@@ -10,12 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Parameter;
-import javax.persistence.PersistenceContext;
-import javax.persistence.PersistenceUnit;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
@@ -36,14 +33,19 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.SortFilterPage;
 import org.omnifaces.utils.collection.PartialResultList;
 
-@Stateless
 public class GenericEntityService {
 
-	@PersistenceContext
 	private EntityManager entityManager;
-
-	@PersistenceUnit
 	private EntityManagerFactory entityManagerFactory;
+
+	public void setEntityManager(EntityManager entityManager) {
+		this.entityManager = entityManager;
+	}
+
+	public void setEntityManagerFactory(EntityManagerFactory entityManagerFactory) {
+		this.entityManagerFactory = entityManagerFactory;
+	}
+	
 
 	public BaseEntity<? extends Number> find(Class<BaseEntity<? extends Number>> type, Number id) {
 		return entityManager.find(type, id);
@@ -66,7 +68,7 @@ public class GenericEntityService {
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
 	}
 
-	static interface QueryBuilder<T> {
+	public static interface QueryBuilder<T> {
 		Root<?> build(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<?> type);
 	}
 
