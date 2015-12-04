@@ -114,10 +114,14 @@ public class GenericEntityService {
 
 				// Add filtering condition to query (addition to where clause)
 				predicates.add(
-					criteriaBuilder.like(root.get(e.getKey()), criteriaBuilder.parameter(String.class, e.getKey() + "Search")));
+					criteriaBuilder.like(
+						criteriaBuilder.lower(root.get(e.getKey())), 
+						criteriaBuilder.parameter(String.class, e.getKey() + "Search")
+					)
+				);
 
 				// Add the value to filter on as a parameter
-				parameters.put(e.getKey() + "Search", "%" + e.getValue() + "%");
+				parameters.put(e.getKey() + "Search", "%" + e.getValue().toString().toLowerCase() + "%");
 			}
 		);
 
