@@ -45,7 +45,7 @@ public class GenericEntityService {
 	public void setEntityManagerFactory(EntityManagerFactory entityManagerFactory) {
 		this.entityManagerFactory = entityManagerFactory;
 	}
-	
+
 
 	public BaseEntity<? extends Number> find(Class<BaseEntity<? extends Number>> type, Number id) {
 		return entityManager.find(type, id);
@@ -115,7 +115,7 @@ public class GenericEntityService {
 				// Add filtering condition to query (addition to where clause)
 				predicates.add(
 					criteriaBuilder.like(
-						criteriaBuilder.lower(root.get(e.getKey())), 
+						criteriaBuilder.lower(root.get(e.getKey())),
 						criteriaBuilder.parameter(String.class, e.getKey() + "Search")
 					)
 				);
@@ -144,7 +144,7 @@ public class GenericEntityService {
 			.setHint("org.hibernate.cacheable", "true")
 			// TODO: Not just a global region but per query
 			.setHint("org.hibernate.cacheRegion", "genericEntityServiceRegion");
-	
+
 
 		// Set parameters on the query. This includes both the provided parameters and the
 		// ones for filtering that we generated here.
@@ -159,8 +159,10 @@ public class GenericEntityService {
 		// without the paging
 		Long count = -1l;
 		if (getCount) {
-			javax.persistence.Query countQuery = entityManager
-					.createQuery(criteriaQuery);
+
+			// Reset order by since count queries do not need sorting, it causes high memory consumption
+			// or even temporary file generation in the database if the result set is rather large.
+			javax.persistence.Query countQuery = entityManager.createQuery(criteriaQuery.orderBy());
 
 			for (Map.Entry<String, Object> parameterEntry : parameters.entrySet()) {
 				countQuery.setParameter(parameterEntry.getKey(), parameterEntry.getValue());
