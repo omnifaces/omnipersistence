@@ -35,8 +35,22 @@ import org.omnifaces.utils.collection.PartialResultList;
 
 public class GenericEntityService {
 
+	private final static Predicate[] PREDICATE_ARRAY = new Predicate[0];
+
 	private EntityManager entityManager;
 	private EntityManagerFactory entityManagerFactory;
+
+	public static interface QueryBuilder<T> {
+		Root<?> build(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<?> type);
+	}
+
+	public static void sort(CriteriaBuilder builder, CriteriaQuery<?> query, Expression<?> sortExpression, String sortOrder) {
+		query.orderBy(
+			"ASCENDING".equals(sortOrder)?
+				builder.asc(sortExpression) :
+				builder.desc(sortExpression)
+		);
+	}
 
 	public void setEntityManager(EntityManager entityManager) {
 		this.entityManager = entityManager;
@@ -45,7 +59,6 @@ public class GenericEntityService {
 	public void setEntityManagerFactory(EntityManagerFactory entityManagerFactory) {
 		this.entityManagerFactory = entityManagerFactory;
 	}
-
 
 	public BaseEntity<? extends Number> find(Class<BaseEntity<? extends Number>> type, Number id) {
 		return entityManager.find(type, id);
@@ -68,27 +81,52 @@ public class GenericEntityService {
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
 	}
 
-	public static interface QueryBuilder<T> {
-		Root<?> build(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<?> type);
+	public <T> PartialResultList<T> getAllPaged(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, true);
+	}
+
+	public <T> PartialResultList<T> getAllPagedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, false);
 	}
 
 	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> type, SortFilterPage sortFilterPage) {
-
-		return getAllPagedAndSorted(type,
-			(builder, query, tp) -> query.from(tp),
-			emptyMap(),
-			sortFilterPage, true
-		);
-
+		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), emptyMap(), sortFilterPage, true, true);
 	}
-
-	public <T> PartialResultList<T> getAllPaged(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount);
-	}
-
-	private final static Predicate[] PREDICATE_ARRAY = new Predicate[0];
 
 	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, true);
+	}
+
+	public <T> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, false);
+	}
+
+	public <T> Root<T> getRootQuery(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<T> type) {
+		return criteriaQuery.from(type);
+	}
+
+	public QueryTranslator translateFromQuery(javax.persistence.Query query) {
+		return translateFromHql(query.unwrap(Query.class).getQueryString());
+	}
+
+	public QueryTranslator translateFromHql(String hqlQueryText) {
+
+		QueryTranslatorFactory translatorFactory = new ASTQueryTranslatorFactory();
+
+		QueryTranslator translator = translatorFactory.createQueryTranslator(
+			hqlQueryText, hqlQueryText,
+			EMPTY_MAP,
+			(SessionFactoryImplementor) entityManagerFactory.unwrap(SessionFactory.class),
+			null
+		);
+
+		translator.compile(EMPTY_MAP, false);
+
+		return translator;
+
+	}
+
+	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isCached) {
 
 		// Create the two standard JPA objects used for criteria query construction
 		CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
@@ -141,10 +179,9 @@ public class GenericEntityService {
 			.createQuery(criteriaQuery)
 			.setFirstResult(sortFilterPage.getOffset())
 			.setMaxResults(sortFilterPage.getLimit())
-			.setHint("org.hibernate.cacheable", "true")
+			.setHint("org.hibernate.cacheable", isCached ? "true" : "false")
 			// TODO: Not just a global region but per query
 			.setHint("org.hibernate.cacheRegion", "genericEntityServiceRegion");
-
 
 		// Set parameters on the query. This includes both the provided parameters and the
 		// ones for filtering that we generated here.
@@ -189,39 +226,5 @@ public class GenericEntityService {
 
 		return new PartialResultList<T>(entities, sortFilterPage.getOffset(), count.intValue());
 	}
-
-	public <T> Root<T> getRootQuery(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<T> type) {
-		return criteriaQuery.from(type);
-	}
-
-	public static void sort(CriteriaBuilder builder, CriteriaQuery<?> query, Expression<?> sortExpression, String sortOrder) {
-		query.orderBy(
-			"ASCENDING".equals(sortOrder)?
-				builder.asc(sortExpression) :
-				builder.desc(sortExpression)
-		);
-	}
-
-	public QueryTranslator translateFromQuery(javax.persistence.Query query) {
-		return translateFromHql(query.unwrap(Query.class).getQueryString());
-	}
-
-	public QueryTranslator translateFromHql(String hqlQueryText) {
-
-		QueryTranslatorFactory translatorFactory = new ASTQueryTranslatorFactory();
-
-		QueryTranslator translator = translatorFactory.createQueryTranslator(
-			hqlQueryText, hqlQueryText,
-			EMPTY_MAP,
-			(SessionFactoryImplementor) entityManagerFactory.unwrap(SessionFactory.class),
-			null
-		);
-
-		translator.compile(EMPTY_MAP, false);
-
-		return translator;
-
-	}
-
 
 }
