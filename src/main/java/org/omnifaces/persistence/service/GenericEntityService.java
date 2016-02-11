@@ -144,22 +144,22 @@ public class GenericEntityService {
 			);
 		}
 
-		List<Predicate> predicates = new ArrayList<Predicate>();
+		List<Predicate> predicates = new ArrayList<>();
 
 		// Add filtering to query
 		sortFilterPage.getFilters().entrySet().forEach(
 			e -> {
+				String key = e.getKey() + "Search";
+				Class<?> type = root.get(e.getKey()).getJavaType();
 
-				// Add filtering condition to query (addition to where clause)
-				predicates.add(
-					criteriaBuilder.like(
-						criteriaBuilder.lower(root.get(e.getKey())),
-						criteriaBuilder.parameter(String.class, e.getKey() + "Search")
-					)
-				);
-
-				// Add the value to filter on as a parameter
-				parameters.put(e.getKey() + "Search", "%" + e.getValue().toString().toLowerCase() + "%");
+				if (type.isEnum()) {
+					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key).as(String.class)));
+					parameters.put(key, Enum.valueOf((Class<Enum>) type, e.getValue().toString()));
+				}
+				else {
+					predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
+					parameters.put(key, "%" + e.getValue().toString().toLowerCase() + "%");
+				}
 			}
 		);
 
@@ -224,7 +224,7 @@ public class GenericEntityService {
 			count = ((Number) nativeQuery.getSingleResult()).longValue();
 		}
 
-		return new PartialResultList<T>(entities, sortFilterPage.getOffset(), count.intValue());
+		return new PartialResultList<>(entities, sortFilterPage.getOffset(), count.intValue());
 	}
 
 }
