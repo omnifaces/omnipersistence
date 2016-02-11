@@ -150,15 +150,21 @@ public class GenericEntityService {
 		sortFilterPage.getFilters().entrySet().forEach(
 			e -> {
 				String key = e.getKey() + "Search";
+				String value = e.getValue().toString();
 				Class<?> type = root.get(e.getKey()).getJavaType();
 
 				if (type.isEnum()) {
 					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key).as(String.class)));
-					parameters.put(key, Enum.valueOf((Class<Enum>) type, e.getValue().toString()));
+					parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
+				}
+				else if (type.isAssignableFrom(Boolean.class)) {
+					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					System.out.println(e.getValue());
+					parameters.put(key, Boolean.parseBoolean(value));
 				}
 				else {
 					predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
-					parameters.put(key, "%" + e.getValue().toString().toLowerCase() + "%");
+					parameters.put(key, "%" + value.toLowerCase() + "%");
 				}
 			}
 		);
