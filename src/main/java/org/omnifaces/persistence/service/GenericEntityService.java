@@ -1,5 +1,6 @@
 package org.omnifaces.persistence.service;
 
+import static java.util.Arrays.stream;
 import static java.util.Collections.EMPTY_MAP;
 import static java.util.Collections.emptyMap;
 import static java.util.regex.Pattern.quote;
@@ -9,6 +10,7 @@ import static org.omnifaces.utils.Lang.isEmpty;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -44,12 +46,8 @@ public class GenericEntityService {
 		Root<?> build(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<?> type);
 	}
 
-	public static void sort(CriteriaBuilder builder, CriteriaQuery<?> query, Expression<?> sortExpression, String sortOrder) {
-		query.orderBy(
-			"ASCENDING".equals(sortOrder)?
-				builder.asc(sortExpression) :
-				builder.desc(sortExpression)
-		);
+	public static void sort(CriteriaBuilder builder, CriteriaQuery<?> query, String sortOrder, Expression<?>... sortExpressions) {
+		query.orderBy(stream(sortExpressions).map(e -> "ASCENDING".equals(sortOrder) ? builder.asc(e) : builder.desc(e)).collect(Collectors.toList()));
 	}
 
 	public void setEntityManager(EntityManager entityManager) {
