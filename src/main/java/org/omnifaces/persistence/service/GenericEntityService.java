@@ -159,8 +159,11 @@ public class GenericEntityService {
 				}
 				else if (type.isAssignableFrom(Boolean.class)) {
 					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-					System.out.println(e.getValue());
-					parameters.put(key, Boolean.parseBoolean(value));
+					parameters.put(key, Boolean.valueOf(value));
+				}
+				else if (type.isAssignableFrom(Long.class)) {
+					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					parameters.put(key, Long.valueOf(value));
 				}
 				else {
 					predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
