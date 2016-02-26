@@ -16,15 +16,20 @@ public abstract class BaseEntity<T> implements Serializable {
 	public abstract void setId(T id);
 
 	@Override
-	public int hashCode() {
-		return (getId() != null) ? (getClass().hashCode() + getId().hashCode()) : super.hashCode();
-	}
+    public int hashCode() {
+        return (getId() != null)
+            ? (getClass().getSimpleName().hashCode() + getId().hashCode())
+            : super.hashCode();
+    }
 
 	@Override
-	public boolean equals(Object other) {
-		return (other != null && getClass() == other.getClass() && getId() != null) ? getId().equals(((BaseEntity<?>) other).getId())
-				: (other == this);
-	}
+    public boolean equals(Object other) {
+        return (other != null && getId() != null
+                && other.getClass().isAssignableFrom(getClass())
+                && getClass().isAssignableFrom(other.getClass()))
+            ? getId().equals(((BaseEntity<?>) other).getId())
+            : (other == this);
+    }
 
 	@Override
 	public String toString() {
