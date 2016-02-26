@@ -177,7 +177,11 @@ public class GenericEntityService {
 				criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY)) :
 				criteriaBuilder.and(predicates.toArray(PREDICATE_ARRAY));
 
-			criteriaQuery.where(criteriaBuilder.and(originalRestrictions, searchRestrictions));
+			if (originalRestrictions != null) {
+				criteriaQuery.where(criteriaBuilder.and(originalRestrictions, searchRestrictions));
+			} else {
+				criteriaQuery.where(searchRestrictions);
+			}
 		}
 
 		// Create the "actual" JPA query from the above constructed criteria query
