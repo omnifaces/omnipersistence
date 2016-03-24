@@ -261,7 +261,7 @@ public class GenericEntityService {
 					
 					try {
 						// Convert the parameter value
-						typedValue.getType().nullSafeSet(capturingStatement, typedValue.getValue(), 1, session);
+						typedValue.getType().nullSafeSet(capturingStatement, typedValue.getValue(), position + 1, session);
 					} catch (HibernateException | SQLException e1) {
 						e1.printStackTrace();
 					}
