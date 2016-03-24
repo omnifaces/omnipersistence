@@ -7,6 +7,9 @@ import static java.util.regex.Pattern.quote;
 import static javax.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.utils.Lang.isEmpty;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,13 +26,17 @@ import javax.persistence.criteria.FetchParent;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
 
+import org.hibernate.HibernateException;
 import org.hibernate.Query;
 import org.hibernate.SessionFactory;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.engine.spi.SessionImplementor;
+import org.hibernate.engine.spi.TypedValue;
 import org.hibernate.hql.internal.ast.ASTQueryTranslatorFactory;
 import org.hibernate.hql.spi.ParameterTranslations;
 import org.hibernate.hql.spi.QueryTranslator;
 import org.hibernate.hql.spi.QueryTranslatorFactory;
+import org.hibernate.internal.AbstractQueryImpl;
 import org.omnifaces.persistence.JPA;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.SortFilterPage;
@@ -224,11 +231,43 @@ public class GenericEntityService {
 			); // not cacheable:  https://hibernate.atlassian.net/browse/HHH-9111 http://stackoverflow.com/q/25789176
 
 			ParameterTranslations parameterTranslations = translator.getParameterTranslations();
+			
+			Query query = typedQuery.unwrap(Query.class);
+			Map<String,TypedValue> namedParams = null;
+			SessionImplementor session = null;
+			try {
+				
+				// Yes, the following code is dreadful...
+				
+				Method method = AbstractQueryImpl.class.getDeclaredMethod("getNamedParams");
+				method.setAccessible(true);
+				Object map = method.invoke(query);
+				namedParams = (Map<String, TypedValue>) map;
+				
+				
+				method = AbstractQueryImpl.class.getDeclaredMethod("getSession");
+				method.setAccessible(true);
+				Object sessionObject = method.invoke(query);
+				session = (SessionImplementor) sessionObject;
+			} catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e1) {
+				e1.printStackTrace();
+			}
 
+			CapturingStatement capturingStatement = new CapturingStatement();
 			for (Parameter<?> parameter : countQuery.getParameters()) {
 				for (int position : parameterTranslations.getNamedParameterSqlLocations(parameter.getName())) {
-					// Can't use countQuery.getParameter value due to bug in Hibernate
-					nativeQuery.setParameter(position + 1, parameters.get(parameter.getName()));
+					
+					TypedValue typedValue = namedParams.get(parameter.getName());
+					
+					try {
+						// Convert the parameter value
+						typedValue.getType().nullSafeSet(capturingStatement, typedValue.getValue(), 1, session);
+					} catch (HibernateException | SQLException e1) {
+						e1.printStackTrace();
+					}
+					
+					
+					nativeQuery.setParameter(position + 1, capturingStatement.getObject());
 				}
 			}
 
