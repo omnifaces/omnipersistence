@@ -384,8 +384,7 @@ public class CapturingStatement implements PreparedStatement {
 	
 	@Override
 	public void setNString(int parameterIndex, String value) throws SQLException {
-		// TODO Auto-generated method stub
-		
+		object = value;
 	}
 	
 	@Override
@@ -444,14 +443,12 @@ public class CapturingStatement implements PreparedStatement {
 	
 	@Override
 	public void setDate(int parameterIndex, java.sql.Date x, Calendar cal) throws SQLException {
-		// TODO Auto-generated method stub
-		
+		object = x;
 	}
 	
 	@Override
 	public void setDate(int parameterIndex, java.sql.Date x) throws SQLException {
-		// TODO Auto-generated method stub
-		
+		object = x;
 	}
 	
 	@Override
