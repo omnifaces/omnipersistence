@@ -159,7 +159,7 @@ public class GenericEntityService {
 				Class<?> type = root.get(e.getKey()).getJavaType();
 
 				if (type.isEnum()) {
-					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key).as(String.class)));
+					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
 					parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
 				}
 				else if (type.isAssignableFrom(Boolean.class)) {
@@ -231,20 +231,20 @@ public class GenericEntityService {
 			); // not cacheable:  https://hibernate.atlassian.net/browse/HHH-9111 http://stackoverflow.com/q/25789176
 
 			ParameterTranslations parameterTranslations = translator.getParameterTranslations();
-			
+
 			Query query = typedQuery.unwrap(Query.class);
 			Map<String,TypedValue> namedParams = null;
 			SessionImplementor session = null;
 			try {
-				
+
 				// Yes, the following code is dreadful...
-				
+
 				Method method = AbstractQueryImpl.class.getDeclaredMethod("getNamedParams");
 				method.setAccessible(true);
 				Object map = method.invoke(query);
 				namedParams = (Map<String, TypedValue>) map;
-				
-				
+
+
 				method = AbstractQueryImpl.class.getDeclaredMethod("getSession");
 				method.setAccessible(true);
 				Object sessionObject = method.invoke(query);
@@ -256,17 +256,17 @@ public class GenericEntityService {
 			CapturingStatement capturingStatement = new CapturingStatement();
 			for (Parameter<?> parameter : countQuery.getParameters()) {
 				for (int position : parameterTranslations.getNamedParameterSqlLocations(parameter.getName())) {
-					
+
 					TypedValue typedValue = namedParams.get(parameter.getName());
-					
+
 					try {
 						// Convert the parameter value
 						typedValue.getType().nullSafeSet(capturingStatement, typedValue.getValue(), position + 1, session);
 					} catch (HibernateException | SQLException e1) {
 						e1.printStackTrace();
 					}
-					
-					
+
+
 					nativeQuery.setParameter(position + 1, capturingStatement.getObject());
 				}
 			}
