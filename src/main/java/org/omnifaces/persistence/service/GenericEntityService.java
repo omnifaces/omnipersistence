@@ -87,23 +87,23 @@ public class GenericEntityService {
 	}
 
 	public <T> PartialResultList<T> getAllPaged(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, true);
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, true, true);
 	}
 
 	public <T> PartialResultList<T> getAllPagedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, false);
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, true, false);
 	}
 
 	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> type, SortFilterPage sortFilterPage) {
-		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), emptyMap(), sortFilterPage, true, true);
+		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), emptyMap(), sortFilterPage, true, false, true);
 	}
 
 	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, true);
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, false, true);
 	}
 
 	public <T> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage.sortField(null), getCount, false);
+		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, false, false);
 	}
 
 	public <T> Root<T> getRootQuery(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<T> type) {
@@ -131,7 +131,7 @@ public class GenericEntityService {
 
 	}
 
-	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isCached) {
+	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isSorted, boolean isCached) {
 
 		// Create the two standard JPA objects used for criteria query construction
 		CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
@@ -140,8 +140,8 @@ public class GenericEntityService {
 		// Obtain main query from the passed-in builder
 		Root<?> root = 	queryBuilder.build(criteriaBuilder, criteriaQuery, returnType);
 
-		// Add sorting to query
-		if (!isEmpty(sortFilterPage.getSortField())) {
+		// Add sorting to query if necessary
+		if (!isSorted && !isEmpty(sortFilterPage.getSortField())) {
 			criteriaQuery.orderBy(
 				"ASCENDING".equals(sortFilterPage.getSortOrder())?
 					criteriaBuilder.asc(root.get(sortFilterPage.getSortField())) :
@@ -152,7 +152,7 @@ public class GenericEntityService {
 		List<Predicate> predicates = new ArrayList<>();
 
 		// Add filtering to query
-		sortFilterPage.getFilters().entrySet().forEach(
+		sortFilterPage.getFilterValues().entrySet().forEach(
 			e -> {
 				String key = e.getKey() + "Search";
 				String value = e.getValue().toString();
@@ -180,9 +180,9 @@ public class GenericEntityService {
 		if (!predicates.isEmpty()) {
 			Predicate originalRestrictions = criteriaQuery.getRestriction();
 
-			Predicate searchRestrictions = sortFilterPage.getFilterOperator().equals("or") ?
-				criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY)) :
-				criteriaBuilder.and(predicates.toArray(PREDICATE_ARRAY));
+			Predicate searchRestrictions = sortFilterPage.isFilterWithAND() ?
+				criteriaBuilder.and(predicates.toArray(PREDICATE_ARRAY)) :
+				criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY));
 
 			if (originalRestrictions != null) {
 				criteriaQuery.where(criteriaBuilder.and(originalRestrictions, searchRestrictions));

@@ -1,78 +1,49 @@
 package org.omnifaces.persistence.model.dto;
 
+import static java.util.Collections.unmodifiableMap;
+
 import java.util.Map;
 
-public class SortFilterPage {
+public final class SortFilterPage {
 
-	private int offset; 
-	private int limit; 
-	private String sortField; 
-	private String sortOrder;
-	private String filterOperator;
-	private Map<String, Object> filters;
-	
-	public SortFilterPage(int offset, int limit, String sortField, String sortOrder, Map<String, Object> filters, String operator) {
+	private final int offset;
+	private final int limit;
+	private final String sortField;
+	private final String sortOrder;
+	private final Map<String, Object> filterValues;
+	private final boolean filterWithAND;
+
+	public SortFilterPage(int offset, int limit, String sortField, String sortOrder, Map<String, Object> filterValues, boolean filterWithAND) {
 		this.offset = offset;
 		this.limit = limit;
 		this.sortField = sortField;
 		this.sortOrder = sortOrder;
-		this.filters = filters;
-		this.filterOperator = operator;
-	}
-	
-	public int getOffset() {
-		return offset;
+		this.filterValues = unmodifiableMap(filterValues);
+		this.filterWithAND = filterWithAND;
 	}
 
-	public void setOffset(int offset) {
-		this.offset = offset;
+	public int getOffset() {
+		return offset;
 	}
 
 	public int getLimit() {
 		return limit;
 	}
 
-	public void setLimit(int limit) {
-		this.limit = limit;
-	}
-
 	public String getSortField() {
 		return sortField;
-	}
-
-	public void setSortField(String sortField) {
-		this.sortField = sortField;
 	}
 
 	public String getSortOrder() {
 		return sortOrder;
 	}
 
-	public void setSortOrder(String sortOrder) {
-		this.sortOrder = sortOrder;
+	public Map<String, Object> getFilterValues() {
+		return filterValues;
 	}
 
-	public Map<String, Object> getFilters() {
-		return filters;
+	public boolean isFilterWithAND() {
+		return filterWithAND;
 	}
 
-	public void setFilters(Map<String, Object> filters) {
-		this.filters = filters;
-	}
-	
-	public String getFilterOperator() {
-		return filterOperator;
-	}
-
-	public void setFilterOperator(String filterOperator) {
-		this.filterOperator = filterOperator;
-	}
-	
-	public SortFilterPage sortField(String sortField) {
-		this.sortField = sortField;
-		return this;
-	}
-	
-	
-	
 }
