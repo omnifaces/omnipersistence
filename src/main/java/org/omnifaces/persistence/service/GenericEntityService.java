@@ -6,6 +6,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.regex.Pattern.quote;
 import static javax.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.utils.Lang.isEmpty;
+import static org.omnifaces.utils.Lang.isOneOf;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -23,6 +24,8 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.FetchParent;
+import javax.persistence.criteria.ParameterExpression;
+import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
 
@@ -167,8 +170,17 @@ public class GenericEntityService {
 					parameters.put(key, Boolean.valueOf(value));
 				}
 				else if (type.isAssignableFrom(Long.class)) {
-					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-					parameters.put(key, Long.valueOf(value));
+					Path<Long> path = root.get(e.getKey());
+					ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
+
+					if (isOneOf(value, "true", "false")) {
+						predicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
+						parameters.put(key, 0L);
+					}
+					else {
+						predicates.add(criteriaBuilder.equal(path, parameter));
+						parameters.put(key, Long.valueOf(value));
+					}
 				}
 				else {
 					predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
