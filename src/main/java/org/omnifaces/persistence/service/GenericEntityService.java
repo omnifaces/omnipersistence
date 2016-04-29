@@ -152,7 +152,8 @@ public class GenericEntityService {
 			);
 		}
 
-		List<Predicate> predicates = new ArrayList<>();
+		List<Predicate> searchPredicates = new ArrayList<>();
+		List<Predicate> exactPredicates = new ArrayList<>();
 
 		// Add filtering to query
 		sortFilterPage.getFilterValues().entrySet().forEach(
@@ -162,11 +163,11 @@ public class GenericEntityService {
 				Class<?> type = root.get(e.getKey()).getJavaType();
 
 				if (type.isEnum()) {
-					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
 					parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
 				}
 				else if (type.isAssignableFrom(Boolean.class)) {
-					predicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
 					parameters.put(key, Boolean.valueOf(value));
 				}
 				else if (type.isAssignableFrom(Long.class)) {
@@ -174,32 +175,41 @@ public class GenericEntityService {
 					ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
 
 					if (isOneOf(value, "true", "false")) {
-						predicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
+						exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
 						parameters.put(key, 0L);
 					}
 					else {
-						predicates.add(criteriaBuilder.equal(path, parameter));
+						searchPredicates.add(criteriaBuilder.equal(path, parameter));
 						parameters.put(key, Long.valueOf(value));
 					}
 				}
 				else {
-					predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
+					searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
 					parameters.put(key, "%" + value.toLowerCase() + "%");
 				}
 			}
 		);
 
-		if (!predicates.isEmpty()) {
+		Predicate newRestrictions = null;
+
+		if (!searchPredicates.isEmpty()) {
+			newRestrictions = sortFilterPage.isFilterWithAND() ?
+				criteriaBuilder.and(searchPredicates.toArray(PREDICATE_ARRAY)) :
+				criteriaBuilder.or(searchPredicates.toArray(PREDICATE_ARRAY));
+		}
+
+		if (!exactPredicates.isEmpty()) {
+			Predicate exactRestrictions = criteriaBuilder.and(exactPredicates.toArray(PREDICATE_ARRAY));
+			newRestrictions = newRestrictions != null ? criteriaBuilder.and(newRestrictions, exactRestrictions) : exactRestrictions;
+		}
+
+		if (newRestrictions != null) {
 			Predicate originalRestrictions = criteriaQuery.getRestriction();
 
-			Predicate searchRestrictions = sortFilterPage.isFilterWithAND() ?
-				criteriaBuilder.and(predicates.toArray(PREDICATE_ARRAY)) :
-				criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY));
-
 			if (originalRestrictions != null) {
-				criteriaQuery.where(criteriaBuilder.and(originalRestrictions, searchRestrictions));
+				criteriaQuery.where(criteriaBuilder.and(originalRestrictions, newRestrictions));
 			} else {
-				criteriaQuery.where(searchRestrictions);
+				criteriaQuery.where(newRestrictions);
 			}
 		}
 
