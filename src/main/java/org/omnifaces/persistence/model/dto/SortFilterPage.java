@@ -12,6 +12,8 @@ public final class SortFilterPage {
 	private final String sortOrder;
 	private final Map<String, Object> filterValues;
 	private final boolean filterWithAND;
+	
+	private boolean filterAsText;
 
 	public SortFilterPage(int offset, int limit, String sortField, String sortOrder, Map<String, Object> filterValues, boolean filterWithAND) {
 		this.offset = offset;
@@ -44,6 +46,14 @@ public final class SortFilterPage {
 
 	public boolean isFilterWithAND() {
 		return filterWithAND;
+	}
+	
+	public boolean isFilterAsText() {
+		return filterAsText;
+	}
+
+	public void setFilterAsText(boolean filterAsText) {
+		this.filterAsText = filterAsText;
 	}
 
 }

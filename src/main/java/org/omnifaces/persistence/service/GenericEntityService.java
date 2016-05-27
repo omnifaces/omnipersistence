@@ -162,30 +162,41 @@ public class GenericEntityService {
 				String value = e.getValue().toString();
 				Class<?> type = root.get(e.getKey()).getJavaType();
 
-				if (type.isEnum()) {
-					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-					parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
-				}
-				else if (type.isAssignableFrom(Boolean.class)) {
-					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-					parameters.put(key, Boolean.valueOf(value));
-				}
-				else if (type.isAssignableFrom(Long.class)) {
-					Path<Long> path = root.get(e.getKey());
-					ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
-
-					if (isOneOf(value, "true", "false")) {
-						exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
-						parameters.put(key, 0L);
+				if (sortFilterPage.isFilterAsText()) {
+					searchPredicates.add(
+						criteriaBuilder.like(
+							criteriaBuilder.lower(criteriaBuilder.function("str", String.class, root.get(e.getKey()))), 
+							criteriaBuilder.parameter(String.class, key)
+						)
+					);
+					parameters.put(key, "%" + value.toLowerCase() + "%");
+				} else {
+				
+					if (type.isEnum()) {
+						exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+						parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
+					}
+					else if (type.isAssignableFrom(Boolean.class)) {
+						exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+						parameters.put(key, Boolean.valueOf(value));
+					}
+					else if (type.isAssignableFrom(Long.class)) {
+						Path<Long> path = root.get(e.getKey());
+						ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
+	
+						if (isOneOf(value, "true", "false")) {
+							exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
+							parameters.put(key, 0L);
+						}
+						else {
+							searchPredicates.add(criteriaBuilder.equal(path, parameter));
+							parameters.put(key, Long.valueOf(value));
+						}
 					}
 					else {
-						searchPredicates.add(criteriaBuilder.equal(path, parameter));
-						parameters.put(key, Long.valueOf(value));
+						searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
+						parameters.put(key, "%" + value.toLowerCase() + "%");
 					}
-				}
-				else {
-					searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
-					parameters.put(key, "%" + value.toLowerCase() + "%");
 				}
 			}
 		);
