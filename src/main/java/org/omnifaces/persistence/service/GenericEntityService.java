@@ -134,6 +134,7 @@ public class GenericEntityService {
 
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isSorted, boolean isCached) {
 
 		// Create the two standard JPA objects used for criteria query construction
@@ -162,41 +163,32 @@ public class GenericEntityService {
 				String value = e.getValue().toString();
 				Class<?> type = root.get(e.getKey()).getJavaType();
 
-				if (sortFilterPage.isFilterAsText()) {
-					searchPredicates.add(
-						criteriaBuilder.like(
-							criteriaBuilder.lower(criteriaBuilder.function("str", String.class, root.get(e.getKey()))), 
-							criteriaBuilder.parameter(String.class, key)
-						)
-					);
-					parameters.put(key, "%" + value.toLowerCase() + "%");
-				} else {
-				
-					if (type.isEnum()) {
+				if (type.isEnum()) {
+					try {
+						Enum enumValue = Enum.valueOf((Class<Enum>) type, value);
 						exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-						parameters.put(key, Enum.valueOf((Class<Enum>) type, value));
+						parameters.put(key, enumValue);
 					}
-					else if (type.isAssignableFrom(Boolean.class)) {
-						exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-						parameters.put(key, Boolean.valueOf(value));
+					catch (IllegalArgumentException ignore) {
+						//
 					}
-					else if (type.isAssignableFrom(Long.class)) {
+				}
+				else if (type.isAssignableFrom(Boolean.class)) {
+					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					parameters.put(key, Boolean.valueOf(value));
+				}
+				else if (type.isAssignableFrom(Long.class)) {
+					if (isOneOf(value, "true", "false")) {
 						Path<Long> path = root.get(e.getKey());
 						ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
-	
-						if (isOneOf(value, "true", "false")) {
-							exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
-							parameters.put(key, 0L);
-						}
-						else {
-							searchPredicates.add(criteriaBuilder.equal(path, parameter));
-							parameters.put(key, Long.valueOf(value));
-						}
+						exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
+						parameters.put(key, 0L);
 					}
-					else {
-						searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get(e.getKey())), criteriaBuilder.parameter(String.class, key)));
-						parameters.put(key, "%" + value.toLowerCase() + "%");
-					}
+				}
+
+				if (!parameters.containsKey(key)) {
+					searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, root.get(e.getKey()))), criteriaBuilder.parameter(String.class, key)));
+					parameters.put(key, "%" + value.toLowerCase() + "%");
 				}
 			}
 		);
