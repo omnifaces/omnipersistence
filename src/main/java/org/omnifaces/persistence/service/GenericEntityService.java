@@ -185,6 +185,10 @@ public class GenericEntityService {
 						parameters.put(key, 0L);
 					}
 				}
+				else if (!sortFilterPage.getFilterableFields().contains(e.getKey())) {
+					exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+					parameters.put(key, value);
+				}
 
 				if (!parameters.containsKey(key)) {
 					searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, root.get(e.getKey()))), criteriaBuilder.parameter(String.class, key)));
