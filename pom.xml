@@ -73,10 +73,10 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
     		<artifactId>omniutils</artifactId>
-    		<version>0.1-SNAPSHOT</version>
+    		<version>0.1</version>
 		</dependency>
-		
-		<!-- TODO: Some code is now Hibernate specific. 
+
+		<!-- TODO: Some code is now Hibernate specific.
 			 Use reflection and/or separate provider specific plugins
 		 -->
 		<dependency>
