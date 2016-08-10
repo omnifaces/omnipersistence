@@ -1,5 +1,7 @@
 package org.omnifaces.persistence.datasource;
 
+import static org.omnifaces.utils.properties.PropertiesUtils.loadPropertiesFromClasspath;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -54,8 +56,16 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 		}
 		
 		Map<String, String> properties = new HashMap<>();
-		for (PropertiesFileLoader propertiesFileLoader : loader) {
-			properties.putAll(propertiesFileLoader.loadFromFile(configFile));
+		
+		if (!loader.iterator().hasNext()) {
+			// No service loader was specified for loading the configfile.
+			// Try the fallback default location of META-INF on the classpath
+			properties.putAll(loadPropertiesFromClasspath("META-INF/" + configFile));
+			
+		} else {
+			for (PropertiesFileLoader propertiesFileLoader : loader) {
+				properties.putAll(propertiesFileLoader.loadFromFile(configFile));
+			}
 		}
 
 		// Get & check the most important property; the class name of the data source that we wrap.
