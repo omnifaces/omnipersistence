@@ -6,6 +6,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableMap;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -61,6 +62,65 @@ public final class SortFilterPage {
 
 	public boolean isFilterWithAND() {
 		return filterWithAND;
+	}
+	
+	public static SortFilterPageBuilder with() {
+		return new SortFilterPageBuilder();
+	}
+	
+	public static class SortFilterPageBuilder {
+		
+		private int offset;
+		private int limit;
+		private String sortField;
+		private String sortOrder;
+		private List<String> filterableFields;
+		private Map<String, Object> filterValues;
+		private boolean filterWithAND;
+		
+		public SortFilterPageBuilder offset(int offset) {
+			this.offset = offset;
+			return this;
+		}
+		
+		public SortFilterPageBuilder limit(int limit) {
+			this.limit = limit;
+			return this;
+		}
+		
+		public SortFilterPageBuilder sortField(String sortField) {
+			this.sortField = sortField;
+			return this;
+		}
+		
+		public SortFilterPageBuilder sortOrder(String sortOrder) {
+			this.sortOrder = sortOrder;
+			return this;
+		}
+		
+		public SortFilterPageBuilder filterableFields(List<String> filterableFields) {
+			this.filterableFields = filterableFields;
+			return this;
+		}
+		
+		public SortFilterPageBuilder filterValues(Map<String, Object> filterValues) {
+			this.filterValues = filterValues;
+			return this;
+		}
+		
+		public SortFilterPageBuilder filterWithAND(boolean filterWithAND) {
+			this.filterWithAND = filterWithAND;
+			return this;
+		}
+		
+		public SortFilterPage build() {
+			return new SortFilterPage(
+						offset, limit, sortField, sortOrder, 
+						filterableFields == null? emptyList() : filterableFields, 
+						filterValues == null? emptyMap() : filterValues, 
+						filterWithAND);
+		}
+		
 	}
 
 }
