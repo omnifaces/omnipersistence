@@ -1,5 +1,9 @@
 package org.omnifaces.persistence.model.dto;
 
+import static java.lang.Integer.MAX_VALUE;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableMap;
 
 import java.util.List;
@@ -9,6 +13,9 @@ import java.util.Map;
  * This class should NOT be mutable.
  */
 public final class SortFilterPage {
+	
+	public final SortFilterPage ONE = new SortFilterPage(0, 1, null, null, emptyList(), emptyMap(), true);
+	public final SortFilterPage ALL = new SortFilterPage(0, MAX_VALUE, null, null, emptyList(), emptyMap(), true);
 
 	private final int offset;
 	private final int limit;
@@ -23,7 +30,7 @@ public final class SortFilterPage {
 		this.limit = limit;
 		this.sortField = sortField;
 		this.sortOrder = sortOrder;
-		this.filterableFields = filterableFields;
+		this.filterableFields = unmodifiableList(filterableFields);
 		this.filterValues = unmodifiableMap(filterValues);
 		this.filterWithAND = filterWithAND;
 	}
