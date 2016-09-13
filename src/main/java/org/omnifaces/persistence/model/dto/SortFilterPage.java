@@ -14,8 +14,8 @@ import java.util.Map;
  */
 public final class SortFilterPage {
 	
-	public final SortFilterPage ONE = new SortFilterPage(0, 1, null, null, emptyList(), emptyMap(), true);
-	public final SortFilterPage ALL = new SortFilterPage(0, MAX_VALUE, null, null, emptyList(), emptyMap(), true);
+	public final static SortFilterPage ONE = new SortFilterPage(0, 1, null, null, emptyList(), emptyMap(), true);
+	public final static SortFilterPage ALL = new SortFilterPage(0, MAX_VALUE, null, null, emptyList(), emptyMap(), true);
 
 	private final int offset;
 	private final int limit;
