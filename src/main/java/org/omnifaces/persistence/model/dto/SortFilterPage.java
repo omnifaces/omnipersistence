@@ -6,7 +6,6 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableMap;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
