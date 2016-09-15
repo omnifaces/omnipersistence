@@ -1,6 +1,6 @@
 package org.omnifaces.persistence.listener;
 
-import static org.omnifaces.utils.annotation.AnnotationUtils.createAnnotationInstance;
+import static org.omnifaces.utils.annotation.Annotations.createAnnotationInstance;
 
 import javax.enterprise.inject.spi.BeanManager;
 import javax.inject.Inject;
