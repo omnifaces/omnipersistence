@@ -2,7 +2,6 @@ package org.omnifaces.persistence.service;
 
 import static java.util.Arrays.stream;
 import static java.util.Collections.EMPTY_MAP;
-import static java.util.Collections.emptyMap;
 import static java.util.regex.Pattern.quote;
 import static javax.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.utils.Lang.isEmpty;
@@ -12,6 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -110,7 +110,7 @@ public class GenericEntityService {
 	}
 
 	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> type, SortFilterPage sortFilterPage) {
-		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), emptyMap(), sortFilterPage, true, false, true);
+		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), new HashMap<>(), sortFilterPage, true, false, true);
 	}
 
 	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
@@ -170,6 +170,7 @@ public class GenericEntityService {
 				);
 			}
 
+			Map<String, Object> searchParameters = new HashMap<>(parameters);
 			List<Predicate> searchPredicates = new ArrayList<>();
 			List<Predicate> exactPredicates = new ArrayList<>();
 
@@ -185,7 +186,7 @@ public class GenericEntityService {
 								Enum enumValue = Enum.valueOf((Class<Enum>) type, value);
 								exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()),
 								                                          criteriaBuilder.parameter(type, key)));
-								parameters.put(key, enumValue);
+								searchParameters.put(key, enumValue);
 							}
 							catch (IllegalArgumentException ignore) {
 								//
@@ -194,7 +195,7 @@ public class GenericEntityService {
 						else if (type.isAssignableFrom(Boolean.class)) {
 							exactPredicates.add(
 									criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-							parameters.put(key, Boolean.valueOf(value));
+							searchParameters.put(key, Boolean.valueOf(value));
 						}
 						else if (type.isAssignableFrom(Long.class)) {
 							if (isOneOf(value, "true", "false")) {
@@ -202,20 +203,20 @@ public class GenericEntityService {
 								ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
 								exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) :
 								                    criteriaBuilder.le(path, parameter));
-								parameters.put(key, 0L);
+								searchParameters.put(key, 0L);
 							}
 						}
 						else if (!sortFilterPage.getFilterableFields().contains(e.getKey())) {
 							exactPredicates.add(
 									criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-							parameters.put(key, value);
+							searchParameters.put(key, value);
 						}
 
-						if (!parameters.containsKey(key)) {
+						if (!searchParameters.containsKey(key)) {
 							searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(
 									criteriaBuilder.function("str", String.class, root.get(e.getKey()))),
 							                                          criteriaBuilder.parameter(String.class, key)));
-							parameters.put(key, "%" + value.toLowerCase() + "%");
+							searchParameters.put(key, "%" + value.toLowerCase() + "%");
 						}
 					}
 			);
@@ -257,7 +258,7 @@ public class GenericEntityService {
 
 			// Set parameters on the query. This includes both the provided parameters and the
 			// ones for filtering that we generated here.
-			parameters.entrySet().forEach(
+			searchParameters.entrySet().forEach(
 					e -> typedQuery.setParameter(e.getKey(), e.getValue())
 			);
 
@@ -273,7 +274,7 @@ public class GenericEntityService {
 				// or even temporary file generation in the database if the result set is rather large.
 				javax.persistence.Query countQuery = entityManager.createQuery(criteriaQuery.orderBy());
 
-				for (Map.Entry<String, Object> parameterEntry : parameters.entrySet()) {
+				for (Map.Entry<String, Object> parameterEntry : searchParameters.entrySet()) {
 					countQuery.setParameter(parameterEntry.getKey(), parameterEntry.getValue());
 				}
 
