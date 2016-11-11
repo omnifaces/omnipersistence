@@ -101,28 +101,36 @@ public class GenericEntityService {
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
 	}
 
-	public <T> PartialResultList<T> getAllPaged(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, true, true);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPaged(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, true, true);
 	}
 
-	public <T> PartialResultList<T> getAllPagedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, true, false);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, true, false);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> type, SortFilterPage sortFilterPage) {
-		return getAllPagedAndSorted(type, (builder, query, tp) -> query.from(tp), new HashMap<>(), sortFilterPage, true, false, true);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, SortFilterPage sortFilterPage) {
+		return getAllPagedAndSorted(resultType, (builder, query, type) -> query.from(type), sortFilterPage);
 	}
 
-	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, false, true);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage) {
+		return getAllPagedAndSorted(resultType, queryBuilder, new HashMap<>(), sortFilterPage, true, false, true);
 	}
 
-	public <T> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> returnType, QueryBuilder<?> queryBuilder,	Map<String, Object> parameters,	SortFilterPage sortFilterPage, boolean getCount) {
-		return getAllPagedAndSorted(returnType, queryBuilder, parameters, sortFilterPage, getCount, false, false);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, queryBuilder, new HashMap<>(), sortFilterPage, getCount, false, true);
 	}
 
-	public <T> Root<T> getRootQuery(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<T> type) {
-		return criteriaQuery.from(type);
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, false, true);
+	}
+
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, false, false);
+	}
+
+	public <T> Root<T> getRootQuery(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> criteriaQuery, Class<T> entityType) {
+		return criteriaQuery.from(entityType);
 	}
 
 	public QueryTranslator translateFromQuery(javax.persistence.Query query) {
@@ -147,7 +155,7 @@ public class GenericEntityService {
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> returnType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isSorted, boolean isCached) {
+	private <T> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount, boolean isSorted, boolean isCached) {
 
 		if (setupHandler != null) {
 			setupHandler.accept(entityManager);
@@ -156,10 +164,10 @@ public class GenericEntityService {
 		try {
 			// Create the two standard JPA objects used for criteria query construction
 			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
-			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(returnType);
+			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
 
 			// Obtain main query from the passed-in builder
-			Root<?> root = queryBuilder.build(criteriaBuilder, criteriaQuery, returnType);
+			Root<?> root = queryBuilder.build(criteriaBuilder, criteriaQuery, resultType);
 
 			// Add sorting to query if necessary
 			if (!isSorted && !isEmpty(sortFilterPage.getSortField())) {
