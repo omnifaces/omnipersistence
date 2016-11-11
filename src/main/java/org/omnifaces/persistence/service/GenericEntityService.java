@@ -101,11 +101,11 @@ public class GenericEntityService {
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPaged(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+	public <T> PartialResultList<T> getAllPaged(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, true, true);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+	public <T> PartialResultList<T> getAllPagedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, true, false);
 	}
 
@@ -113,19 +113,19 @@ public class GenericEntityService {
 		return getAllPagedAndSorted(resultType, (builder, query, type) -> query.from(type), sortFilterPage);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage) {
+	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage) {
 		return getAllPagedAndSorted(resultType, queryBuilder, new HashMap<>(), sortFilterPage, true, false, true);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage, boolean getCount) {
+	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType, queryBuilder, new HashMap<>(), sortFilterPage, getCount, false, true);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, false, true);
 	}
 
-	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
+	public <T> PartialResultList<T> getAllPagedAndSortedUncached(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType, queryBuilder, parameters, sortFilterPage, getCount, false, false);
 	}
 
