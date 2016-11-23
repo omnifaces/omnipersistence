@@ -213,6 +213,12 @@ public class GenericEntityService {
 								                    criteriaBuilder.le(path, parameter));
 								searchParameters.put(key, 0L);
 							}
+							else if ("id".equals(e.getKey()) && sortFilterPage.getFilterValues().size() == 1) {
+								// If this is the only search field, assume exact match instead of search match.
+								exactPredicates.add(
+										criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
+								searchParameters.put(key, Long.valueOf(value));
+							}
 						}
 						else if (!sortFilterPage.getFilterableFields().contains(e.getKey())) {
 							exactPredicates.add(
