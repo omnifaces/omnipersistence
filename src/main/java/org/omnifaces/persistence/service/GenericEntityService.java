@@ -188,16 +188,23 @@ public class GenericEntityService {
 					String key = e.getKey();
 					String searchKey = key + "Search";
 					String searchValue = e.getValue().toString();
-					Class<?> type = root.get(key).getJavaType();
+					Class<?> type;
+
+					try {
+						type = root.get(key).getJavaType();
+					}
+					catch (IllegalArgumentException ignore) {
+						return; // Likely custom search key referring non-existent property.
+					}
 
 					if (type.isEnum()) {
 						try {
-							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue);
+							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
 							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
 							searchParameters.put(searchKey, enumValue);
 						}
 						catch (IllegalArgumentException ignore) {
-							//
+							return; // Likely custom search value referring non-existent enum value.
 						}
 					}
 					else if (type.isAssignableFrom(Boolean.class)) {
