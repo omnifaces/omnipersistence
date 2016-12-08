@@ -184,55 +184,50 @@ public class GenericEntityService {
 
 			// Add filtering to query
 			sortFilterPage.getFilterValues().entrySet().forEach(
-					e -> {
-						String key = e.getKey() + "Search";
-						String value = e.getValue().toString();
-						Class<?> type = root.get(e.getKey()).getJavaType();
+				e -> {
+					String key = e.getKey();
+					String searchKey = key + "Search";
+					String searchValue = e.getValue().toString();
+					Class<?> type = root.get(key).getJavaType();
 
-						if (type.isEnum()) {
-							try {
-								Enum enumValue = Enum.valueOf((Class<Enum>) type, value);
-								exactPredicates.add(criteriaBuilder.equal(root.get(e.getKey()),
-								                                          criteriaBuilder.parameter(type, key)));
-								searchParameters.put(key, enumValue);
-							}
-							catch (IllegalArgumentException ignore) {
-								//
-							}
+					if (type.isEnum()) {
+						try {
+							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue);
+							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							searchParameters.put(searchKey, enumValue);
 						}
-						else if (type.isAssignableFrom(Boolean.class)) {
-							exactPredicates.add(
-									criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-							searchParameters.put(key, Boolean.valueOf(value));
-						}
-						else if (type.isAssignableFrom(Long.class)) {
-							if (isOneOf(value, "true", "false")) {
-								Path<Long> path = root.get(e.getKey());
-								ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, key);
-								exactPredicates.add("true".equals(value) ? criteriaBuilder.gt(path, parameter) :
-								                    criteriaBuilder.le(path, parameter));
-								searchParameters.put(key, 0L);
-							}
-							else if ("id".equals(e.getKey()) && sortFilterPage.getFilterValues().size() == 1) {
-								// If this is the only search field, assume exact match instead of search match.
-								exactPredicates.add(
-										criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-								searchParameters.put(key, Long.valueOf(value));
-							}
-						}
-						else if (!sortFilterPage.getFilterableFields().contains(e.getKey())) {
-							exactPredicates.add(
-									criteriaBuilder.equal(root.get(e.getKey()), criteriaBuilder.parameter(type, key)));
-							searchParameters.put(key, value);
-						}
-
-						if (!searchParameters.containsKey(key)) {
-							searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(
-									criteriaBuilder.function("str", String.class, root.get(e.getKey()))),
-							                                          criteriaBuilder.parameter(String.class, key)));
-							searchParameters.put(key, "%" + value.toLowerCase() + "%");
+						catch (IllegalArgumentException ignore) {
+							//
 						}
 					}
+					else if (type.isAssignableFrom(Boolean.class)) {
+						exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+						searchParameters.put(searchKey, Boolean.valueOf(searchValue));
+					}
+					else if (type.isAssignableFrom(Long.class)) {
+						if (isOneOf(searchValue, "true", "false")) {
+							// If value happens to represent a boolean, use true to match everything > 0 and false to match everything < 0 (i.e. exclude everything positive).
+							Path<Long> path = root.get(key);
+							ParameterExpression<Long> parameter = criteriaBuilder.parameter(Long.class, searchKey);
+							exactPredicates.add("true".equals(searchValue) ? criteriaBuilder.gt(path, parameter) : criteriaBuilder.le(path, parameter));
+							searchParameters.put(searchKey, 0L);
+						}
+						else if (key.matches("(id|.+Id$)") && sortFilterPage.getFilterValues().size() == 1) {
+							// If key happens to represent an ID, and this is the only search field, then assume exact match instead of search match.
+							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							searchParameters.put(searchKey, Long.valueOf(searchValue));
+						}
+					}
+					else if (!sortFilterPage.getFilterableFields().contains(key)) {
+						exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+						searchParameters.put(searchKey, searchValue);
+					}
+
+					if (!searchParameters.containsKey(searchKey)) {
+						searchPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, root.get(key))), criteriaBuilder.parameter(String.class, searchKey)));
+						searchParameters.put(searchKey, "%" + searchValue.toLowerCase() + "%");
+					}
+				}
 			);
 
 			Predicate newRestrictions = null;
