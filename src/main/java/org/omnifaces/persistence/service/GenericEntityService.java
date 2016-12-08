@@ -199,8 +199,16 @@ public class GenericEntityService {
 
 					if (type.isEnum()) {
 						try {
+							if (searchValue.startsWith("!")) {
+								// If value starts with ! then negate the exact match.
+								searchValue = searchValue.substring(1);
+								exactPredicates.add(criteriaBuilder.notEqual(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							} else {
+								exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+
+							}
+
 							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
-							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
 							searchParameters.put(searchKey, enumValue);
 						}
 						catch (IllegalArgumentException ignore) {
