@@ -192,8 +192,15 @@ public class GenericEntityService {
 
 					if (type.isEnum()) {
 						try {
+							if (searchValue.startsWith("!")) {
+								searchValue = searchValue.substring(1);
+								exactPredicates.add(criteriaBuilder.notEqual(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							} else {
+								exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+
+							}
+
 							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue);
-							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
 							searchParameters.put(searchKey, enumValue);
 						}
 						catch (IllegalArgumentException ignore) {
