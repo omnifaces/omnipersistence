@@ -110,7 +110,11 @@ public class GenericEntityService {
 	}
 
 	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, SortFilterPage sortFilterPage) {
-		return getAllPagedAndSorted(resultType, (builder, query, type) -> query.from(type), sortFilterPage);
+		return getAllPagedAndSorted(resultType, (builder, query, type) -> query.from(type), new HashMap<>(), sortFilterPage, true, false, true);
+	}
+
+	public <T extends BaseEntity<? extends Number>> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType, (builder, query, type) -> query.from(type), new HashMap<>(), sortFilterPage, getCount, false, true);
 	}
 
 	public <T> PartialResultList<T> getAllPagedAndSorted(Class<T> resultType, QueryBuilder<?> queryBuilder, SortFilterPage sortFilterPage) {
