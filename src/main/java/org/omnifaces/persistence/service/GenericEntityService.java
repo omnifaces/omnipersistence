@@ -2,6 +2,7 @@ package org.omnifaces.persistence.service;
 
 import static java.util.Arrays.stream;
 import static java.util.Collections.EMPTY_MAP;
+import static java.util.Collections.singleton;
 import static java.util.regex.Pattern.quote;
 import static javax.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.utils.Lang.isEmpty;
@@ -11,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -190,8 +192,9 @@ public class GenericEntityService {
 			sortFilterPage.getFilterValues().entrySet().forEach(
 				e -> {
 					String key = e.getKey();
+					Object value = e.getValue();
 					String searchKey = key + "Search";
-					String searchValue = e.getValue().toString();
+					String searchValue = value.toString();
 					Class<?> type;
 
 					try {
@@ -219,11 +222,11 @@ public class GenericEntityService {
 							return; // Likely custom search value referring non-existent enum value.
 						}
 					}
-					else if (type.isAssignableFrom(Boolean.class)) {
+					else if (Boolean.class.isAssignableFrom(type)) {
 						exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
 						searchParameters.put(searchKey, Boolean.valueOf(searchValue));
 					}
-					else if (type.isAssignableFrom(Long.class)) {
+					else if (Long.class.isAssignableFrom(type)) {
 						if (isOneOf(searchValue, "true", "false")) {
 							// If value happens to represent a boolean, use true to match everything > 0 and false to match everything < 0 (i.e. exclude everything positive).
 							Path<Long> path = root.get(key);
@@ -236,6 +239,30 @@ public class GenericEntityService {
 							exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
 							searchParameters.put(searchKey, Long.valueOf(searchValue));
 						}
+						else if (value instanceof Long[]) {
+							// LongRange
+							exactPredicates.add(criteriaBuilder.between(root.get(key), criteriaBuilder.parameter(Long.class, "min_" + searchKey), criteriaBuilder.parameter(Long.class, "max_" + searchKey)));
+							searchParameters.put("min_" + searchKey, ((Long[]) value)[0]);
+							searchParameters.put("max_" + searchKey, ((Long[]) value)[1]);
+							searchParameters.put(searchKey, null);
+						}
+					}
+					else if (Collection.class.isAssignableFrom(type) && value instanceof Object[]) {
+						Object[] values = (Object[]) value;
+
+						if (values.length > 0) {
+							List<Expression> in = new ArrayList<>(values.length);
+
+							for (Object item : values) {
+								String name = searchKey + item;
+								in.add(criteriaBuilder.parameter(value.getClass().getComponentType(), name));
+								searchParameters.put(name, item);
+							}
+
+							exactPredicates.add(root.join(key).in(in.toArray(new Expression[in.size()])));
+						}
+
+						searchParameters.put(searchKey, null);
 					}
 					else if (!sortFilterPage.getFilterableFields().contains(key)) {
 						exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
@@ -286,8 +313,9 @@ public class GenericEntityService {
 
 			// Set parameters on the query. This includes both the provided parameters and the
 			// ones for filtering that we generated here.
+			searchParameters.values().removeAll(singleton(null));
 			searchParameters.entrySet().forEach(
-					e -> typedQuery.setParameter(e.getKey(), e.getValue())
+				e -> typedQuery.setParameter(e.getKey(), e.getValue())
 			);
 
 			// Execute query
@@ -296,6 +324,7 @@ public class GenericEntityService {
 			// Troublesome Hibernate specific code to get total number of the results for the above query
 			// without the paging
 			Long count = -1l;
+
 			if (getCount) {
 
 				// Reset order by since count queries do not need sorting, it causes high memory consumption
@@ -334,7 +363,7 @@ public class GenericEntityService {
 					session = (SessionImplementor) sessionObject;
 				}
 				catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e1) {
-					e1.printStackTrace();
+					throw new IllegalStateException(e1);
 				}
 
 				CapturingStatement capturingStatement = new CapturingStatement();
@@ -345,13 +374,11 @@ public class GenericEntityService {
 
 						try {
 							// Convert the parameter value
-							typedValue.getType()
-							          .nullSafeSet(capturingStatement, typedValue.getValue(), position + 1, session);
+							typedValue.getType().nullSafeSet(capturingStatement, typedValue.getValue(), position + 1, session);
 						}
 						catch (HibernateException | SQLException e1) {
-							e1.printStackTrace();
+							throw new IllegalArgumentException(e1);
 						}
-
 
 						nativeQuery.setParameter(position + 1, capturingStatement.getObject());
 					}
