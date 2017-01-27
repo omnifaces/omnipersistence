@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,17 @@ public class GenericEntityService {
 		criteriaQuery.where(criteriaBuilder.equal(root.get("id"), id));
 
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
+	}
+	
+	public <T> PartialResultList<T> getAllPagedAndSortedByType(Class<T> resultType, SortFilterPage sortFilterPage, boolean getCount) {
+		return getAllPagedAndSorted(resultType,
+
+			(builder, query, tp) -> query.from(resultType),
+
+			Collections.emptyMap(),
+
+			sortFilterPage, getCount
+		);
 	}
 
 	public <T> PartialResultList<T> getAllPaged(Class<T> resultType, QueryBuilder<?> queryBuilder, Map<String, Object> parameters, SortFilterPage sortFilterPage, boolean getCount) {
