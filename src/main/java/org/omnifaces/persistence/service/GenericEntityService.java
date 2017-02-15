@@ -103,7 +103,7 @@ public class GenericEntityService {
 
 		return JPA.getOptionalSingleResult(entityManager.createQuery(criteriaQuery));
 	}
-	
+
 	public <T> PartialResultList<T> getAllPagedAndSortedByType(Class<T> resultType, SortFilterPage sortFilterPage, boolean getCount) {
 		return getAllPagedAndSorted(resultType,
 
@@ -218,17 +218,20 @@ public class GenericEntityService {
 
 					if (type.isEnum()) {
 						try {
-							if (searchValue.startsWith("!")) {
-								// If value starts with ! then negate the exact match.
-								searchValue = searchValue.substring(1);
-								exactPredicates.add(criteriaBuilder.notEqual(root.get(key), criteriaBuilder.parameter(type, searchKey)));
-							} else {
-								exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							boolean negated = searchValue.startsWith("!");
 
+							if (negated) {
+								searchValue = searchValue.substring(1);
 							}
 
 							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
 							searchParameters.put(searchKey, enumValue);
+
+							if (negated) {
+								exactPredicates.add(criteriaBuilder.notEqual(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							} else {
+								exactPredicates.add(criteriaBuilder.equal(root.get(key), criteriaBuilder.parameter(type, searchKey)));
+							}
 						}
 						catch (IllegalArgumentException ignore) {
 							return; // Likely custom search value referring non-existent enum value.
