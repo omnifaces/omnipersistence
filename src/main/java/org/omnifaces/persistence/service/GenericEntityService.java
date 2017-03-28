@@ -261,20 +261,25 @@ public class GenericEntityService {
 							searchParameters.put("max_" + searchKey, ((Long[]) value)[1]);
 							searchParameters.put(searchKey, null);
 						}
+						else {
+							searchParameters.put(searchKey, null);
+						}
 					}
-					else if (Collection.class.isAssignableFrom(type) && value instanceof Object[]) {
-						Object[] values = (Object[]) value;
+					else if (Collection.class.isAssignableFrom(type)) {
+						if (value instanceof Object[]) {
+							Object[] values = (Object[]) value;
 
-						if (values.length > 0) {
-							List<Expression> in = new ArrayList<>(values.length);
+							if (values.length > 0) {
+								List<Expression> in = new ArrayList<>(values.length);
 
-							for (Object item : values) {
-								String name = searchKey + item;
-								in.add(criteriaBuilder.parameter(value.getClass().getComponentType(), name));
-								searchParameters.put(name, item);
+								for (Object item : values) {
+									String name = searchKey + item;
+									in.add(criteriaBuilder.parameter(value.getClass().getComponentType(), name));
+									searchParameters.put(name, item);
+								}
+
+								exactPredicates.add(root.join(key).in(in.toArray(new Expression[in.size()])));
 							}
-
-							exactPredicates.add(root.join(key).in(in.toArray(new Expression[in.size()])));
 						}
 
 						searchParameters.put(searchKey, null);
