@@ -262,7 +262,7 @@ public class GenericEntityService {
 							searchParameters.put(searchKey, null);
 						}
 						else {
-							searchParameters.put(searchKey, null);
+							searchParameters.remove(searchKey);
 						}
 					}
 					else if (Collection.class.isAssignableFrom(type)) {
