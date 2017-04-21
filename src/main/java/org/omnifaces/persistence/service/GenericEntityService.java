@@ -218,13 +218,21 @@ public class GenericEntityService {
 
 					if (type.isEnum()) {
 						try {
+							Enum enumValue;
 							boolean negated = searchValue.startsWith("!");
 
 							if (negated) {
 								searchValue = searchValue.substring(1);
 							}
-
-							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+							if(value instanceof Object[]) {
+								if (((Object[]) value).length == 1){
+									enumValue = (Enum) ((Object[]) value)[0];
+								} else {
+									enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+								}
+							} else {
+								enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+							}
 							searchParameters.put(searchKey, enumValue);
 
 							if (negated) {
@@ -262,7 +270,7 @@ public class GenericEntityService {
 							searchParameters.put(searchKey, null);
 						}
 						else {
-							searchParameters.put(searchKey, null);
+							searchParameters.remove(searchKey);
 						}
 					}
 					else if (Collection.class.isAssignableFrom(type)) {
