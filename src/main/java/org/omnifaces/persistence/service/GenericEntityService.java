@@ -218,13 +218,21 @@ public class GenericEntityService {
 
 					if (type.isEnum()) {
 						try {
+							Enum enumValue;
 							boolean negated = searchValue.startsWith("!");
 
 							if (negated) {
 								searchValue = searchValue.substring(1);
 							}
-
-							Enum enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+							if(value instanceof Object[]) {
+								if (((Object[]) value).length == 1){
+									enumValue = (Enum) ((Object[]) value)[0];
+								} else {
+									enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+								}
+							} else {
+								enumValue = Enum.valueOf((Class<Enum>) type, searchValue.toUpperCase());
+							}
 							searchParameters.put(searchKey, enumValue);
 
 							if (negated) {
