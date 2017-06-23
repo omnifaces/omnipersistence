@@ -10,7 +10,7 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.MappedSuperclass;
 
-import org.omnifaces.persistence.listener.PersistenceEventEntityListener;
+import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -29,7 +29,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @author Bauke Scholtz
  */
 @MappedSuperclass
-@EntityListeners(PersistenceEventEntityListener.class)
+@EntityListeners(BaseEntityListener.class)
 public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
 
 	private static final long serialVersionUID = 1L;
