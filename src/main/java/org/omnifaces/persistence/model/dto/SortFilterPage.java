@@ -10,8 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * This class should NOT be mutable.
+ * @deprecated Use {@link Page} instead.
  */
+@Deprecated
 public final class SortFilterPage {
 
 	public final static SortFilterPage ONE = new SortFilterPage(0, 1, null, null, emptyList(), emptyMap(), true);

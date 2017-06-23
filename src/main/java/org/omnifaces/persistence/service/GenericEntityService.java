@@ -49,6 +49,10 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.SortFilterPage;
 import org.omnifaces.utils.collection.PartialResultList;
 
+/**
+ * @deprecated Use {@link BaseEntityService} instead.
+ */
+@Deprecated
 public class GenericEntityService {
 
 	private final static Predicate[] PREDICATE_ARRAY = new Predicate[0];

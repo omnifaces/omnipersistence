@@ -9,16 +9,16 @@ import org.omnifaces.utils.collection.PartialResultList;
  * List that implements the sort, filter and paging operations of a given
  * input list at construction time.
  *
- * @param <E>
+ * @param <E> Element type.
  */
 public class SortFilterPageList<E> extends PartialResultList<E> {
-	
+
 	public SortFilterPageList(Set<E> wrappedSet, SortFilterPage page) {
-		super((List<E>) new ArrayList<>(wrappedSet), page.getOffset(), wrappedSet.size());
+		super(new ArrayList<>(wrappedSet), page.getOffset(), wrappedSet.size());
 	}
 
 	public SortFilterPageList(List<E> wrappedList, SortFilterPage page) {
-		super((List<E>) wrappedList, page.getOffset(), wrappedList.size());
+		super(wrappedList, page.getOffset(), wrappedList.size());
 	}
-	
+
 }
