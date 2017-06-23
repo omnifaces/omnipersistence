@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence;
 
+import static org.omnifaces.utils.reflect.Reflections.findClass;
+import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 
 import java.util.Map;
@@ -42,16 +44,16 @@ import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.SetAttribute;
 import javax.persistence.metamodel.SingularAttribute;
 
-import org.hibernate.proxy.HibernateProxy;
-
 public final class JPA {
 
 	public static final String LOAD_GRAPH_HINT_KEY = "javax.persistence.loadgraph";
 	public static final String FETCH_GRAPH_HINT_KEY = "javax.persistence.fetchgraph";
-
 	public static final String CACHE_RETRIEVE_MODE_HINT_KEY = "javax.persistence.cache.retrieveMode";
 
+	private static final Optional<Class<Object>> HIBERNATE_PROXY_CLASS = findClass("org.hibernate.proxy.HibernateProxy");
+
 	private JPA() {
+		//
 	}
 
 	public static <T> T getOptionalSingleResult(TypedQuery<T> query) {
@@ -86,10 +88,10 @@ public final class JPA {
 					.collect(Collectors.toMap(keyMapper, valueMapper));
 	}
 
-	public static <T> T getOptionalSingleResult(Query query, Class<T> clazz) {
+	public static <T> T getOptionalSingleResult(Query query, Class<T> type) {
 		try {
 			query.setMaxResults(1);
-			return clazz.cast(query.getSingleResult());
+			return type.cast(query.getSingleResult());
 		}
 		catch (NoResultException e) {
 			return null;
@@ -99,25 +101,32 @@ public final class JPA {
 	public static <T, I> Long getForeignKeyReferences(Class<T> entityClass, Class<I> idType, I entityId, EntityManager entityManager) {
 		Metamodel metamodel = entityManager.getMetamodel();
 		EntityType<T> entityType = metamodel.entity(entityClass);
-
 		SingularAttribute<? super T, I> idAttribute = entityType.getId(idType);
 
 		return metamodel.getEntities()
 						.stream()
 						.flatMap(entity -> getAttributesOfType(entity, entityClass))
 						.distinct()
-						.mapToLong(attribute -> countReferencesTo(attribute, entityType, idAttribute, entityId, entityManager))
+						.mapToLong(attribute -> countReferencesTo(entityManager, attribute, idAttribute, entityId))
 						.sum();
 	}
 
-	public static boolean isProxy(Object o) {
-		return o instanceof HibernateProxy;
+	public static boolean isProxy(Object object) {
+		return isHibernateProxy(object);
+	}
+
+	private static boolean isHibernateProxy(Object object) {
+		return HIBERNATE_PROXY_CLASS.isPresent() && HIBERNATE_PROXY_CLASS.get().isInstance(object);
 	}
 
 	@SuppressWarnings("unchecked")
 	public static <E> E dereferenceProxy(E entity) {
-		return (E) ((HibernateProxy) entity).getHibernateLazyInitializer()
-		                                    .getImplementation();
+		if (isHibernateProxy(entity)) {
+			return (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation");
+		}
+		else {
+			throw new UnsupportedOperationException();
+		}
 	}
 
 	private static <T, E> Stream<Attribute<?, ?>> getAttributesOfType(EntityType<T> entityType, Class<E> entityClass) {
@@ -133,51 +142,39 @@ public final class JPA {
 						 .map(attribute -> attribute);
 	}
 
-
-	private static <R, T, I> Long countReferencesTo(Attribute<R, ?> attribute, EntityType<T> entityType, SingularAttribute<? super T, I> idAttribute, I id, EntityManager entityManager) {
+	@SuppressWarnings("unchecked")
+	private static <R, T, I> Long countReferencesTo(EntityManager entityManager, Attribute<R, ?> attribute, SingularAttribute<? super T, I> idAttribute, I id) {
 		CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
-
 		CriteriaQuery<Long> query = criteriaBuilder.createQuery(Long.class);
 		Root<R> root = query.from(attribute.getDeclaringType().getJavaType());
 
 		if (attribute instanceof SingularAttribute) {
-			@SuppressWarnings("unchecked")
 			Join<R, T> relation = root.join((SingularAttribute<R, T>) attribute);
-
 			query.where(criteriaBuilder.equal(relation.get(idAttribute), id));
 		}
 		else if (attribute instanceof ListAttribute) {
-			@SuppressWarnings("unchecked")
 			ListJoin<R, T> relation = root.join((ListAttribute<R, T>) attribute);
-
 			query.where(criteriaBuilder.equal(relation.get(idAttribute), id));
 		}
 		else if (attribute instanceof SetAttribute) {
-			@SuppressWarnings("unchecked")
 			SetJoin<R, T> relation = root.join((SetAttribute<R, T>) attribute);
-
 			query.where(criteriaBuilder.equal(relation.get(idAttribute), id));
 		}
 		else if (attribute instanceof MapAttribute) {
-			@SuppressWarnings("unchecked")
 			MapJoin<R, ?, T> relation = root.join((MapAttribute<R, ?, T>) attribute);
-
 			query.where(criteriaBuilder.equal(relation.get(idAttribute), id));
 		}
 		else if (attribute instanceof CollectionAttribute) {
-			@SuppressWarnings("unchecked")
 			CollectionJoin<R, T> relation = root.join((CollectionAttribute<R, T>) attribute);
-
 			query.where(criteriaBuilder.equal(relation.get(idAttribute), id));
 		}
 		else {
-			// Unknown attribute type, just return 0L
+			// Unknown attribute type, just return 0L.
 			return 0L;
 		}
 
 		query.select(criteriaBuilder.count(root));
 		return entityManager.createQuery(query).getSingleResult();
 	}
+
 }
-
-

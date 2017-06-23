@@ -87,7 +87,7 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
 			<artifactId>omniutils</artifactId>
-			<version>0.3</version>
+			<version>0.4-SNAPSHOT</version>
 		</dependency>
 
 		<!-- TODO: Some code is now Hibernate specific.
