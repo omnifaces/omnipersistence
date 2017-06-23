@@ -2,17 +2,22 @@ package org.omnifaces.persistence.model;
 
 import static java.time.Instant.now;
 
+import java.io.Serializable;
 import java.time.Instant;
 
 import javax.persistence.MappedSuperclass;
 import javax.persistence.PrePersist;
 import javax.persistence.PreUpdate;
 import javax.persistence.Transient;
+import javax.validation.constraints.NotNull;
 
 @MappedSuperclass
-public abstract class TimestampedEntity<T> extends BaseEntity<T> implements Timestamped {
+public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> implements Timestamped {
 
 	private static final long serialVersionUID = 1L;
+
+	private @NotNull Instant created;
+	private @NotNull Instant lastModified;
 
 	@Transient
 	private boolean skipAdjustLastModified;
@@ -32,8 +37,32 @@ public abstract class TimestampedEntity<T> extends BaseEntity<T> implements Time
 		}
 	}
 
+	/**
+	 * Invoke this method if you need to skip adjusting the "last modified" timestamp during any update event on this
+	 * instance. In case you intend to reset this later on, simply obtain a new instance from the entity manager.
+	 */
 	public void skipAdjustLastModified() {
 		this.skipAdjustLastModified = true;
+	}
+
+	@Override
+	public void setCreated(Instant created) {
+		this.created = created;
+	}
+
+	@Override
+	public Instant getCreated() {
+		return created;
+	}
+
+	@Override
+	public void setLastModified(Instant lastModified) {
+		this.lastModified = lastModified;
+	}
+
+	@Override
+	public Instant getLastModified() {
+		return lastModified;
 	}
 
 }
