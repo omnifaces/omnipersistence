@@ -70,9 +70,8 @@ import org.omnifaces.utils.collection.PartialResultList;
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
-	private static final Predicate[] PREDICATE_ARRAY = new Predicate[0];
 	private static final Map<Class<?>, SimpleEntry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
-
+	private static final Predicate[] PREDICATE_ARRAY = new Predicate[0];
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
 
@@ -326,7 +325,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods.
 	 * You do not need it directly. Just supply a lambda. Below is an usage example:
 	 * <pre>
-	 * {@code @Stateless}
+	 * &#64;Stateless
 	 * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
 	 *
 	 *     public void getPageOfFooType(Page page, boolean count) {
@@ -531,11 +530,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		String searchKey = key + "Search" + parameterValues.size();
 		Object value = criteria;
 		Path path = root.get(key);
-		boolean negated = false;
+		boolean negated = value instanceof Not;
 		Predicate predicate;
 
-		if (value instanceof Not) {
-			negated = true;
+		if (negated) {
 			value = ((Not) value).getValue();
 		}
 
@@ -588,8 +586,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		else if (Collection.class.isAssignableFrom(type)) {
 			predicate = buildIn(root.join(key), searchKey, Arrays.asList(value), criteriaBuilder, parameterValues); // TODO
 		}
-		else if (value instanceof String) {
-			predicate = buildLike(path, searchKey, value, criteriaBuilder, parameterValues);
+		else if (String.class.isAssignableFrom(type) || value instanceof String) {
+			predicate = buildLike(path, searchKey, value.toString(), criteriaBuilder, parameterValues);
 		}
 		else {
 			predicate = buildUnsupportedPredicate(path, searchKey, value, criteriaBuilder, parameterValues);
@@ -706,6 +704,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <li>type = {@link Number}
 	 * <li>type = {@link Boolean}
 	 * <li>type = {@link Collection}
+	 * <li>type = {@link String}
 	 * <li>value = {@link String}
 	 * </ul>
 	 * So if you want to support e.g. a {@link Map} value, then you could consider overriding this method.
