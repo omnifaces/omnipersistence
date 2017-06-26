@@ -8,20 +8,24 @@ import javax.persistence.criteria.Predicate;
 
 import org.omnifaces.utils.data.Range;
 
-public final class Between extends Constraint<Range<Comparable<?>>> {
+public final class Between extends Constraint<Range<? extends Comparable<?>>> {
 
-	private Between(Range<Comparable<?>> value) {
+	private Between(Range<? extends Comparable<?>> value) {
 		super(value, false);
 	}
 
-	public static Between value(Range<Comparable<?>> value) {
+	public static Between value(Range<? extends Comparable<?>> value) {
 		return new Between(value);
+	}
+
+	public static <T extends Comparable<T>> Between range(T min, T max) {
+		return new Between(Range.ofClosed(min, max));
 	}
 
 	@Override
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Path<?> path, Map<String, Object> parameterValues) {
-		Range<Comparable<?>> searchValue = getValue();
+		Range<? extends Comparable<?>> searchValue = getValue();
 		parameterValues.put("min_" + key, searchValue.getMin());
 		parameterValues.put("max_" + key, searchValue.getMax());
 		Path rawPath = path;
@@ -31,13 +35,15 @@ public final class Between extends Constraint<Range<Comparable<?>>> {
 	}
 
 	@Override
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public boolean applies(Object value) {
-		return value instanceof Comparable && getValue().contains((Comparable<?>) value);
+		Range rawRange = getValue();
+		return value instanceof Comparable && rawRange.contains(value);
 	}
 
 	@Override
 	public String toString() {
-		Range<Comparable<?>> range = getValue();
+		Range<? extends Comparable<?>> range = getValue();
 		return "BETWEEN " + range.getMin() + " AND " + range.getMax();
 	}
 
