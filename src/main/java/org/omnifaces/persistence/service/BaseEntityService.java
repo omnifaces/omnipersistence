@@ -15,7 +15,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -472,7 +471,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		criteriaQuery.orderBy(stream(ordering).map(order -> {
-			Path<Object> path = root.get(order.getKey());
+			Path<Object> path = resolvePath(root, order.getKey());
 			return order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 		}).collect(toList()));
 	}
@@ -512,24 +511,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private List<Predicate> buildPredicates(Map<String, Object> criteria, CriteriaBuilder criteriaBuilder, Root<E> root, Map<String, Object> parameterValues) {
 		return stream(criteria).map(parameter -> {
 			String key = parameter.getKey();
-			Class<?> type;
+			Path<?> path;
 
 			try {
-				type = ID.equals(key) ? identifierType : root.get(key).getJavaType();
+				path = resolvePath(root, key);
 			}
 			catch (IllegalArgumentException ignore) {
 				return null; // Likely custom search key referring non-existent property.
 			}
 
-			return buildPredicate(type, key, parameter.getValue(), criteriaBuilder, root, parameterValues);
+			/*
+			if (Collection.class.isAssignableFrom(type)) {
+				predicate = buildIn(root.join(key), searchKey, Arrays.asList(value), criteriaBuilder, parameterValues); // TODO
+			}*/
+
+
+			Class<?> type = ID.equals(key) ? identifierType : path.getJavaType();
+			return buildPredicate(path, type, key, parameter.getValue(), criteriaBuilder, root, parameterValues);
 		}).filter(Objects::nonNull).collect(toList());
 	}
 
-	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private Predicate buildPredicate(Class<?> type, String key, Object criteria, CriteriaBuilder criteriaBuilder, Root<E> root, Map<String, Object> parameterValues) {
-		String searchKey = key + "Search" + parameterValues.size();
+	@SuppressWarnings("unchecked")
+	private Predicate buildPredicate(Path<?> path, Class<?> type, String key, Object criteria, CriteriaBuilder criteriaBuilder, Root<E> root, Map<String, Object> parameterValues) {
+		String searchKey = key.replace(".", "_") + "Search" + parameterValues.size();
 		Object value = criteria;
-		Path path = root.get(key);
 		boolean negated = value instanceof Not;
 		Predicate predicate;
 
@@ -549,7 +554,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		else if (value instanceof Iterable<?> || value.getClass().isArray()) {
 			List<Predicate> predicates = stream(value)
-				.map(item -> buildPredicate(type, key, item, criteriaBuilder, root, parameterValues))
+				.map(item -> buildPredicate(path, type, key, item, criteriaBuilder, root, parameterValues))
 				.filter(Objects::nonNull)
 				.collect(toList());
 
@@ -561,7 +566,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		else if (type.isEnum()) {
 			try {
-				predicate = buildEqual(path, searchKey, parseEnum(path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqual(path, searchKey, parseEnum((Path<Enum<?>>) path, value), criteriaBuilder, parameterValues);
 			}
 			catch (IllegalArgumentException ignore) {
 				return null; // Likely custom search value referring non-existent enum value.
@@ -569,7 +574,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		else if (Number.class.isAssignableFrom(type)) {
 			try {
-				predicate = buildEqual(path, searchKey, parseNumber(path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqual(path, searchKey, parseNumber((Path<Number>) path, value), criteriaBuilder, parameterValues);
 			}
 			catch (NumberFormatException ignore) {
 				return null; // Likely custom search value referring non-numeric value.
@@ -577,14 +582,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		else if (Boolean.class.isAssignableFrom(type)) {
 			try {
-				predicate = buildEqual(path, searchKey, parseBoolean(path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqual(path, searchKey, parseBoolean((Path<Boolean>) path, value), criteriaBuilder, parameterValues);
 			}
 			catch (IllegalArgumentException ignore) {
 				return null; // Likely custom search value referring non-boolean value.
 			}
-		}
-		else if (Collection.class.isAssignableFrom(type)) {
-			predicate = buildIn(root.join(key), searchKey, Arrays.asList(value), criteriaBuilder, parameterValues); // TODO
 		}
 		else if (String.class.isAssignableFrom(type) || value instanceof String) {
 			predicate = buildLike(path, searchKey, value.toString(), criteriaBuilder, parameterValues);
@@ -724,6 +726,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 
 	// Helpers --------------------------------------------------------------------------------------------------------
+
+	@SuppressWarnings("unchecked")
+	private <T> Path<T> resolvePath(Root<E> root, String field) {
+		if (!field.contains(".")) {
+			return root.get(field);
+		}
+
+		Path<?> path = root;
+
+		for (String property : field.split("\\.")) {
+			path = path.get(property);
+		}
+
+		return (Path<T>) path;
+	}
 
 	private static void noop() {
 		// NOOP.
