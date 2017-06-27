@@ -132,7 +132,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param jpqlStatement The Java Persistence Query Language statement to be executed.
 	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement.
 	 */
-	protected TypedQuery<E> createQuery(String jpqlStatement) {
+	protected final TypedQuery<E> createQuery(String jpqlStatement) {
 		return entityManager.createQuery(jpqlStatement, entityType);
 	}
 
@@ -144,7 +144,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return An instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
 	 * by the given name.
 	 */
-	protected TypedQuery<E> createNamedQuery(String name) {
+	protected final TypedQuery<E> createNamedQuery(String name) {
 		return entityManager.createNamedQuery(name, entityType);
 	}
 
@@ -330,6 +330,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *     public void getPageOfFooType(Page page, boolean count) {
 	 *         return getPage(page, count, (criteriaBuilder, criteriaQuery, root) -&gt; {
 	 *             criteriaQuery.where(criteriaBuilder.equals(root.get("type"), Type.FOO));
+	 *         });
+	 *     }
+	 *
+	 *     public void getPageWithLazyChildren(Page page, boolean count) {
+	 *         return getPage(page, count, (criteriaBuilder, criteriaQuery, root) -&gt; {
+	 *             root.fetch("lazyChildren");
 	 *         });
 	 *     }
 	 *
