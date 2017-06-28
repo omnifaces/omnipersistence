@@ -1,7 +1,9 @@
 package org.omnifaces.persistence.service;
 
 import static java.util.stream.Collectors.toList;
+import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.model.Identifiable.ID;
+import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
@@ -39,6 +41,8 @@ import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Subquery;
 import javax.persistence.metamodel.Attribute;
+import javax.persistence.metamodel.PluralAttribute;
+import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
 import org.omnifaces.persistence.constraint.Constraint;
 import org.omnifaces.persistence.constraint.Not;
@@ -279,25 +283,46 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Lazy fetching actions ------------------------------------------------------------------------------------------
 
 	/**
-	 * Fetch lazy collections of given entity on given getters.
+	 * Fetch lazy collections of given entity on given getters. If no getters are supplied, then it will fetch every
+	 * single {@link PluralAttribute} not of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch lazy collections on.
 	 * @param getters Getters of those lazy collections.
 	 */
 	@SafeVarargs
 	protected final void fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
-		stream(getters).forEach(getter -> getter.apply(entity).size());
+		if (!isEmpty(getters)) {
+			stream(getters).forEach(getter -> getter.apply(entity).size());
+		}
+		else {
+			fetchEveryPluralAttribute(entity, type -> type != MAP);
+		}
 	}
 
 	/**
-	 * Fetch lazy maps of given entity on given getters.
+	 * Fetch lazy maps of given entity on given getters. If no getters are supplied, then it will fetch every single
+	 * {@link PluralAttribute} of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch lazy maps on.
 	 * @param getters Getters of those lazy collections.
 	 */
 	@SafeVarargs
 	protected final void fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
-		stream(getters).forEach(getter -> getter.apply(entity).size());
+		if (!isEmpty(getters)) {
+			stream(getters).forEach(getter -> getter.apply(entity).size());
+		}
+		else {
+			fetchEveryPluralAttribute(entity, type -> type == MAP);
+		}
+	}
+
+	private void fetchEveryPluralAttribute(E entity, java.util.function.Predicate<CollectionType> ofType) {
+		for (PluralAttribute<?, ?, ?> a : entityManager.getMetamodel().entity(entity.getClass()).getPluralAttributes()) {
+			if (ofType.test(a.getCollectionType())) {
+				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
+				invokeMethod(invokeMethod(entity, "get" + name), "size");
+			}
+		}
 	}
 
 	/**
@@ -308,7 +333,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected final void fetchLazyBlobs(E entity) {
 		E managed = entityManager.merge(entity);
 
-		for (Attribute<?, ?> a : entityManager.getMetamodel().entity(managed.getClass()).getDeclaredSingularAttributes()) {
+		for (Attribute<?, ?> a : entityManager.getMetamodel().entity(managed.getClass()).getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
 				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
 				byte[] blob = (byte[]) invokeMethod(managed, "get" + name);
