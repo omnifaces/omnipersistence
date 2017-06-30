@@ -4,7 +4,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Path;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
 
 public final class Not extends Constraint<Object> {
@@ -18,7 +18,7 @@ public final class Not extends Constraint<Object> {
 	}
 
 	@Override
-	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Path<?> path, Map<String, Object> parameterValues) {
+	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> expression, Map<String, Object> parameterValues) {
 		throw new UnsupportedOperationException();
 	}
 

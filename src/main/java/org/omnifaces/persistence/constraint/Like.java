@@ -4,7 +4,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Path;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
 
 public final class Like extends Constraint<String> {
@@ -47,10 +47,10 @@ public final class Like extends Constraint<String> {
 	}
 
 	@Override
-	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Path<?> path, Map<String, Object> parameterValues) {
+	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> expression, Map<String, Object> parameterValues) {
 		String searchValue = (startsWith() ? "" : "%") + getValue().toLowerCase() + (endsWith() ? "" : "%");
 		parameterValues.put(key, searchValue);
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), criteriaBuilder.parameter(String.class, key));
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), criteriaBuilder.parameter(String.class, key));
 	}
 
 	@Override

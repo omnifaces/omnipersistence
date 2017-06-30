@@ -4,7 +4,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Path;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.model.dto.Page;
@@ -44,7 +44,7 @@ public abstract class Constraint<T> {
 		this.value = value;
 	}
 
-	public abstract Predicate build(String key, CriteriaBuilder criteriaBuilder, Path<?> path, Map<String, Object> parameterValues);
+	public abstract Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> path, Map<String, Object> parameterValues);
 
 	public abstract boolean applies(Object value);
 

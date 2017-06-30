@@ -4,8 +4,8 @@ import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.ParameterExpression;
-import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 
 public final class Order extends Constraint<Comparable<?>> {
@@ -58,23 +58,23 @@ public final class Order extends Constraint<Comparable<?>> {
 
 	@Override
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Path<?> path, Map<String, Object> parameterValues) {
+	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> expression, Map<String, Object> parameterValues) {
 		Comparable<?> searchValue = getValue();
 		parameterValues.put(key, searchValue);
-		Path rawPath = path;
-		ParameterExpression<? extends Comparable> searchParameter = criteriaBuilder.parameter(rawPath.getJavaType(), key);
+		Expression rawExpression = expression;
+		ParameterExpression<? extends Comparable> searchParameter = criteriaBuilder.parameter(rawExpression.getJavaType(), key);
 
 		if (greaterThan()) {
-			return criteriaBuilder.greaterThan(rawPath, searchParameter);
+			return criteriaBuilder.greaterThan(rawExpression, searchParameter);
 		}
 		else if (greaterThanOrEqualTo()) {
-			return criteriaBuilder.greaterThanOrEqualTo(rawPath, searchParameter);
+			return criteriaBuilder.greaterThanOrEqualTo(rawExpression, searchParameter);
 		}
 		else if (lessThan()) {
-			return criteriaBuilder.lessThan(rawPath, searchParameter);
+			return criteriaBuilder.lessThan(rawExpression, searchParameter);
 		}
 		else {
-			return criteriaBuilder.lessThanOrEqualTo(rawPath, searchParameter);
+			return criteriaBuilder.lessThanOrEqualTo(rawExpression, searchParameter);
 		}
 	}
 
