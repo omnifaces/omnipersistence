@@ -559,9 +559,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
 				Root<E> countRoot = countQuery.from(entityType);
 				countQuery.select(criteriaBuilder.count(countRoot));
-				Predicate existingRestrictions = criteriaQuery.getRestriction();
 
-				if (existingRestrictions != null) {
+				if (hasRestrictions(criteriaQuery)) {
 					// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
 					// See also https://stackoverflow.com/a/12076584/157882
 
@@ -570,7 +569,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					subQuery.select(subQueryRoot.get(ID)).distinct(true);
 
 					if (resultType == entityType) {
-						subQuery.where(existingRestrictions); // No need to rebuild them as they are the same anyway.
+						// No need to rebuild them as they are the same anyway.
+						copyRestrictions(criteriaQuery, subQuery);
 					}
 					else {
 						expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
@@ -605,6 +605,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 
 			Map<String, Expression<?>> expressions = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
+
+			if (expressions.values().stream().anyMatch(e -> !(e instanceof Path))) {
+				query.groupBy(root);
+			}
+
 			return field -> expressions.get(field);
 		}
 		else if (resultType == entityType) {
@@ -646,8 +651,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (!requiredPredicates.isEmpty()) {
-			Predicate requiredRestrictions = criteriaBuilder.and(requiredPredicates.toArray(PREDICATE_ARRAY));
-			restriction = (restriction != null) ? criteriaBuilder.and(requiredRestrictions, restriction) : requiredRestrictions;
+			List<Predicate> wherePredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("where_")).collect(toList());
+
+			if (!wherePredicates.isEmpty()) {
+				Predicate requiredRestriction = criteriaBuilder.and(wherePredicates.toArray(PREDICATE_ARRAY));
+				restriction = (restriction != null) ? criteriaBuilder.and(requiredRestriction, restriction) : requiredRestriction;
+			}
+
+			List<Predicate> havingPredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("having_")).collect(toList());
+
+			if (!havingPredicates.isEmpty()) {
+				Predicate groupRestriction = criteriaBuilder.and(havingPredicates.toArray(PREDICATE_ARRAY));
+				Predicate originalGroupRestriction = query.getGroupRestriction();
+
+				if (originalGroupRestriction != null) {
+					groupRestriction = criteriaBuilder.and(originalGroupRestriction, groupRestriction);
+				}
+
+				query.having(groupRestriction);
+			}
 		}
 
 		if (restriction != null) {
@@ -679,7 +701,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			if (Collection.class.isAssignableFrom(type)) {
 				predicate = buildIn(root.join(key), searchKey, Arrays.asList(value), criteriaBuilder, parameterValues); // TODO
 			}*/
-
 
 			Class<?> type = ID.equals(field) ? identifierType : expression.getJavaType();
 			return buildPredicate(expression, type, field, parameter.getValue(), criteriaBuilder, parameterValues);
@@ -758,6 +779,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			predicate = criteriaBuilder.not(predicate);
 		}
 
+		predicate.alias((expression instanceof Path ? "where" : "having") + "_" + searchKey);
 		return predicate;
 	}
 
@@ -887,7 +909,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Expression<?> get(String field);
 	}
 
-	private Expression<?> resolveExpression(Root<E> root, String field) {
+	private static Expression<?> resolveExpression(Root<?> root, String field) {
 		if (!field.contains(".")) {
 			return root.get(field);
 		}
@@ -899,6 +921,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return path;
+	}
+
+	private static boolean hasRestrictions(AbstractQuery<?> query) {
+		return query.getRestriction() != null || !query.getGroupList().isEmpty() || query.getGroupRestriction() != null;
+	}
+
+	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
+		if (source.getRestriction() != null) {
+			target.where(source.getRestriction());
+		}
+		if (source.getGroupList() != null) {
+			target.groupBy(source.getGroupList());
+		}
+		if (source.getGroupRestriction() != null) {
+			target.having(source.getGroupRestriction());
+		}
 	}
 
 	private static <T> T noop() {
