@@ -569,7 +569,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 					Subquery<T> subQuery = countQuery.subquery(resultType);
 					Root<E> subQueryRoot = subQuery.from(entityType);
-					expressionResolver = buildSelection(criteriaBuilder, subQuery, new SubQueryRoot<>(subQueryRoot), resultType, queryBuilder);
+					expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
 					if (subQueryRoot.getJoins().isEmpty()) {
 						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
@@ -598,7 +598,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
 	private <T extends E> ExpressionResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, root);
+		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, query instanceof Subquery ? new SubQueryRoot<>(root) : root);
 
 		if (!isEmpty(mapping)) {
 			if (query instanceof CriteriaQuery) {
