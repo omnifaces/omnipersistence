@@ -1,5 +1,6 @@
 package org.omnifaces.persistence.service;
 
+import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
@@ -41,6 +42,7 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Fetch;
+import javax.persistence.criteria.From;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
@@ -571,7 +573,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					Root<E> subQueryRoot = subQuery.from(entityType);
 					expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
-					if (subQueryRoot.getJoins().isEmpty()) {
+					if (!hasJoins(root)) {
 						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
 					}
 					else {
@@ -896,22 +898,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static Expression<?> resolveExpression(Root<?> root, String field) {
-		if (!field.contains(".")) {
-			return root.get(field);
-		}
-
 		Path<?> path = root;
-		Map<String, Path<?>> joins = getJoins(root);
 		String[] properties = field.split("\\.");
+		int depth = properties.length;
+		Map<String, Path<?>> joins = depth > 1 ? getJoins(root) : emptyMap();
 
-		for (int i = 0; i < properties.length; i++) {
+		for (int i = 0; i < depth; i++) {
 			String property = properties[i];
 
-			if (i + 1 < properties.length) {
+			if (i + 1 < depth) {
 				path = joins.get(property);
 			}
 			else {
-				path = path.get(property);
+				Path<?> resolved = path.get(property);
+
+				if (Collection.class.isAssignableFrom(resolved.getJavaType())) {
+					path = ((From<?, ?>) path).join(property);
+				}
+				else {
+					path = resolved;
+				}
 			}
 		}
 
@@ -939,6 +945,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static boolean hasRestrictions(AbstractQuery<?> query) {
 		return query.getRestriction() != null || !query.getGroupList().isEmpty() || query.getGroupRestriction() != null;
+	}
+
+	private static boolean hasJoins(Root<?> root) {
+		return !root.getJoins().isEmpty() || !root.getFetches().isEmpty();
 	}
 
 	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
