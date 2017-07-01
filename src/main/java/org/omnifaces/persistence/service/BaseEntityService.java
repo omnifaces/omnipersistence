@@ -616,7 +616,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return field -> expressions.get(field);
 		}
 		else if (resultType == entityType) {
-			return field -> resolveExpression(root, field);
+			return new ExpressionResolverImpl(root);
 		}
 		else {
 			throw new IllegalArgumentException("You must return a getter-expression mapping from MappedQueryBuilder");
@@ -635,6 +635,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		criteriaQuery.orderBy(stream(ordering).map(order -> {
 			Expression<?> expression = expressionResolver.get(order.getKey());
+
+			if (isElementCollection(expression.getJavaType())) {
+				expression = expressionResolver.get("@" + order.getKey());
+			}
+
 			return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
 		}).collect(toList()));
 	}
@@ -657,6 +662,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 			if (!wherePredicates.isEmpty()) {
 				restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
+			}
+
+			List<Predicate> inPredicates = requiredPredicates.stream().filter(p -> p.getAlias().endsWith("_in")).collect(toList());
+
+			if (!inPredicates.isEmpty()) {
+				for (Predicate inPredicate : inPredicates) {
+					String alias = inPredicate.getAlias();
+					String field = alias.substring(alias.indexOf("_") + 1).split("_\\d+_", 2)[0]; // TODO: Awkward.
+					int count = Integer.valueOf(alias.split("_\\d+_", 2)[1].split("_")[0]);
+					Expression<?> path = expressionResolver.get("@" + field);
+					Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(path), count);
+					countPredicate.alias("having_" + alias);
+					requiredPredicates.add(countPredicate);
+				}
+
+				List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
+				groupList.add(expressionResolver.get(null));
+				query.groupBy(groupList);
 			}
 
 			List<Predicate> havingPredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("having_")).collect(toList());
@@ -685,19 +708,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				return null; // Likely custom search key referring non-existent property.
 			}
 
-			/*
-			if (Collection.class.isAssignableFrom(type)) {
-				predicate = buildIn(root.join(key), searchKey, Arrays.asList(value), criteriaBuilder, parameterValues); // TODO
-			}*/
-
 			Class<?> type = ID.equals(field) ? identifierType : expression.getJavaType();
-			return buildPredicate(expression, type, field, parameter.getValue(), criteriaBuilder, parameterValues);
+			Object value = parameter.getValue();
+
+			if (isElementCollection(type)) {
+				if (isEmpty(value)) {
+					return null;
+				}
+
+				expression = expressionResolver.get("@" + field);
+			}
+
+			return buildPredicate(expression, type, field, value, criteriaBuilder, parameterValues);
 		}).filter(Objects::nonNull).collect(toList());
 	}
 
 	@SuppressWarnings("unchecked")
 	private Predicate buildPredicate(Expression<?> expression, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		String searchKey = field.replace(".", "_") + "Search" + parameterValues.size();
+		String searchKey = ((expression instanceof Path) ? "where" : "having") + "_" + field.replace(".", "_") + "_" + parameterValues.size();
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -710,7 +738,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			value = null;
 		}
 
-		if (value == null) {
+		if (isElementCollection(type)) {
+			int previousSize = parameterValues.size();
+			predicate = buildIn((Join<?, ?>) expression, searchKey, value, criteriaBuilder, parameterValues);
+			searchKey += "_" + (parameterValues.size() - previousSize) + "_in";
+		}
+		else if (value == null) {
 			predicate = criteriaBuilder.isNull(expression);
 		}
 		else if (value instanceof Constraint) {
@@ -767,7 +800,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			predicate = criteriaBuilder.not(predicate);
 		}
 
-		predicate.alias((expression instanceof Path ? "where" : "having") + "_" + searchKey);
+		predicate.alias(searchKey);
 		return predicate;
 	}
 
@@ -781,14 +814,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), criteriaBuilder.parameter(String.class, key));
 	}
 
-	private Predicate buildIn(Join<?, ?> join, String key, Collection<?> values, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		List<Expression<?>> in = new ArrayList<>(values.size());
-
-		for (Object value : values) {
-			String searchKey = key + value;
-			parameterValues.put(searchKey, value);
-			in.add(criteriaBuilder.parameter(value.getClass(), searchKey));
-		}
+	private Predicate buildIn(Join<?, ?> join, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		List<Expression<?>> in = stream(value).map(item -> {
+			String itemKey = key + "_" + item;
+			parameterValues.put(itemKey, item);
+			return criteriaBuilder.parameter(item.getClass(), itemKey);
+		}).collect(toList());
 
 		return join.in(in.toArray(new Expression[in.size()]));
 	}
@@ -897,42 +928,65 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Expression<?> get(String field);
 	}
 
-	private static Expression<?> resolveExpression(Root<?> root, String field) {
-		Path<?> path = root;
-		String[] properties = field.split("\\.");
-		int depth = properties.length;
-		Map<String, Path<?>> joins = depth > 1 ? getJoins(root) : emptyMap();
+	private static class ExpressionResolverImpl implements ExpressionResolver {
 
-		for (int i = 0; i < depth; i++) {
-			String property = properties[i];
+		private Root<?> root;
+		private Map<String, Path<?>> paths;
 
-			if (i + 1 < depth) {
-				path = joins.get(property);
-			}
-			else {
-				Path<?> resolved = path.get(property);
-
-				if (Collection.class.isAssignableFrom(resolved.getJavaType())) {
-					path = ((From<?, ?>) path).join(property);
-				}
-				else {
-					path = resolved;
-				}
-			}
+		private ExpressionResolverImpl(Root<?> root) {
+			this.root = root;
+			this.paths = new HashMap<>();
 		}
 
-		return path;
+		@Override
+		public Expression<?> get(String field) {
+			if (field == null) {
+				return root;
+			}
+
+			Path<?> path = paths.get(field);
+
+			if (path != null) {
+				return path;
+			}
+
+			path = root;
+			String[] properties = field.split("\\.");
+			int depth = properties.length;
+			Map<String, Path<?>> joins = depth > 1 ? getJoins(root) : emptyMap();
+
+			for (int i = 0; i < depth; i++) {
+				String property = properties[i];
+
+				if (i + 1 < depth) {
+					path = joins.get(property);
+				}
+				else if (property.charAt(0) == '@') {
+					path = ((From<?, ?>) path).join(property.substring(1));
+				}
+				else {
+					path = path.get(property);
+				}
+			}
+
+			paths.put(field, path);
+			return path;
+		}
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private static Map<String, Path<?>> getJoins(Root<?> root) {
-		Set rawJoins = root.getJoins();
-		Set rawFetches = root.getFetches();
+	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
+		Set rawJoins = from.getJoins();
+		Set rawFetches = from.getFetches();
 
 		Map joins = new HashMap(((Set<Join>) rawJoins).stream().collect(toMap(join -> join.getAttribute().getName())));
 		joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
 
 		return joins;
+	}
+
+	private static boolean isElementCollection(Class<?> type) {
+		return Collection.class.isAssignableFrom(type);
 	}
 
 	private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, Predicate nonnullable) {
@@ -947,8 +1001,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return query.getRestriction() != null || !query.getGroupList().isEmpty() || query.getGroupRestriction() != null;
 	}
 
-	private static boolean hasJoins(Root<?> root) {
-		return !root.getJoins().isEmpty() || !root.getFetches().isEmpty();
+	private static boolean hasJoins(From<?, ?> from) {
+		return !from.getJoins().isEmpty() || !from.getFetches().isEmpty();
 	}
 
 	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
