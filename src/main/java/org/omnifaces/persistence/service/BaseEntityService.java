@@ -568,8 +568,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					// See also https://stackoverflow.com/a/12076584/157882
 
 					Subquery<T> subQuery = countQuery.subquery(resultType);
-					Root<E> subQueryRoot = new SubQueryRoot<>(subQuery.from(entityType));
-					expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
+					Root<E> subQueryRoot = subQuery.from(entityType);
+					expressionResolver = buildSelection(criteriaBuilder, subQuery, new SubQueryRoot<>(subQueryRoot), resultType, queryBuilder);
 
 					if (subQueryRoot.getJoins().isEmpty()) {
 						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
