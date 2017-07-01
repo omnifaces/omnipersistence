@@ -7,6 +7,7 @@ import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
+import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -38,6 +40,7 @@ import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.Fetch;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
@@ -565,19 +568,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					// See also https://stackoverflow.com/a/12076584/157882
 
 					Subquery<T> subQuery = countQuery.subquery(resultType);
-					Root<E> subQueryRoot = subQuery.from(entityType);
-					subQuery.select(subQueryRoot.get(ID)).distinct(true);
+					Root<E> subQueryRoot = new SubQueryRoot<>(subQuery.from(entityType));
+					expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
-					if (resultType == entityType) {
-						// No need to rebuild them as they are the same anyway.
-						copyRestrictions(criteriaQuery, subQuery);
+					if (subQueryRoot.getJoins().isEmpty()) {
+						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
 					}
 					else {
-						expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, expressionResolver);
 					}
 
-					countQuery.where(criteriaBuilder.in(countRoot).value(subQuery));
+					countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
 				}
 
 				TypedQuery<Long> typedCountQuery = entityManager.createQuery(countQuery);
@@ -915,12 +916,32 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		Path<?> path = root;
+		Map<String, Path<?>> joins = getJoins(root);
+		String[] properties = field.split("\\.");
 
-		for (String property : field.split("\\.")) {
-			path = path.get(property);
+		for (int i = 0; i < properties.length; i++) {
+			String property = properties[i];
+
+			if (i + 1 < properties.length) {
+				path = joins.get(property);
+			}
+			else {
+				path = path.get(property);
+			}
 		}
 
 		return path;
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	private static Map<String, Path<?>> getJoins(Root<?> root) {
+		Set rawJoins = root.getJoins();
+		Set rawFetches = root.getFetches();
+
+		Map joins = new HashMap(((Set<Join>) rawJoins).stream().collect(toMap(join -> join.getAttribute().getName())));
+		joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
+
+		return joins;
 	}
 
 	private static boolean hasRestrictions(AbstractQuery<?> query) {
@@ -931,7 +952,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		if (source.getRestriction() != null) {
 			target.where(source.getRestriction());
 		}
-		if (source.getGroupList() != null) {
+		if (!source.getGroupList().isEmpty()) {
 			target.groupBy(source.getGroupList());
 		}
 		if (source.getGroupRestriction() != null) {

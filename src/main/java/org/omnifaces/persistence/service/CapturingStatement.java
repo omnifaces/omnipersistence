@@ -26,7 +26,7 @@ import java.util.Calendar;
  * @deprecated Use {@link BaseEntityService} instead.
  */
 @Deprecated
-public class CapturingStatement implements PreparedStatement {
+class CapturingStatement implements PreparedStatement {
 
 	private Object object;
 
