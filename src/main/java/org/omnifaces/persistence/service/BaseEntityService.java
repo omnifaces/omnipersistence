@@ -647,40 +647,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
-			Predicate[] optionalRestrictions = optionalPredicates.toArray(PREDICATE_ARRAY);
-			restriction = criteriaBuilder.or(optionalRestrictions);
+			restriction = criteriaBuilder.or(optionalPredicates.toArray(PREDICATE_ARRAY));
 		}
 
 		if (!requiredPredicates.isEmpty()) {
 			List<Predicate> wherePredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("where_")).collect(toList());
 
 			if (!wherePredicates.isEmpty()) {
-				Predicate requiredRestriction = criteriaBuilder.and(wherePredicates.toArray(PREDICATE_ARRAY));
-				restriction = (restriction != null) ? criteriaBuilder.and(requiredRestriction, restriction) : requiredRestriction;
+				restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
 			}
 
 			List<Predicate> havingPredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("having_")).collect(toList());
 
 			if (!havingPredicates.isEmpty()) {
-				Predicate groupRestriction = criteriaBuilder.and(havingPredicates.toArray(PREDICATE_ARRAY));
-				Predicate originalGroupRestriction = query.getGroupRestriction();
-
-				if (originalGroupRestriction != null) {
-					groupRestriction = criteriaBuilder.and(originalGroupRestriction, groupRestriction);
-				}
-
-				query.having(groupRestriction);
+				query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), havingPredicates));
 			}
 		}
 
 		if (restriction != null) {
-			Predicate originalRestriction = query.getRestriction();
-
-			if (originalRestriction != null) {
-				restriction = criteriaBuilder.and(originalRestriction, restriction);
-			}
-
-			query.where(restriction);
+			query.where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
@@ -942,6 +927,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
 
 		return joins;
+	}
+
+	private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, Predicate nonnullable) {
+		return nullable == null ? nonnullable : criteriaBuilder.and(nullable, nonnullable);
+	}
+
+	private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, List<Predicate> nonnullable) {
+		return conjunctRestrictionsIfNecessary(criteriaBuilder, nullable, criteriaBuilder.and(nonnullable.toArray(PREDICATE_ARRAY)));
 	}
 
 	private static boolean hasRestrictions(AbstractQuery<?> query) {
