@@ -672,7 +672,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
 			}
 
-			List<Predicate> inPredicates = requiredPredicates.stream().filter(Alias::isIn).collect(toList());
+			List<Predicate> inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
 
 			for (Predicate inPredicate : inPredicates) {
 				Predicate countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, pathResolver);
@@ -748,7 +748,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			if (isElementCollection(type)) {
 				int previousSize = parameterValues.size();
 				predicate = buildInPredicate((Join<?, ?>) path, alias, value, criteriaBuilder, parameterValues);
-				Alias.in(alias, parameterValues.size() - previousSize);
+				alias = Alias.in(alias, parameterValues.size() - previousSize);
 			}
 			else if (value == null) {
 				predicate = criteriaBuilder.isNull(path);
@@ -1077,10 +1077,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static void groupByRootIfNecessary(AbstractQuery<?> query, PathResolver pathResolver) {
-		List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
 		Expression<?> root = pathResolver.get(null);
 
-		if (!groupList.contains(root)) {
+		if (!query.getGroupList().contains(root)) {
+			List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
 			groupList.add(root);
 			query.groupBy(groupList);
 		}
