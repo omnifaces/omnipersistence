@@ -26,7 +26,7 @@ import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.SetAttribute;
 import javax.persistence.metamodel.SingularAttribute;
 
-class RootWrapper<X> implements Root<X> {
+public class RootWrapper<X> implements Root<X> {
 
 	private Root<X> wrapped;
 
@@ -159,6 +159,7 @@ class RootWrapper<X> implements Root<X> {
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X> Expression<X> as(Class<X> type) {
 		return getWrapped().as(type);
 	}
@@ -169,6 +170,7 @@ class RootWrapper<X> implements Root<X> {
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
 		return getWrapped().fetch(attributeName);
 	}
@@ -189,6 +191,7 @@ class RootWrapper<X> implements Root<X> {
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
 		return getWrapped().fetch(attributeName, jt);
 	}
@@ -234,51 +237,61 @@ class RootWrapper<X> implements Root<X> {
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> Join<X, Y> join(String attributeName) {
 		return getWrapped().join(attributeName);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> CollectionJoin<X, Y> joinCollection(String attributeName) {
 		return getWrapped().joinCollection(attributeName);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> SetJoin<X, Y> joinSet(String attributeName) {
 		return getWrapped().joinSet(attributeName);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> ListJoin<X, Y> joinList(String attributeName) {
 		return getWrapped().joinList(attributeName);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, K, V> MapJoin<X, K, V> joinMap(String attributeName) {
 		return getWrapped().joinMap(attributeName);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> Join<X, Y> join(String attributeName, JoinType jt) {
 		return getWrapped().join(attributeName, jt);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> CollectionJoin<X, Y> joinCollection(String attributeName, JoinType jt) {
 		return getWrapped().joinCollection(attributeName, jt);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> SetJoin<X, Y> joinSet(String attributeName, JoinType jt) {
 		return getWrapped().joinSet(attributeName, jt);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, Y> ListJoin<X, Y> joinList(String attributeName, JoinType jt) {
 		return getWrapped().joinList(attributeName, jt);
 	}
 
 	@Override
+	@SuppressWarnings("hiding")
 	public <X, K, V> MapJoin<X, K, V> joinMap(String attributeName, JoinType jt) {
 		return getWrapped().joinMap(attributeName, jt);
 	}

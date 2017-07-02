@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -33,9 +34,11 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.ejb.Stateless;
+import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
 import javax.persistence.PersistenceContext;
+import javax.persistence.Query;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
@@ -44,6 +47,8 @@ import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Fetch;
 import javax.persistence.criteria.From;
 import javax.persistence.criteria.Join;
+import javax.persistence.criteria.Order;
+import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
@@ -410,7 +415,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
 	 * </pre>
-	 * @param <T> The generic base entity type or from a subclass thereof.
+	 * @param <T> The generic base entity type or from a DTO subclass thereof.
 	 */
 	@FunctionalInterface
 	protected static interface MappedQueryBuilder<T> {
@@ -418,8 +423,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your subclass define the callback method which needs to be invoked before any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to set an {@link EntityManager} property.
+	 * Here you can in your DTO subclass define the callback method which needs to be invoked before any of
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to set an {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
 	 */
@@ -428,8 +433,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your subclass define the callback method which needs to be invoked when any query involved in
-	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific query hint.
+	 * Here you can in your DTO subclass define the callback method which needs to be invoked when any query involved in
+	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
 	 * The default implementation sets the Hibernate <code>cacheable</code> and <code>cacheRegion</code> hints.
 	 * @param page The page on which this query is based.
 	 * @param cacheable Whether the results should be cacheable.
@@ -445,8 +450,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your subclass define the callback method which needs to be invoked after any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove an {@link EntityManager} property.
+	 * Here you can in your DTO subclass define the callback method which needs to be invoked after any of
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove an {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
 	 */
@@ -520,7 +525,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
 	 * @param mappedQueryBuilder This allows fine-graining the JPA criteria query and must return a mapping of
-	 * getters-expressions.
+	 * getters-paths.
 	 * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
 	 */
@@ -537,7 +542,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param cacheable Whether the results should be cacheable.
 	 * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
 	 * @param queryBuilder This allows fine-graining the JPA criteria query and must return a mapping of
-	 * getters-expressions when result type does not equal entity type.
+	 * getters-paths when result type does not equal entity type.
 	 * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
 	 */
@@ -549,9 +554,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
 			Root<E> root = criteriaQuery.from(entityType);
 
-			ExpressionResolver expressionResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
-			buildOrderBy(page, criteriaBuilder, criteriaQuery, expressionResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, expressionResolver);
+			PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
+			buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
+			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 			onPage(page, cacheable).accept(typedQuery);
@@ -571,13 +576,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 					Subquery<T> subQuery = countQuery.subquery(resultType);
 					Root<E> subQueryRoot = subQuery.from(entityType);
-					expressionResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
+					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
 					if (!hasJoins(root)) {
 						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
 					}
 					else {
-						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, expressionResolver);
+						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
 					}
 
 					countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
@@ -599,7 +604,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
-	private <T extends E> ExpressionResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
+	private <T extends E> PathResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
 		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, query instanceof Subquery ? new SubQueryRoot<>(root) : root);
 
 		if (!isEmpty(mapping)) {
@@ -607,50 +612,53 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				((CriteriaQuery<?>) query).multiselect(mapping.values().toArray(new Selection[mapping.size()]));
 			}
 
-			Map<String, Expression<?>> expressions = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
+			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
+			PathResolver pathResolver = field -> (field == null) ? root : paths.get(field);
 
-			if (expressions.values().stream().anyMatch(e -> !(e instanceof Path))) {
-				query.groupBy(root);
+			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupByRoot)) {
+				groupByRootIfNecessary(query, pathResolver);
 			}
 
-			return field -> expressions.get(field);
+			return pathResolver;
 		}
 		else if (resultType == entityType) {
-			return new ExpressionResolverImpl(root);
+			return new RootPathResolver(root);
 		}
 		else {
-			throw new IllegalArgumentException("You must return a getter-expression mapping from MappedQueryBuilder");
+			throw new IllegalArgumentException("You must return a getter-path mapping from MappedQueryBuilder");
 		}
 	}
 
 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
-	private <T> void buildOrderBy(Page page, CriteriaBuilder criteriaBuilder, CriteriaQuery<T> criteriaQuery, ExpressionResolver expressionResolver) {
+	private <T> void buildOrderBy(Page page, CriteriaBuilder criteriaBuilder, CriteriaQuery<T> criteriaQuery, PathResolver pathResolver) {
 		Map<String, Boolean> ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
 			return;
 		}
 
-		criteriaQuery.orderBy(stream(ordering).map(order -> {
-			Expression<?> expression = expressionResolver.get(order.getKey());
+		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver)).collect(toList()));
+	}
 
-			if (isElementCollection(expression.getJavaType())) {
-				expression = expressionResolver.get("@" + order.getKey());
-			}
+	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+		Expression<?> path = pathResolver.get(order.getKey());
 
-			return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
-		}).collect(toList()));
+		if (isElementCollection(path.getJavaType())) {
+			path = pathResolver.get(pathResolver.forElementCollection(order.getKey()));
+		}
+
+		return order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 	}
 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
-	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, ExpressionResolver expressionResolver) {
+	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver) {
 		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
-		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), criteriaBuilder, expressionResolver, parameterValues);
-		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), criteriaBuilder, expressionResolver, parameterValues);
+		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), criteriaBuilder, pathResolver, parameterValues);
+		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), criteriaBuilder, pathResolver, parameterValues);
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
@@ -658,33 +666,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (!requiredPredicates.isEmpty()) {
-			List<Predicate> wherePredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("where_")).collect(toList());
+			List<Predicate> wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).collect(toList());
 
 			if (!wherePredicates.isEmpty()) {
 				restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
 			}
 
-			List<Predicate> inPredicates = requiredPredicates.stream().filter(p -> p.getAlias().endsWith("_in")).collect(toList());
+			List<Predicate> inPredicates = requiredPredicates.stream().filter(Alias::isIn).collect(toList());
 
-			if (!inPredicates.isEmpty()) {
-				for (Predicate inPredicate : inPredicates) {
-					String alias = inPredicate.getAlias();
-					String field = alias.substring(alias.indexOf("_") + 1).split("_\\d+_", 2)[0]; // TODO: Awkward.
-					int count = Integer.valueOf(alias.split("_\\d+_", 2)[1].split("_")[0]);
-					Expression<?> path = expressionResolver.get("@" + field);
-					Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(path), count);
-					countPredicate.alias("having_" + alias);
+			for (Predicate inPredicate : inPredicates) {
+				Predicate countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, pathResolver);
+
+				if (countPredicate != null) {
 					requiredPredicates.add(countPredicate);
 				}
-
-				List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
-				groupList.add(expressionResolver.get(null));
-				query.groupBy(groupList);
 			}
 
-			List<Predicate> havingPredicates = requiredPredicates.stream().filter(p -> p.getAlias().startsWith("having_")).collect(toList());
+			List<Predicate> havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
 
 			if (!havingPredicates.isEmpty()) {
+				groupByRootIfNecessary(query, pathResolver);
 				query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), havingPredicates));
 			}
 		}
@@ -696,36 +697,41 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return parameterValues;
 	}
 
-	private <T> List<Predicate> buildPredicates(Map<String, Object> criteria, CriteriaBuilder criteriaBuilder, ExpressionResolver expressionResolver, Map<String, Object> parameterValues) {
-		return stream(criteria).map(parameter -> {
-			String field = parameter.getKey();
-			Expression<?> expression;
+	private <T> List<Predicate> buildPredicates(Map<String, Object> criteria, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+		return stream(criteria)
+			.map(parameter -> buildPredicate(parameter, criteriaBuilder, pathResolver, parameterValues))
+			.filter(Objects::nonNull)
+			.collect(toList());
+	}
 
-			try {
-				expression = expressionResolver.get(field);
+	private Predicate buildPredicate(Entry<String, Object> parameter, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+		String field = parameter.getKey();
+		Expression<?> path;
+
+		try {
+			path = pathResolver.get(field);
+		}
+		catch (IllegalArgumentException ignore) {
+			return null; // Likely custom search key referring non-existent property.
+		}
+
+		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
+		Object value = parameter.getValue();
+
+		if (isElementCollection(type)) {
+			if (isEmpty(value)) {
+				return null;
 			}
-			catch (IllegalArgumentException ignore) {
-				return null; // Likely custom search key referring non-existent property.
-			}
 
-			Class<?> type = ID.equals(field) ? identifierType : expression.getJavaType();
-			Object value = parameter.getValue();
+			path = pathResolver.get(pathResolver.forElementCollection(field));
+		}
 
-			if (isElementCollection(type)) {
-				if (isEmpty(value)) {
-					return null;
-				}
-
-				expression = expressionResolver.get("@" + field);
-			}
-
-			return buildPredicate(expression, type, field, value, criteriaBuilder, parameterValues);
-		}).filter(Objects::nonNull).collect(toList());
+		return buildTypedPredicate(path, type, field, value, criteriaBuilder, parameterValues);
 	}
 
 	@SuppressWarnings("unchecked")
-	private Predicate buildPredicate(Expression<?> expression, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		String searchKey = ((expression instanceof Path) ? "where" : "having") + "_" + field.replace(".", "_") + "_" + parameterValues.size();
+	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		String alias = Alias.create(path, field, parameterValues.size());
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -738,105 +744,104 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			value = null;
 		}
 
-		if (isElementCollection(type)) {
-			int previousSize = parameterValues.size();
-			predicate = buildIn((Join<?, ?>) expression, searchKey, value, criteriaBuilder, parameterValues);
-			searchKey += "_" + (parameterValues.size() - previousSize) + "_in";
+		try {
+			if (isElementCollection(type)) {
+				int previousSize = parameterValues.size();
+				predicate = buildInPredicate((Join<?, ?>) path, alias, value, criteriaBuilder, parameterValues);
+				Alias.in(alias, parameterValues.size() - previousSize);
+			}
+			else if (value == null) {
+				predicate = criteriaBuilder.isNull(path);
+			}
+			else if (value instanceof Constraint) {
+				predicate = ((Constraint<?>) value).build(alias, criteriaBuilder, path, parameterValues);
+			}
+			else if (value instanceof Iterable<?> || value.getClass().isArray()) {
+				predicate = buildArrayPredicate(path, type, field, value, criteriaBuilder, parameterValues);
+			}
+			else if (type.isEnum()) {
+				predicate = buildEqualPredicate(path, alias, parseEnum((Expression<Enum<?>>) path, value), criteriaBuilder, parameterValues);
+			}
+			else if (Number.class.isAssignableFrom(type)) {
+				predicate = buildEqualPredicate(path, alias, parseNumber((Expression<Number>) path, value), criteriaBuilder, parameterValues);
+			}
+			else if (Boolean.class.isAssignableFrom(type)) {
+				predicate = buildEqualPredicate(path, alias, parseBoolean((Expression<Boolean>) path, value), criteriaBuilder, parameterValues);
+			}
+			else if (String.class.isAssignableFrom(type) || value instanceof String) {
+				predicate = buildLikePredicate(path, alias, value.toString(), criteriaBuilder, parameterValues);
+			}
+			else {
+				predicate = buildUnsupportedPredicate(path, alias, value, criteriaBuilder, parameterValues);
+			}
 		}
-		else if (value == null) {
-			predicate = criteriaBuilder.isNull(expression);
+		catch (IllegalArgumentException e) {
+			return null; // Likely custom search value referring illegal value.
 		}
-		else if (value instanceof Constraint) {
-			predicate = ((Constraint<?>) value).build(searchKey, criteriaBuilder, expression, parameterValues);
-		}
-		else if (value instanceof Iterable<?> || value.getClass().isArray()) {
-			List<Predicate> predicates = stream(value)
-				.map(item -> buildPredicate(expression, type, field, item, criteriaBuilder, parameterValues))
-				.filter(Objects::nonNull)
-				.collect(toList());
 
-			if (predicates.isEmpty()) {
-				return null; // Likely invalid custom search value.
-			}
-
-			predicate = criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY));
-		}
-		else if (type.isEnum()) {
-			try {
-				predicate = buildEqual(expression, searchKey, parseEnum((Expression<Enum<?>>) expression, value), criteriaBuilder, parameterValues);
-			}
-			catch (IllegalArgumentException ignore) {
-				return null; // Likely custom search value referring non-existent enum value.
-			}
-		}
-		else if (Number.class.isAssignableFrom(type)) {
-			try {
-				predicate = buildEqual(expression, searchKey, parseNumber((Expression<Number>) expression, value), criteriaBuilder, parameterValues);
-			}
-			catch (NumberFormatException ignore) {
-				return null; // Likely custom search value referring non-numeric value.
-			}
-		}
-		else if (Boolean.class.isAssignableFrom(type)) {
-			try {
-				predicate = buildEqual(expression, searchKey, parseBoolean((Expression<Boolean>) expression, value), criteriaBuilder, parameterValues);
-			}
-			catch (IllegalArgumentException ignore) {
-				return null; // Likely custom search value referring non-boolean value.
-			}
-		}
-		else if (String.class.isAssignableFrom(type) || value instanceof String) {
-			predicate = buildLike(expression, searchKey, value.toString(), criteriaBuilder, parameterValues);
-		}
-		else {
-			predicate = buildUnsupportedPredicate(expression, searchKey, value, criteriaBuilder, parameterValues);
-
-			if (predicate == null) {
-				throw new UnsupportedOperationException("You may not return null from buildUnsupportedPredicate().");
-			}
+		if (predicate == null) {
+			throw new UnsupportedOperationException("You may not return null from buildUnsupportedPredicate().");
 		}
 
 		if (negated) {
 			predicate = criteriaBuilder.not(predicate);
 		}
 
-		predicate.alias(searchKey);
+		predicate.alias(alias);
 		return predicate;
 	}
 
-	private Predicate buildEqual(Expression<?> expression, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		parameterValues.put(key, value);
-		return criteriaBuilder.equal(expression, criteriaBuilder.parameter(expression.getJavaType(), key));
-	}
-
-	private Predicate buildLike(Expression<?> expression, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		parameterValues.put(key, value);
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), criteriaBuilder.parameter(String.class, key));
-	}
-
-	private Predicate buildIn(Join<?, ?> join, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		List<Expression<?>> in = stream(value).map(item -> {
-			String itemKey = key + "_" + item;
-			parameterValues.put(itemKey, item);
-			return criteriaBuilder.parameter(item.getClass(), itemKey);
-		}).collect(toList());
+	private Predicate buildInPredicate(Join<?, ?> join, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		List<Expression<?>> in = stream(value)
+			.map(item -> buildInPredicateParameter(key, item, criteriaBuilder, parameterValues))
+			.collect(toList());
 
 		return join.in(in.toArray(new Expression[in.size()]));
 	}
 
+	private ParameterExpression<?> buildInPredicateParameter(String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		String itemKey = key + "_" + value;
+		parameterValues.put(itemKey, value);
+		return criteriaBuilder.parameter(value.getClass(), itemKey);
+	}
+
+	private Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		List<Predicate> predicates = stream(value)
+			.map(item -> buildTypedPredicate(path, type, field, item, criteriaBuilder, parameterValues))
+			.filter(Objects::nonNull)
+			.collect(toList());
+
+		if (predicates.isEmpty()) {
+			throw new IllegalArgumentException(value.toString());
+		}
+
+		Predicate predicate = criteriaBuilder.or(predicates.toArray(PREDICATE_ARRAY));
+		return predicate;
+	}
+
+	private Predicate buildEqualPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		parameterValues.put(key, value);
+		return criteriaBuilder.equal(path, criteriaBuilder.parameter(path.getJavaType(), key));
+	}
+
+	private Predicate buildLikePredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+		parameterValues.put(key, value);
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), criteriaBuilder.parameter(String.class, key));
+	}
+
 	/**
 	 * You can override this method if you want more fine grained control over how enums values are parsed for predicates.
-	 * @param expression Entity property expression. You can use this to inspect the target entity property.
+	 * @param path Entity property path. You can use this to inspect the target entity property.
 	 * @param value Value to be parsed to enum.
 	 * @return The parsed enum value.
 	 * @throws IllegalArgumentException When value cannot be parsed as enum.
 	 */
-	protected Enum<?> parseEnum(Expression<Enum<?>> expression, Object value) throws IllegalArgumentException {
+	protected Enum<?> parseEnum(Expression<Enum<?>> path, Object value) throws IllegalArgumentException {
 		if (value instanceof Enum) {
 			return (Enum<?>) value;
 		}
 		else {
-			for (Enum<?> enumConstant : expression.getJavaType().getEnumConstants()) {
+			for (Enum<?> enumConstant : path.getJavaType().getEnumConstants()) {
 				if (enumConstant.name().equalsIgnoreCase(value.toString())) {
 					return enumConstant;
 				}
@@ -848,37 +853,43 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * You can override this method if you want more fine grained control over how number values are parsed for predicates.
-	 * @param expression Entity property expression. You can use this to inspect the target entity property.
+	 * @param path Entity property path. You can use this to inspect the target entity property.
 	 * @param value Value to be parsed to number.
 	 * @return The parsed number value.
-	 * @throws NumberFormatException When value cannot be parsed as number.
+	 * @throws IllegalArgumentException When value cannot be parsed as number.
 	 */
-	protected Number parseNumber(Expression<Number> expression, Object value) throws NumberFormatException {
+	protected Number parseNumber(Expression<Number> path, Object value) throws NumberFormatException {
 		if (value instanceof Number) {
 			return (Number) value;
 		}
-		else if (BigDecimal.class.isAssignableFrom(expression.getJavaType())) {
-			return new BigDecimal(value.toString());
+
+		try {
+			if (BigDecimal.class.isAssignableFrom(path.getJavaType())) {
+				return new BigDecimal(value.toString());
+			}
+			else if (BigInteger.class.isAssignableFrom(path.getJavaType())) {
+				return new BigInteger(value.toString());
+			}
+			else if (Integer.class.isAssignableFrom(path.getJavaType())) {
+				return Integer.valueOf(value.toString());
+			}
+			else {
+				return Long.valueOf(value.toString());
+			}
 		}
-		else if (BigInteger.class.isAssignableFrom(expression.getJavaType())) {
-			return new BigInteger(value.toString());
-		}
-		else if (Integer.class.isAssignableFrom(expression.getJavaType())) {
-			return Integer.valueOf(value.toString());
-		}
-		else {
-			return Long.valueOf(value.toString());
+		catch (NumberFormatException e) {
+			throw new IllegalArgumentException(value.toString(), e);
 		}
 	}
 
 	/**
 	 * You can override this method if you want more fine grained control over how boolean values are parsed for predicates.
-	 * @param expression Entity property expression. You can use this to inspect the target entity property.
+	 * @param path Entity property path. You can use this to inspect the target entity property.
 	 * @param value Value to be parsed to boolean.
 	 * @return The parsed boolean value.
 	 * @throws IllegalArgumentException When value cannot be parsed as boolean.
 	 */
-	protected Boolean parseBoolean(Expression<Boolean> expression, Object value) {
+	protected Boolean parseBoolean(Expression<Boolean> path, Object value) {
 		if (value instanceof Boolean) {
 			return (Boolean) value;
 		}
@@ -894,6 +905,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * You can override this method if you want to deal with an unsupported predicate and want to return a custom predicate.
 	 * At least, following predicates are supported, in this scanning order:
 	 * <ul>
+	 * <li>type = {@link ElementCollection}
 	 * <li>value = <code>null</code>
 	 * <li>value = {@link Constraint}
 	 * <li>value = {@link Iterable}
@@ -905,17 +917,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <li>type = {@link String}
 	 * <li>value = {@link String}
 	 * </ul>
-	 * So if you want to support e.g. a {@link Map} value, then you could consider overriding this method.
+	 * So if you want to support e.g. a {@link Map} value not covered by one of above types, then you could consider
+	 * overriding this method.
 	 *
-	 * @param expression Entity property expression. You can use this to inspect the target entity property.
+	 * @param path Entity property path. You can use this to inspect the target entity property.
 	 * @param key Search key. Use this as key of <code>parameterValues</code>.
 	 * @param value Search value. You can handle this here. Ultimately it must be put as value of <code>parameterValues</code>.
 	 * @param criteriaBuilder So you can build a predicate with a {@link CriteriaBuilder#parameter(Class, String)}.
 	 * @param parameterValues This holds all search parameter values collected so far.
 	 * @return The custom predicate.
 	 * @throws UnsupportedOperationException When this is not overridden yet.
+	 * @throws IllegalArgumentException When you cannot parse the value reasonably.
 	 */
-	protected Predicate buildUnsupportedPredicate(Expression<?> expression, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	protected Predicate buildUnsupportedPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
 		throw new UnsupportedOperationException("Predicate for " + key + "=" + value + " is not supported."
 			+ " Consider overriding buildUnsupportedPredicate() in your BaseEntityService subclass if you want to deal with it.");
 	}
@@ -924,16 +938,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Helpers --------------------------------------------------------------------------------------------------------
 
 	@FunctionalInterface
-	private static interface ExpressionResolver {
+	private static interface PathResolver {
 		Expression<?> get(String field);
+
+		default String forElementCollection(String attribute) {
+			return '@' + attribute;
+		}
+
+		default boolean isElementCollection(String attribute) {
+			return attribute.charAt(0) == '@';
+		}
 	}
 
-	private static class ExpressionResolverImpl implements ExpressionResolver {
+	private static class RootPathResolver implements PathResolver {
 
 		private Root<?> root;
 		private Map<String, Path<?>> paths;
 
-		private ExpressionResolverImpl(Root<?> root) {
+		private RootPathResolver(Root<?> root) {
 			this.root = root;
 			this.paths = new HashMap<>();
 		}
@@ -951,38 +973,78 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 
 			path = root;
-			String[] properties = field.split("\\.");
-			int depth = properties.length;
+			String[] attributes = field.split("\\.");
+			int depth = attributes.length;
 			Map<String, Path<?>> joins = depth > 1 ? getJoins(root) : emptyMap();
 
 			for (int i = 0; i < depth; i++) {
-				String property = properties[i];
+				String attribute = attributes[i];
 
 				if (i + 1 < depth) {
-					path = joins.get(property);
+					path = joins.get(attribute);
 				}
-				else if (property.charAt(0) == '@') {
-					path = ((From<?, ?>) path).join(property.substring(1));
+				else if (isElementCollection(attribute)) {
+					path = ((From<?, ?>) path).join(attribute.substring(1));
 				}
 				else {
-					path = path.get(property);
+					path = path.get(attribute);
 				}
 			}
 
 			paths.put(field, path);
 			return path;
 		}
+
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		private static Map<String, Path<?>> getJoins(From<?, ?> from) {
+			Set rawJoins = from.getJoins();
+			Set rawFetches = from.getFetches();
+
+			Map joins = new HashMap(((Set<Join>) rawJoins).stream().collect(toMap(join -> join.getAttribute().getName())));
+			joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
+
+			return joins;
+		}
 	}
 
-	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
-		Set rawJoins = from.getJoins();
-		Set rawFetches = from.getFetches();
+	private static class Alias {
 
-		Map joins = new HashMap(((Set<Join>) rawJoins).stream().collect(toMap(join -> join.getAttribute().getName())));
-		joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
+		private static final String WHERE = "where_";
+		private static final String HAVING = "having_";
+		private static final String IN = "_in";
 
-		return joins;
+		public static String create(Expression<?> expression, String field, int index) {
+			return (needsGroupByRoot(expression) ? HAVING : WHERE) + field.replace(".", "_") + "_" + index;
+		}
+
+		public static String in(String alias, int count) {
+			return alias + "_" + count + IN;
+		}
+
+		public static String having(Predicate predicate) {
+			return HAVING + predicate.getAlias();
+		}
+
+		public static boolean isWhere(Predicate predicate) {
+			return predicate.getAlias().startsWith(WHERE);
+		}
+
+		public static boolean isIn(Predicate predicate) {
+			return predicate.getAlias().endsWith(IN);
+		}
+
+		public static boolean isHaving(Predicate predicate) {
+			return predicate.getAlias().startsWith(HAVING);
+		}
+
+		public static Entry<String, Integer> getFieldAndCount(Predicate predicate) {
+			String alias = predicate.getAlias();
+			String[] fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_')).split("_\\d+_");
+			String field = fieldAndCount[0];
+			int count = Integer.valueOf(fieldAndCount[1]);
+			return new SimpleEntry<>(field, count);
+		}
+
 	}
 
 	private static boolean isElementCollection(Class<?> type) {
@@ -995,6 +1057,33 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, List<Predicate> nonnullable) {
 		return conjunctRestrictionsIfNecessary(criteriaBuilder, nullable, criteriaBuilder.and(nonnullable.toArray(PREDICATE_ARRAY)));
+	}
+
+	private static Predicate buildCountPredicateIfNecessary(Predicate inPredicate, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+		Entry<String, Integer> fieldAndCount = Alias.getFieldAndCount(inPredicate);
+
+		if (fieldAndCount.getValue() > 1) {
+			Expression<?> path = pathResolver.get(pathResolver.forElementCollection(fieldAndCount.getKey()));
+			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(path), fieldAndCount.getValue());
+			countPredicate.alias(Alias.having(inPredicate));
+			return countPredicate;
+		}
+
+		return null;
+	}
+
+	private static boolean needsGroupByRoot(Expression<?> expression) {
+		return !(expression instanceof Path);
+	}
+
+	private static void groupByRootIfNecessary(AbstractQuery<?> query, PathResolver pathResolver) {
+		List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
+		Expression<?> root = pathResolver.get(null);
+
+		if (!groupList.contains(root)) {
+			groupList.add(root);
+			query.groupBy(groupList);
+		}
 	}
 
 	private static boolean hasRestrictions(AbstractQuery<?> query) {
