@@ -397,6 +397,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <p>
 	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
 	 * <pre>
+	 * public class YourEntityDTO extends YourEntity {
+	 *
+	 *     private BigDecimal totalPrice;
+	 *
+	 *     public YourEntityDTO(Long id, String name, BigDecimal totalPrice) {
+	 *         setId(id);
+	 *         setName(name);
+	 *         this.totalPrice = totalPrice;
+	 *     }
+	 *
+	 *     public BigDecimal getTotalPrice() {
+	 *         return totalPrice;
+	 *     }
+	 *
+	 * }
+	 * </pre>
+	 * <pre>
      * &#64;Stateless
      * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
      *
@@ -424,7 +441,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your DTO subclass define the callback method which needs to be invoked before any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to set an {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
 	 */
@@ -451,7 +468,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your DTO subclass define the callback method which needs to be invoked after any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove an {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
 	 */
@@ -495,7 +512,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected PartialResultList<E> getPage(Page page, boolean count, QueryBuilder<E> queryBuilder) {
 		return getPage(page, count, true, entityType, (builder, query, root) -> {
 			queryBuilder.build(builder, query, (Root<E>) root);
-			return null;
+			return noop();
 		});
 	}
 
@@ -512,7 +529,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, QueryBuilder<E> queryBuilder) {
 		return getPage(page, count, cacheable, entityType, (builder, query, root) -> {
 			queryBuilder.build(builder, query, (Root<E>) root);
-			return null;
+			return noop();
 		});
 	}
 
