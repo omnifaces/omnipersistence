@@ -1,6 +1,5 @@
 package org.omnifaces.persistence.service;
 
-import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
@@ -632,8 +631,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
 			PathResolver pathResolver = field -> (field == null) ? root : paths.get(field);
 
-			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupByRoot)) {
-				groupByRootIfNecessary(query, pathResolver);
+			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupBy)) {
+				groupByIfNecessary(query, pathResolver, null);
 			}
 
 			return pathResolver;
@@ -692,7 +691,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			List<Predicate> inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
 
 			for (Predicate inPredicate : inPredicates) {
-				Predicate countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, pathResolver);
+				Predicate countPredicate = buildCountPredicateIfNecessary(query, inPredicate, criteriaBuilder, pathResolver);
 
 				if (countPredicate != null) {
 					requiredPredicates.add(countPredicate);
@@ -702,7 +701,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			List<Predicate> havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
 
 			if (!havingPredicates.isEmpty()) {
-				groupByRootIfNecessary(query, pathResolver);
+				groupByIfNecessary(query, pathResolver, null);
 				query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), havingPredicates));
 			}
 		}
@@ -740,7 +739,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				return null;
 			}
 
-			path = pathResolver.get(pathResolver.forElementCollection(field));
+			path = pathResolver.get(pathResolver.inElementCollection(field));
 		}
 
 		return buildTypedPredicate(path, type, field, value, criteriaBuilder, parameterValues);
@@ -962,18 +961,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return '@' + attribute;
 		}
 
-		default boolean isElementCollection(String attribute) {
-			return attribute.charAt(0) == '@';
+		default String inElementCollection(String attribute) {
+			return '@' + attribute + '@';
 		}
 	}
 
 	private static class RootPathResolver implements PathResolver {
 
 		private Root<?> root;
+		private Map<String, Path<?>> joins;
 		private Map<String, Path<?>> paths;
 
 		private RootPathResolver(Root<?> root) {
 			this.root = root;
+			this.joins = getJoins(root);
 			this.paths = new HashMap<>();
 		}
 
@@ -992,7 +993,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			path = root;
 			String[] attributes = field.split("\\.");
 			int depth = attributes.length;
-			Map<String, Path<?>> joins = depth > 1 ? getJoins(root) : emptyMap();
 
 			for (int i = 0; i < depth; i++) {
 				String attribute = attributes[i];
@@ -1000,8 +1000,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				if (i + 1 < depth) {
 					path = joins.get(attribute);
 				}
-				else if (isElementCollection(attribute)) {
-					path = ((From<?, ?>) path).join(attribute.substring(1));
+				else if (attribute.charAt(0) == '@') {  // TODO: improve this mess.
+					if (attribute.charAt(attribute.length() - 1) == '@') {
+						path = ((From<?, ?>) path).join(attribute.substring(1, attribute.length() - 1));
+					}
+					else {
+						path = joins.get(attribute.substring(1));
+					}
 				}
 				else {
 					path = path.get(attribute);
@@ -1031,7 +1036,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private static final String IN = "_in";
 
 		public static String create(Expression<?> expression, String field, int index) {
-			return (needsGroupByRoot(expression) ? HAVING : WHERE) + field.replace(".", "_") + "_" + index;
+			return (needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_") + "_" + index;
 		}
 
 		public static String in(String alias, int count) {
@@ -1039,7 +1044,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		public static String having(Predicate predicate) {
-			return HAVING + predicate.getAlias();
+			return HAVING + predicate.getAlias().substring(predicate.getAlias().indexOf("_") + 1);
 		}
 
 		public static boolean isWhere(Predicate predicate) {
@@ -1076,29 +1081,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return conjunctRestrictionsIfNecessary(criteriaBuilder, nullable, criteriaBuilder.and(nonnullable.toArray(PREDICATE_ARRAY)));
 	}
 
-	private static Predicate buildCountPredicateIfNecessary(Predicate inPredicate, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private static Predicate buildCountPredicateIfNecessary(AbstractQuery<?> query, Predicate inPredicate, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Entry<String, Integer> fieldAndCount = Alias.getFieldAndCount(inPredicate);
 
 		if (fieldAndCount.getValue() > 1) {
-			Expression<?> path = pathResolver.get(pathResolver.forElementCollection(fieldAndCount.getKey()));
-			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(path), fieldAndCount.getValue());
+			Expression<?> join = pathResolver.get(pathResolver.inElementCollection(fieldAndCount.getKey()));
+			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(join), fieldAndCount.getValue());
 			countPredicate.alias(Alias.having(inPredicate));
+			groupByIfNecessary(query, pathResolver, pathResolver.forElementCollection(fieldAndCount.getKey()));
 			return countPredicate;
 		}
 
 		return null;
 	}
 
-	private static boolean needsGroupByRoot(Expression<?> expression) {
+	private static boolean needsGroupBy(Expression<?> expression) {
 		return !(expression instanceof Path);
 	}
 
-	private static void groupByRootIfNecessary(AbstractQuery<?> query, PathResolver pathResolver) {
-		Expression<?> root = pathResolver.get(null);
+	private static void groupByIfNecessary(AbstractQuery<?> query, PathResolver pathResolver, String field) {
+		Expression<?> path = pathResolver.get(field);
 
-		if (!query.getGroupList().contains(root)) {
+		if (!query.getGroupList().contains(path)) {
 			List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
-			groupList.add(root);
+			groupList.add(path);
 			query.groupBy(groupList);
 		}
 	}
