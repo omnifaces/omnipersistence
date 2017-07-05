@@ -1,10 +1,10 @@
 package org.omnifaces.persistence.constraint;
 
-import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.model.dto.Page;
@@ -32,7 +32,11 @@ public abstract class Constraint<T> {
 
 	private T value;
 
-	protected Constraint(T value, boolean nestable) {
+	protected Constraint(T value) {
+		this(value, false);
+	}
+
+	Constraint(T value, boolean nestable) {
 		if (value instanceof Constraint && (!nestable || value.getClass() == getClass())) {
 			throw new IllegalArgumentException("You cannot nest " + value + " in " + this);
 		}
@@ -44,7 +48,7 @@ public abstract class Constraint<T> {
 		this.value = value;
 	}
 
-	public abstract Predicate build(Expression<?> path, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues);
+	public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
 	public abstract boolean applies(Object value);
 
@@ -74,5 +78,9 @@ public abstract class Constraint<T> {
 			&& (object == this || (Objects.equals(value, ((Constraint<?>) object).value)));
 	}
 
-}
+	@FunctionalInterface
+	public interface ParameterBuilder {
+		<T> ParameterExpression<T> create(Object value);
+	}
 
+}

@@ -1,6 +1,5 @@
 package org.omnifaces.persistence.constraint;
 
-import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
@@ -20,7 +19,7 @@ public final class Order extends Constraint<Comparable<?>> {
 	private Type type;
 
 	private Order(Type type, Comparable<?> value) {
-		super(value, false);
+		super(value);
 		this.type = type;
 	}
 
@@ -58,23 +57,22 @@ public final class Order extends Constraint<Comparable<?>> {
 
 	@Override
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	public Predicate build(Expression<?> expression, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		Comparable<?> searchValue = getValue();
-		parameterValues.put(key, searchValue);
 		Expression rawExpression = expression;
-		ParameterExpression<? extends Comparable> searchParameter = criteriaBuilder.parameter(rawExpression.getJavaType(), key);
+		ParameterExpression<? extends Comparable> parameter = parameterBuilder.create(searchValue);
 
 		if (greaterThan()) {
-			return criteriaBuilder.greaterThan(rawExpression, searchParameter);
+			return criteriaBuilder.greaterThan(rawExpression, parameter);
 		}
 		else if (greaterThanOrEqualTo()) {
-			return criteriaBuilder.greaterThanOrEqualTo(rawExpression, searchParameter);
+			return criteriaBuilder.greaterThanOrEqualTo(rawExpression, parameter);
 		}
 		else if (lessThan()) {
-			return criteriaBuilder.lessThan(rawExpression, searchParameter);
+			return criteriaBuilder.lessThan(rawExpression, parameter);
 		}
 		else {
-			return criteriaBuilder.lessThanOrEqualTo(rawExpression, searchParameter);
+			return criteriaBuilder.lessThanOrEqualTo(rawExpression, parameter);
 		}
 	}
 

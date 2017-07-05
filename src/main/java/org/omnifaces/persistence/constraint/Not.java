@@ -1,6 +1,5 @@
 package org.omnifaces.persistence.constraint;
 
-import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
@@ -18,7 +17,7 @@ public final class Not extends Constraint<Object> {
 	}
 
 	@Override
-	public Predicate build(Expression<?> expression, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		throw new UnsupportedOperationException();
 	}
 

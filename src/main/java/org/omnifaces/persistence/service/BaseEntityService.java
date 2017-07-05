@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
@@ -55,6 +56,7 @@ import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
 import org.omnifaces.persistence.constraint.Constraint;
+import org.omnifaces.persistence.constraint.Constraint.ParameterBuilder;
 import org.omnifaces.persistence.constraint.Not;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
@@ -735,12 +737,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			path = pathResolver.get(pathResolver.inElementCollection(field));
 		}
 
-		return buildTypedPredicate(path, type, field, value, criteriaBuilder, parameterValues);
+		return buildTypedPredicate(path, type, field, value, criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
 	}
 
 	@SuppressWarnings({ "unchecked", "null" })
-	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		String alias = Alias.create(path, field, parameterValues.size());
+	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+		String alias = Alias.create(path, field);
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -758,28 +760,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = criteriaBuilder.isNull(path);
 			}
 			else if (isElementCollection(type)) {
-				predicate = buildInPredicate(path, alias, value, criteriaBuilder, parameterValues);
+				predicate = buildInPredicate(path, alias, value, parameterBuilder);
 			}
 			else if (value instanceof Constraint) {
-				predicate = ((Constraint<?>) value).build(path, alias, criteriaBuilder, parameterValues);
+				predicate = ((Constraint<?>) value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
-				predicate = buildArrayPredicate(path, type, field, value, criteriaBuilder, parameterValues);
+				predicate = buildArrayPredicate(path, type, field, value, criteriaBuilder, parameterBuilder);
 			}
 			else if (type.isEnum()) {
-				predicate = buildEqualPredicate(path, alias, parseEnum((Expression<Enum<?>>) path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqualPredicate(path, parseEnum((Expression<Enum<?>>) path, value), criteriaBuilder, parameterBuilder);
 			}
 			else if (Number.class.isAssignableFrom(type)) {
-				predicate = buildEqualPredicate(path, alias, parseNumber((Expression<Number>) path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqualPredicate(path, parseNumber((Expression<Number>) path, value), criteriaBuilder, parameterBuilder);
 			}
 			else if (Boolean.class.isAssignableFrom(type)) {
-				predicate = buildEqualPredicate(path, alias, parseBoolean((Expression<Boolean>) path, value), criteriaBuilder, parameterValues);
+				predicate = buildEqualPredicate(path, parseBoolean((Expression<Boolean>) path, value), criteriaBuilder, parameterBuilder);
 			}
 			else if (String.class.isAssignableFrom(type) || value instanceof String) {
-				predicate = buildLikePredicate(path, alias, value.toString(), criteriaBuilder, parameterValues);
+				predicate = buildLikePredicate(path, value.toString(), criteriaBuilder, parameterBuilder);
 			}
 			else {
-				predicate = buildUnsupportedPredicate(path, alias, value, criteriaBuilder, parameterValues);
+				predicate = buildUnsupportedPredicate(path, alias, value, criteriaBuilder, parameterBuilder);
 			}
 		}
 		catch (IllegalArgumentException e) {
@@ -800,29 +802,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	private Predicate buildInPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		List<Expression<?>> in = stream(value)
-			.map(item -> buildInPredicateParameter(key, item, criteriaBuilder, parameterValues))
-			.collect(toList());
+	private Predicate buildInPredicate(Expression<?> path, String alias, Object value, ParameterBuilder parameterBuilder) {
+		List<Expression<?>> in = stream(value).map(parameterBuilder::create).collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
 		}
 
 		Predicate predicate = ((Join<?, ?>) path).in(in.toArray(new Expression[in.size()]));
-		predicate.alias(Alias.in(key, in.size()));
+		predicate.alias(Alias.in(alias, in.size()));
 		return predicate;
 	}
 
-	private ParameterExpression<?> buildInPredicateParameter(String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		String itemKey = key + "_" + value;
-		parameterValues.put(itemKey, value);
-		return criteriaBuilder.parameter(value.getClass(), itemKey);
-	}
-
-	private Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	private Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		List<Predicate> predicates = stream(value)
-			.map(item -> buildTypedPredicate(path, type, field, item, criteriaBuilder, parameterValues))
+			.map(item -> buildTypedPredicate(path, type, field, item, criteriaBuilder, parameterBuilder))
 			.filter(Objects::nonNull)
 			.collect(toList());
 
@@ -834,14 +828,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	private Predicate buildEqualPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		parameterValues.put(key, value);
-		return criteriaBuilder.equal(path, criteriaBuilder.parameter(path.getJavaType(), key));
+	private Predicate buildEqualPredicate(Expression<?> path, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+		return criteriaBuilder.equal(path, parameterBuilder.create(value));
 	}
 
-	private Predicate buildLikePredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-		parameterValues.put(key, value);
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), criteriaBuilder.parameter(String.class, key));
+	private Predicate buildLikePredicate(Expression<?> path, String value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), parameterBuilder.create(value));
 	}
 
 	/**
@@ -938,12 +930,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param key Search key. Use this as key of <code>parameterValues</code>.
 	 * @param value Search value. You can handle this here. Ultimately it must be put as value of <code>parameterValues</code>.
 	 * @param criteriaBuilder So you can build a predicate with a {@link CriteriaBuilder#parameter(Class, String)}.
-	 * @param parameterValues This holds all search parameter values collected so far.
+	 * @param parameterBuilder You must use this to obtain a {@link ParameterExpression} for a given value.
 	 * @return The custom predicate.
 	 * @throws UnsupportedOperationException When this is not overridden yet.
 	 * @throws IllegalArgumentException When you cannot parse the value reasonably.
 	 */
-	protected Predicate buildUnsupportedPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	protected Predicate buildUnsupportedPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		throw new UnsupportedOperationException("Predicate for " + key + "=" + value + " is not supported."
 			+ " Consider overriding buildUnsupportedPredicate() in your BaseEntityService subclass if you want to deal with it.");
 	}
@@ -1026,8 +1018,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private static final String HAVING = "having_";
 		private static final String IN = "_in";
 
-		public static String create(Expression<?> expression, String field, int index) {
-			return (needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_") + "_" + index;
+		public static String create(Expression<?> expression, String field) {
+			return (needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_");
 		}
 
 		public static String in(String alias, int count) {
@@ -1052,10 +1044,32 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		public static Entry<String, Integer> getFieldAndCount(Predicate predicate) {
 			String alias = predicate.getAlias();
-			String[] fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_')).split("_\\d+_");
+			String[] fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_')).split("_");
 			String field = fieldAndCount[0];
 			int count = Integer.valueOf(fieldAndCount[1]);
 			return new SimpleEntry<>(field, count);
+		}
+
+	}
+
+	private static class UncheckedParameterBuilder implements ParameterBuilder {
+
+		private String field;
+		private CriteriaBuilder criteriaBuilder;
+		private Map<String, Object> parameterValues;
+
+		private UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+			this.field = field.replace(".", "_") + "_";
+			this.criteriaBuilder = criteriaBuilder;
+			this.parameterValues = parameterValues;
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public <T> ParameterExpression<T> create(Object value) {
+			String name = field + parameterValues.size();
+			parameterValues.put(name, value);
+			return (ParameterExpression<T>) criteriaBuilder.parameter(value.getClass(), name);
 		}
 
 	}

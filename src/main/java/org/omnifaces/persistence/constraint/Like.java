@@ -1,6 +1,5 @@
 package org.omnifaces.persistence.constraint;
 
-import java.util.Map;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
@@ -18,7 +17,7 @@ public final class Like extends Constraint<String> {
 	private Type type;
 
 	private Like(Type type, String value) {
-		super(value, false);
+		super(value);
 		this.type = type;
 	}
 
@@ -47,10 +46,9 @@ public final class Like extends Constraint<String> {
 	}
 
 	@Override
-	public Predicate build(Expression<?> expression, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		String searchValue = (startsWith() ? "" : "%") + getValue().toLowerCase() + (endsWith() ? "" : "%");
-		parameterValues.put(key, searchValue);
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), criteriaBuilder.parameter(String.class, key));
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), parameterBuilder.create(searchValue));
 	}
 
 	@Override
