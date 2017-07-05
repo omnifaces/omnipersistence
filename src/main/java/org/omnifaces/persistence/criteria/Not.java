@@ -1,4 +1,4 @@
-package org.omnifaces.persistence.constraint;
+package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
@@ -6,7 +6,12 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
 
-public final class Not extends Constraint<Object> {
+/**
+ * Creates <code>path NOT criteria</code>.
+ *
+ * @author Bauke Scholtz
+ */
+public final class Not extends Criteria<Object> {
 
 	private Not(Object value) {
 		super(value, true);
@@ -17,23 +22,18 @@ public final class Not extends Constraint<Object> {
 	}
 
 	@Override
-	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	public boolean applies(Object value) {
-		if (value instanceof Constraint) {
-			return !((Constraint<?>) value).applies(getValue());
+		if (value instanceof Criteria) {
+			return !((Criteria<?>) value).applies(getValue());
 		}
 		else {
 			return !Objects.equals(value, getValue());
 		}
-	}
-
-	@Override
-	public String toString() {
-		return "NOT(" + getValue() + ")";
 	}
 
 }

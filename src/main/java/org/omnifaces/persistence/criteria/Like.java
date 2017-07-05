@@ -1,4 +1,4 @@
-package org.omnifaces.persistence.constraint;
+package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
@@ -6,7 +6,12 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
 
-public final class Like extends Constraint<String> {
+/**
+ * Creates <code>path LIKE value</code>.
+ *
+ * @author Bauke Scholtz
+ */
+public final class Like extends Criteria<String> {
 
 	private enum Type {
 		STARTS_WITH,
@@ -46,9 +51,9 @@ public final class Like extends Constraint<String> {
 	}
 
 	@Override
-	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		String searchValue = (startsWith() ? "" : "%") + getValue().toLowerCase() + (endsWith() ? "" : "%");
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, expression)), parameterBuilder.create(searchValue));
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), parameterBuilder.build(searchValue));
 	}
 
 	@Override

@@ -38,8 +38,8 @@ public final class Page { // This class should NOT be mutable!
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents constraint. Each entity must match all of given criteria.
-	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents constraint. Each entity must match at least one of given criteria.
+	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
+	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
 	public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
@@ -86,7 +86,7 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
-	 * Returns the required criteria. Map key represents property name and map value represents constraint. Each entity must match all of given criteria.
+	 * Returns the required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
 	 * @return The required criteria.
 	 */
 	public Map<String, Object> getRequiredCriteria() {
@@ -94,7 +94,7 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
-	 * Returns the optional criteria. Map key represents property name and map value represents constraint. Each entity must match at least one of given criteria.
+	 * Returns the optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
 	 * @return The optional criteria.
 	 */
 	public Map<String, Object> getOptionalCriteria() {

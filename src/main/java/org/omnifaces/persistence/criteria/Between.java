@@ -1,4 +1,4 @@
-package org.omnifaces.persistence.constraint;
+package org.omnifaces.persistence.criteria;
 
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
@@ -6,7 +6,12 @@ import javax.persistence.criteria.Predicate;
 
 import org.omnifaces.utils.data.Range;
 
-public final class Between extends Constraint<Range<? extends Comparable<?>>> {
+/**
+ * Creates <code>path BETWEEN range.min AND range.max</code>.
+ *
+ * @author Bauke Scholtz
+ */
+public final class Between extends Criteria<Range<? extends Comparable<?>>> {
 
 	private Between(Range<? extends Comparable<?>> value) {
 		super(value);
@@ -22,10 +27,10 @@ public final class Between extends Constraint<Range<? extends Comparable<?>>> {
 
 	@Override
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Range<? extends Comparable<?>> searchValue = getValue();
-		Expression rawExpression = expression;
-		return criteriaBuilder.between(rawExpression, parameterBuilder.create(searchValue.getMin()), parameterBuilder.create(searchValue.getMax()));
+	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+		Range<? extends Comparable> searchValue = getValue();
+		Expression<? extends Comparable> rawPath = (Expression<? extends Comparable>) path;
+		return criteriaBuilder.between(rawPath, parameterBuilder.build(searchValue.getMin()), parameterBuilder.build(searchValue.getMax()));
 	}
 
 	@Override

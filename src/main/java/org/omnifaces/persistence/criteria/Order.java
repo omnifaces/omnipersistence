@@ -1,4 +1,4 @@
-package org.omnifaces.persistence.constraint;
+package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
@@ -7,13 +7,18 @@ import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Predicate;
 
-public final class Order extends Constraint<Comparable<?>> {
+/**
+ * Creates <code>path LT|LTE|GT|GTE enum</code>.
+ *
+ * @author Bauke Scholtz
+ */
+public final class Order extends Criteria<Comparable<?>> {
 
 	private enum Type {
-		GT,
-		GTE,
 		LT,
-		LTE;
+		LTE,
+		GT,
+		GTE
 	}
 
 	private Type type;
@@ -21,14 +26,6 @@ public final class Order extends Constraint<Comparable<?>> {
 	private Order(Type type, Comparable<?> value) {
 		super(value);
 		this.type = type;
-	}
-
-	public static Order greaterThan(Comparable<?> value) {
-		return new Order(Type.GT, value);
-	}
-
-	public static Order greaterThanOrEqualTo(Comparable<?> value) {
-		return new Order(Type.GTE, value);
 	}
 
 	public static Order lessThan(Comparable<?> value) {
@@ -39,12 +36,12 @@ public final class Order extends Constraint<Comparable<?>> {
 		return new Order(Type.LTE, value);
 	}
 
-	public boolean greaterThan() {
-		return type == Type.GT;
+	public static Order greaterThanOrEqualTo(Comparable<?> value) {
+		return new Order(Type.GTE, value);
 	}
 
-	public boolean greaterThanOrEqualTo() {
-		return type == Type.GTE;
+	public static Order greaterThan(Comparable<?> value) {
+		return new Order(Type.GT, value);
 	}
 
 	public boolean lessThan() {
@@ -55,24 +52,32 @@ public final class Order extends Constraint<Comparable<?>> {
 		return type == Type.LTE;
 	}
 
-	@Override
-	@SuppressWarnings({ "rawtypes", "unchecked" })
-	public Predicate build(Expression<?> expression, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Comparable<?> searchValue = getValue();
-		Expression rawExpression = expression;
-		ParameterExpression<? extends Comparable> parameter = parameterBuilder.create(searchValue);
+	public boolean greaterThanOrEqualTo() {
+		return type == Type.GTE;
+	}
 
-		if (greaterThan()) {
-			return criteriaBuilder.greaterThan(rawExpression, parameter);
+	public boolean greaterThan() {
+		return type == Type.GT;
+	}
+
+	@Override
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+		Comparable searchValue = getValue();
+		Expression<? extends Comparable> rawPath = (Expression<? extends Comparable>) path;
+		ParameterExpression<? extends Comparable> parameter = parameterBuilder.build(searchValue);
+
+		if (lessThan()) {
+			return criteriaBuilder.lessThan(rawPath, parameter);
+		}
+		else if (lessThanOrEqualTo()) {
+			return criteriaBuilder.lessThanOrEqualTo(rawPath, parameter);
 		}
 		else if (greaterThanOrEqualTo()) {
-			return criteriaBuilder.greaterThanOrEqualTo(rawExpression, parameter);
-		}
-		else if (lessThan()) {
-			return criteriaBuilder.lessThan(rawExpression, parameter);
+			return criteriaBuilder.greaterThanOrEqualTo(rawPath, parameter);
 		}
 		else {
-			return criteriaBuilder.lessThanOrEqualTo(rawExpression, parameter);
+			return criteriaBuilder.greaterThan(rawPath, parameter);
 		}
 	}
 
