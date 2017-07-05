@@ -44,7 +44,7 @@ public abstract class Constraint<T> {
 		this.value = value;
 	}
 
-	public abstract Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> path, Map<String, Object> parameterValues);
+	public abstract Predicate build(Expression<?> path, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues);
 
 	public abstract boolean applies(Object value);
 

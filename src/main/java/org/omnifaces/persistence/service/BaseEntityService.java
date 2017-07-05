@@ -4,6 +4,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.model.Identifiable.ID;
+import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
@@ -27,13 +28,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import javax.ejb.Stateless;
-import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
 import javax.persistence.PersistenceContext;
@@ -43,7 +41,6 @@ import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Fetch;
 import javax.persistence.criteria.From;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Order;
@@ -632,7 +629,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			PathResolver pathResolver = field -> (field == null) ? root : paths.get(field);
 
 			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupBy)) {
-				groupByIfNecessary(query, pathResolver, null);
+				groupByIfNecessary(query, root);
 			}
 
 			return pathResolver;
@@ -691,7 +688,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			List<Predicate> inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
 
 			for (Predicate inPredicate : inPredicates) {
-				Predicate countPredicate = buildCountPredicateIfNecessary(query, inPredicate, criteriaBuilder, pathResolver);
+				Predicate countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, query, pathResolver);
 
 				if (countPredicate != null) {
 					requiredPredicates.add(countPredicate);
@@ -701,7 +698,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			List<Predicate> havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
 
 			if (!havingPredicates.isEmpty()) {
-				groupByIfNecessary(query, pathResolver, null);
+				groupByIfNecessary(query, pathResolver.get(null));
 				query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), havingPredicates));
 			}
 		}
@@ -735,17 +732,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Object value = parameter.getValue();
 
 		if (isElementCollection(type)) {
-			if (isEmpty(value)) {
-				return null;
-			}
-
 			path = pathResolver.get(pathResolver.inElementCollection(field));
 		}
 
 		return buildTypedPredicate(path, type, field, value, criteriaBuilder, parameterValues);
 	}
 
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "null" })
 	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
 		String alias = Alias.create(path, field, parameterValues.size());
 		Object value = criteria;
@@ -756,23 +749,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			value = ((Not) value).getValue();
 		}
 
-		if (value instanceof Constraint<?> && ((Constraint<?>) value).getValue() == null) {
+		if (value instanceof Constraint && ((Constraint<?>) value).getValue() == null) {
 			value = null;
 		}
 
 		try {
-			if (isElementCollection(type)) {
-				int previousSize = parameterValues.size();
-				predicate = buildInPredicate((Join<?, ?>) path, alias, value, criteriaBuilder, parameterValues);
-				alias = Alias.in(alias, parameterValues.size() - previousSize);
-			}
-			else if (value == null) {
+			if (value == null) {
 				predicate = criteriaBuilder.isNull(path);
 			}
-			else if (value instanceof Constraint) {
-				predicate = ((Constraint<?>) value).build(alias, criteriaBuilder, path, parameterValues);
+			else if (isElementCollection(type)) {
+				predicate = buildInPredicate(path, alias, value, criteriaBuilder, parameterValues);
 			}
-			else if (value instanceof Iterable<?> || value.getClass().isArray()) {
+			else if (value instanceof Constraint) {
+				predicate = ((Constraint<?>) value).build(path, alias, criteriaBuilder, parameterValues);
+			}
+			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, criteriaBuilder, parameterValues);
 			}
 			else if (type.isEnum()) {
@@ -799,6 +790,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new UnsupportedOperationException("You may not return null from buildUnsupportedPredicate().");
 		}
 
+		alias = coalesce(predicate.getAlias(), alias);
+
 		if (negated) {
 			predicate = criteriaBuilder.not(predicate);
 		}
@@ -807,12 +800,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	private Predicate buildInPredicate(Join<?, ?> join, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	private Predicate buildInPredicate(Expression<?> path, String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
 		List<Expression<?>> in = stream(value)
 			.map(item -> buildInPredicateParameter(key, item, criteriaBuilder, parameterValues))
 			.collect(toList());
 
-		return join.in(in.toArray(new Expression[in.size()]));
+		if (in.isEmpty()) {
+			throw new IllegalArgumentException(value.toString());
+		}
+
+		Predicate predicate = ((Join<?, ?>) path).in(in.toArray(new Expression[in.size()]));
+		predicate.alias(Alias.in(key, in.size()));
+		return predicate;
 	}
 
 	private ParameterExpression<?> buildInPredicateParameter(String key, Object value, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
@@ -921,19 +920,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * You can override this method if you want to deal with an unsupported predicate and want to return a custom predicate.
 	 * At least, following predicates are supported, in this scanning order:
 	 * <ul>
-	 * <li>type = {@link ElementCollection}
 	 * <li>value = <code>null</code>
+	 * <li>type = {@link Collection}
 	 * <li>value = {@link Constraint}
 	 * <li>value = {@link Iterable}
 	 * <li>value = {@link Array}
 	 * <li>type = {@link Enum}
 	 * <li>type = {@link Number}
 	 * <li>type = {@link Boolean}
-	 * <li>type = {@link Collection}
 	 * <li>type = {@link String}
 	 * <li>value = {@link String}
 	 * </ul>
-	 * So if you want to support e.g. a {@link Map} value not covered by one of above types, then you could consider
+	 * So if you want to support e.g. a {@link Map} value for a type not covered by one of above types, then you could consider
 	 * overriding this method.
 	 *
 	 * @param path Entity property path. You can use this to inspect the target entity property.
@@ -1000,16 +998,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				if (i + 1 < depth) {
 					path = joins.get(attribute);
 				}
-				else if (attribute.charAt(0) == '@') {  // TODO: improve this mess.
-					if (attribute.charAt(attribute.length() - 1) == '@') {
-						path = ((From<?, ?>) path).join(attribute.substring(1, attribute.length() - 1));
-					}
-					else {
-						path = joins.get(attribute.substring(1));
-					}
+				else if (!attribute.startsWith("@")) {
+					path = path.get(attribute);
+				}
+				else if (!attribute.endsWith("@")) {
+					path = joins.get(attribute.substring(1));
 				}
 				else {
-					path = path.get(attribute);
+					path = ((From<?, ?>) path).join(attribute.substring(1, attribute.length() - 1));
 				}
 			}
 
@@ -1017,14 +1013,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return path;
 		}
 
-		@SuppressWarnings({ "rawtypes", "unchecked" })
 		private static Map<String, Path<?>> getJoins(From<?, ?> from) {
-			Set rawJoins = from.getJoins();
-			Set rawFetches = from.getFetches();
-
-			Map joins = new HashMap(((Set<Join>) rawJoins).stream().collect(toMap(join -> join.getAttribute().getName())));
-			joins.putAll(((Set<Fetch>) rawFetches).stream().collect(toMap(fetch -> fetch.getAttribute().getName())));
-
+			Map<String, Path<?>> joins = new HashMap<>(from.getJoins().stream().collect(toMap(join -> join.getAttribute().getName())));
+			joins.putAll(from.getFetches().stream().filter(fetch -> fetch instanceof Path).collect(toMap(fetch -> fetch.getAttribute().getName(), fetch -> (Path<?>) fetch)));
 			return joins;
 		}
 	}
@@ -1081,14 +1072,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return conjunctRestrictionsIfNecessary(criteriaBuilder, nullable, criteriaBuilder.and(nonnullable.toArray(PREDICATE_ARRAY)));
 	}
 
-	private static Predicate buildCountPredicateIfNecessary(AbstractQuery<?> query, Predicate inPredicate, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private static Predicate buildCountPredicateIfNecessary(Predicate inPredicate, CriteriaBuilder criteriaBuilder, AbstractQuery<?> query, PathResolver pathResolver) {
 		Entry<String, Integer> fieldAndCount = Alias.getFieldAndCount(inPredicate);
 
 		if (fieldAndCount.getValue() > 1) {
 			Expression<?> join = pathResolver.get(pathResolver.inElementCollection(fieldAndCount.getKey()));
 			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(join), fieldAndCount.getValue());
 			countPredicate.alias(Alias.having(inPredicate));
-			groupByIfNecessary(query, pathResolver, pathResolver.forElementCollection(fieldAndCount.getKey()));
+			groupByIfNecessary(query, pathResolver.get(pathResolver.forElementCollection(fieldAndCount.getKey())));
 			return countPredicate;
 		}
 
@@ -1099,9 +1090,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return !(expression instanceof Path);
 	}
 
-	private static void groupByIfNecessary(AbstractQuery<?> query, PathResolver pathResolver, String field) {
-		Expression<?> path = pathResolver.get(field);
-
+	private static void groupByIfNecessary(AbstractQuery<?> query, Expression<?> path) {
 		if (!query.getGroupList().contains(path)) {
 			List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
 			groupList.add(path);
@@ -1114,16 +1103,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean hasJoins(From<?, ?> from) {
-		return !from.getJoins().isEmpty() || !from.getFetches().isEmpty();
+		return !from.getJoins().isEmpty() || from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path);
 	}
 
 	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
 		if (source.getRestriction() != null) {
 			target.where(source.getRestriction());
 		}
-		if (!source.getGroupList().isEmpty()) {
-			target.groupBy(source.getGroupList());
-		}
+
+		target.groupBy(source.getGroupList());
+
 		if (source.getGroupRestriction() != null) {
 			target.having(source.getGroupRestriction());
 		}

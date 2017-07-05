@@ -58,7 +58,7 @@ public final class Order extends Constraint<Comparable<?>> {
 
 	@Override
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> expression, Map<String, Object> parameterValues) {
+	public Predicate build(Expression<?> expression, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
 		Comparable<?> searchValue = getValue();
 		parameterValues.put(key, searchValue);
 		Expression rawExpression = expression;

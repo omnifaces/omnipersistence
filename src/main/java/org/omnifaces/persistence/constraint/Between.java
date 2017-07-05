@@ -24,7 +24,7 @@ public final class Between extends Constraint<Range<? extends Comparable<?>>> {
 
 	@Override
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public Predicate build(String key, CriteriaBuilder criteriaBuilder, Expression<?> expression, Map<String, Object> parameterValues) {
+	public Predicate build(Expression<?> expression, String key, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
 		Range<? extends Comparable<?>> searchValue = getValue();
 		parameterValues.put("min_" + key, searchValue.getMin());
 		parameterValues.put("max_" + key, searchValue.getMax());
