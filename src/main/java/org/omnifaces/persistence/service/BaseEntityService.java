@@ -584,7 +584,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
-			buildRange(page, typedQuery);
+			buildRange(page, typedQuery, root);
 			onPage(page, cacheable).accept(typedQuery);
 			parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
 			List<T> entities = typedQuery.getResultList();
@@ -655,12 +655,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private <T> void buildRange(Page page, TypedQuery<T> typedQuery) {
-		if (page.getOffset() != 0) {
+	private <T> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+		boolean hasJoins = hasJoins(root);
+
+		if (hasJoins || page.getOffset() != 0) {
 			typedQuery.setFirstResult(page.getOffset());
 		}
 
-		if (page.getLimit() != MAX_VALUE) {
+		if (hasJoins || page.getLimit() != MAX_VALUE) {
 			typedQuery.setMaxResults(page.getLimit());
 		}
 	}
