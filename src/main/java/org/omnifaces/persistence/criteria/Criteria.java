@@ -34,7 +34,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @author Bauke Scholtz
  * @param <T> The generic criteria value type.
  * @see Page
- * @See BaseEntityService
+ * @see BaseEntityService
  */
 public abstract class Criteria<T> {
 
