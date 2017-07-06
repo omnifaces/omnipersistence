@@ -1,5 +1,6 @@
 package org.omnifaces.persistence.service;
 
+import static java.lang.Integer.MAX_VALUE;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
@@ -85,6 +86,8 @@ import org.omnifaces.utils.reflect.Getter;
  *
  * @param <I> The generic ID type, usually {@link Long}.
  * @param <E> The generic base entity type.
+ * @see BaseEntity
+ * @see Page
  * @see Criteria
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
@@ -581,9 +584,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
+			buildRange(page, typedQuery);
 			onPage(page, cacheable).accept(typedQuery);
 			parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
-			List<T> entities = typedQuery.setFirstResult(page.getOffset()).setMaxResults(page.getLimit()).getResultList();
+			List<T> entities = typedQuery.getResultList();
 
 			int estimatedTotalNumberOfResults = -1;
 
@@ -648,6 +652,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		else {
 			throw new IllegalArgumentException(ERROR_ILLEGAL_MAPPING);
+		}
+	}
+
+	private <T> void buildRange(Page page, TypedQuery<T> typedQuery) {
+		if (page.getOffset() != 0) {
+			typedQuery.setFirstResult(page.getOffset());
+		}
+
+		if (page.getLimit() != MAX_VALUE) {
+			typedQuery.setMaxResults(page.getLimit());
 		}
 	}
 
@@ -809,7 +823,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private Predicate buildInPredicate(Expression<?> path, String alias, Object value, ParameterBuilder parameterBuilder) {
-		List<Expression<?>> in = stream(value).map(parameterBuilder::build).collect(toList());
+		List<Expression<?>> in = stream(value).map(parameterBuilder::create).collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
@@ -959,7 +973,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		@Override
 		@SuppressWarnings("unchecked")
-		public <T> ParameterExpression<T> build(Object value) {
+		public <T> ParameterExpression<T> create(Object value) {
 			String name = field + parameterValues.size();
 			parameterValues.put(name, value);
 			return (ParameterExpression<T>) criteriaBuilder.parameter(value.getClass(), name);

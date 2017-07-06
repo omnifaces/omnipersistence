@@ -53,7 +53,7 @@ public final class Like extends Criteria<String> {
 	@Override
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		String searchValue = (startsWith() ? "" : "%") + getValue().toLowerCase() + (endsWith() ? "" : "%");
-		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), parameterBuilder.build(searchValue));
+		return criteriaBuilder.like(criteriaBuilder.lower(criteriaBuilder.function("str", String.class, path)), parameterBuilder.create(searchValue));
 	}
 
 	@Override

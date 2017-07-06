@@ -64,7 +64,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		Expression<T> typedPath = (Expression<T>) path;
-		ParameterExpression<T> parameter = parameterBuilder.build(getValue());
+		ParameterExpression<T> parameter = parameterBuilder.create(getValue());
 
 		if (lessThan()) {
 			return criteriaBuilder.lessThan(typedPath, parameter);

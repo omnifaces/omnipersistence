@@ -29,7 +29,7 @@ public final class Numeric extends Criteria<Number> {
 
 	@Override
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		return criteriaBuilder.equal(path, parameterBuilder.build(getValue()));
+		return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
 	}
 
 	@Override

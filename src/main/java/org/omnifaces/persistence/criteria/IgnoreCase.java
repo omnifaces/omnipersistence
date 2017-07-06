@@ -22,7 +22,7 @@ public final class IgnoreCase extends Criteria<String> {
 	@Override
 	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		return criteriaBuilder.equal(criteriaBuilder.lower((Expression<String>) path), criteriaBuilder.lower(parameterBuilder.build(getValue())));
+		return criteriaBuilder.equal(criteriaBuilder.lower((Expression<String>) path), criteriaBuilder.lower(parameterBuilder.create(getValue())));
 	}
 
 	@Override

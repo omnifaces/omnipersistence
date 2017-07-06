@@ -12,16 +12,27 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
+import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
+ * <p>
  * This class basically defines a paged view of a database based on a given offset, limit, ordering, required criteria
- * and optional criteria.
+ * and optional criteria. This is used by {@link BaseEntityService#getPage(Page, boolean)} methods.
+ *
+ * @author Bauke Scholtz
+ * @see BaseEntityService
+ * @see Criteria
  */
 public final class Page { // This class should NOT be mutable!
 
-	public final static Page ALL = new Page(MAX_VALUE);
-	public final static Page ONE = new Page(1);
+	// Constants ------------------------------------------------------------------------------------------------------
+
+	public final static Page ALL = Page.of(0, MAX_VALUE);
+	public final static Page ONE = Page.of(0, 1);
+
+
+	// Properties -----------------------------------------------------------------------------------------------------
 
 	private final int offset;
 	private final int limit;
@@ -29,12 +40,11 @@ public final class Page { // This class should NOT be mutable!
 	private final Map<String, Object> requiredCriteria;
 	private final Map<String, Object> optionalCriteria;
 
-	private Page(int limit) {
-		this(null, limit, null, null, null);
-	}
+
+	// Constructors ---------------------------------------------------------------------------------------------------
 
 	/**
-	 * Creates a new Page.
+	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
@@ -60,6 +70,9 @@ public final class Page { // This class should NOT be mutable!
 
 		return argumentValue;
 	}
+
+
+	// Getters --------------------------------------------------------------------------------------------------------
 
 	/**
 	 * Returns the offset. Defaults to 0.
@@ -101,6 +114,9 @@ public final class Page { // This class should NOT be mutable!
 		return optionalCriteria;
 	}
 
+
+	// Object overrides -----------------------------------------------------------------------------------------------
+
 	@Override
 	public boolean equals(Object object) {
 		if (!(object instanceof Page)) {
@@ -137,6 +153,109 @@ public final class Page { // This class should NOT be mutable!
 			.append(ordering).append(",")
 			.append(new TreeMap<>(requiredCriteria)).append(",")
 			.append(new TreeMap<>(optionalCriteria)).append("]").toString();
+	}
+
+
+	// Builder --------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Use this if you want to build a page.
+	 * @return A new page builder.
+	 */
+	public static Builder with() {
+		return new Builder();
+	}
+
+	/**
+	 * Use this if you want a page of given offset and limit.
+	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+	 * @return A new page of given offset and limit.
+	 */
+	public static Page of(int offset, int limit) {
+		return with().range(offset, limit).build();
+	}
+
+	/**
+	 * The page builder. Use {@link Page#with()} to get started.
+	 * @author Bauke Scholtz
+	 */
+	public static class Builder {
+
+		private Integer offset;
+		private Integer limit;
+		private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
+		private Map<String, Object> requiredCriteria;
+		private Map<String, Object> optionalCriteria;
+
+		/**
+		 * Set the range.
+		 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+		 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+		 * @throws IllegalStateException When another offset and limit is already set in this builder.
+		 * @return This builder.
+		 */
+		public Builder range(int offset, int limit) {
+			if (this.offset != null) {
+				throw new IllegalStateException("Offset and limit are already set");
+			}
+
+			this.offset = offset;
+			this.limit = limit;
+			return this;
+		}
+
+		/**
+		 * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
+		 * @param field The field.
+		 * @param ascending Whether to sort ascending.
+		 * @return This builder.
+		 */
+		public Builder orderBy(String field, boolean ascending) {
+			ordering.put(field, ascending);
+			return this;
+		}
+
+		/**
+		 * Set the required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
+		 * @param requiredCriteria Required criteria.
+		 * @return This builder.
+		 * @throws IllegalStateException When another required criteria is already set in this builder.
+		 * @see Criteria
+		 */
+		public Builder allMatch(Map<String, Object> requiredCriteria) {
+			if (this.requiredCriteria != null) {
+				throw new IllegalStateException("Required criteria is already set");
+			}
+
+			this.requiredCriteria = requiredCriteria;
+			return this;
+		}
+
+		/**
+		 * Set the optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+		 * @param optionalCriteria Optional criteria.
+		 * @return This builder.
+		 * @throws IllegalStateException When another optional criteria is already set in this builder.
+		 * @see Criteria
+		 */
+		public Builder anyMatch(Map<String, Object> optionalCriteria) {
+			if (this.optionalCriteria != null) {
+				throw new IllegalStateException("Optional criteria is already set");
+			}
+
+			this.optionalCriteria = optionalCriteria;
+			return this;
+		}
+
+		/**
+		 * Build the page.
+		 * @return The built page.
+		 */
+		public Page build() {
+			return new Page(offset, limit, ordering, requiredCriteria, optionalCriteria);
+		}
+
 	}
 
 }

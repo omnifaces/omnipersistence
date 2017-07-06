@@ -33,6 +33,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *
  * @author Bauke Scholtz
  * @param <T> The generic criteria value type.
+ * @see Page
+ * @See BaseEntityService
  */
 public abstract class Criteria<T> {
 
@@ -62,11 +64,11 @@ public abstract class Criteria<T> {
 	/**
 	 * Returns a predicate for the criteria value. Below is an example implementation:
 	 * <pre>
-	 * return criteriaBuilder.equal(path, parameterBuilder.build(getValue()));
+	 * return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
 	 * </pre>
 	 * @param path Entity property path. You can use this to inspect the target entity property.
 	 * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
-	 * @param parameterBuilder You must use this to obtain a {@link ParameterExpression} for the criteria value.
+	 * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
 	 * @return A predicate for the criteria value.
 	 */
 	public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
@@ -128,7 +130,7 @@ public abstract class Criteria<T> {
 	 */
 	@FunctionalInterface
 	public interface ParameterBuilder {
-		<T> ParameterExpression<T> build(Object value);
+		<T> ParameterExpression<T> create(Object value);
 	}
 
 }

@@ -28,7 +28,7 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 	@Override
 	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		return criteriaBuilder.between((Expression<T>) path, parameterBuilder.build(getValue().getMin()), parameterBuilder.build(getValue().getMax()));
+		return criteriaBuilder.between((Expression<T>) path, parameterBuilder.create(getValue().getMin()), parameterBuilder.create(getValue().getMax()));
 	}
 
 	@Override
