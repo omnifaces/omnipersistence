@@ -19,8 +19,12 @@ public final class Numeric extends Criteria<Number> {
 		super(value);
 	}
 
-	public static Numeric value(Class<Number> type, Object value) {
-		return new Numeric(parseNumber(type, value));
+	public static Numeric value(Number value) {
+		return new Numeric(value);
+	}
+
+	public static Numeric parse(Object searchValue, Class<Number> targetType) {
+		return new Numeric(parseNumber(searchValue, targetType));
 	}
 
 	@Override
@@ -29,31 +33,31 @@ public final class Numeric extends Criteria<Number> {
 	}
 
 	@Override
-	public boolean applies(Object value) {
-		return value != null && Objects.equals(parseNumber(getValue().getClass(), value), getValue());
+	public boolean applies(Object modelValue) {
+		return modelValue != null && Objects.equals(parseNumber(modelValue, getValue().getClass()), getValue());
 	}
 
-	private static Number parseNumber(Class<?> type, Object value) throws NumberFormatException {
-		if (value instanceof Number) {
-			return (Number) value;
+	private static Number parseNumber(Object searchValue, Class<?> targetType) throws NumberFormatException {
+		if (searchValue instanceof Number) {
+			return (Number) searchValue;
 		}
 
 		try {
-			if (BigDecimal.class.isAssignableFrom(type)) {
-				return new BigDecimal(value.toString());
+			if (BigDecimal.class.isAssignableFrom(targetType)) {
+				return new BigDecimal(searchValue.toString());
 			}
-			else if (BigInteger.class.isAssignableFrom(type)) {
-				return new BigInteger(value.toString());
+			else if (BigInteger.class.isAssignableFrom(targetType)) {
+				return new BigInteger(searchValue.toString());
 			}
-			else if (Integer.class.isAssignableFrom(type)) {
-				return Integer.valueOf(value.toString());
+			else if (Integer.class.isAssignableFrom(targetType)) {
+				return Integer.valueOf(searchValue.toString());
 			}
 			else {
-				return Long.valueOf(value.toString());
+				return Long.valueOf(searchValue.toString());
 			}
 		}
 		catch (NumberFormatException e) {
-			throw new IllegalArgumentException(value.toString(), e);
+			throw new IllegalArgumentException(searchValue.toString(), e);
 		}
 	}
 

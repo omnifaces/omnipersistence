@@ -72,14 +72,14 @@ public abstract class Criteria<T> {
 	public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
 	/**
-	 * Returns whether this criteria value would apply to the given model value.
-	 * This is basically the "plain Java" equivalent of {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
-	 * @param value The model value to test this criteria on.
+	 * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java"
+	 * equivalent of the SQL behavior as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
+	 * @param modelValue The model value to test this criteria on.
 	 * @return Whether this criteria value would apply to the given model value.
 	 * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
 	 * @throws UnsupportedOperationException When this method is not implemented yet.
 	 */
-	public boolean applies(Object value) {
+	public boolean applies(Object modelValue) {
 		throw new UnsupportedOperationException("This method is not implemented yet.");
 	}
 

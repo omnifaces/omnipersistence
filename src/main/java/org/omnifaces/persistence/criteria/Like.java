@@ -57,22 +57,22 @@ public final class Like extends Criteria<String> {
 	}
 
 	@Override
-	public boolean applies(Object value) {
-		if (value == null) {
+	public boolean applies(Object modelValue) {
+		if (modelValue == null) {
 			return false;
 		}
 
 		String lowerCasedValue = getValue().toLowerCase();
-		String valueAsLowerCasedString = value.toString().toLowerCase();
+		String lowerCasedModelValue = modelValue.toString().toLowerCase();
 
 		if (startsWith()) {
-			return valueAsLowerCasedString.startsWith(lowerCasedValue);
+			return lowerCasedModelValue.startsWith(lowerCasedValue);
 		}
 		else if (endsWith()) {
-			return valueAsLowerCasedString.endsWith(lowerCasedValue);
+			return lowerCasedModelValue.endsWith(lowerCasedValue);
 		}
 		else {
-			return valueAsLowerCasedString.contains(lowerCasedValue);
+			return lowerCasedModelValue.contains(lowerCasedValue);
 		}
 	}
 

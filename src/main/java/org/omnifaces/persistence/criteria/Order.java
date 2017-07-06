@@ -12,7 +12,7 @@ import javax.persistence.criteria.Predicate;
  *
  * @author Bauke Scholtz
  */
-public final class Order extends Criteria<Comparable<?>> {
+public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
 	private enum Type {
 		LT,
@@ -23,25 +23,25 @@ public final class Order extends Criteria<Comparable<?>> {
 
 	private Type type;
 
-	private Order(Type type, Comparable<?> value) {
+	private Order(Type type, T value) {
 		super(value);
 		this.type = type;
 	}
 
-	public static Order lessThan(Comparable<?> value) {
-		return new Order(Type.LT, value);
+	public static <T extends Comparable<T>> Order<T> lessThan(T value) {
+		return new Order<>(Type.LT, value);
 	}
 
-	public static Order lessThanOrEqualTo(Comparable<?> value) {
-		return new Order(Type.LTE, value);
+	public static <T extends Comparable<T>> Order<T> lessThanOrEqualTo(T value) {
+		return new Order<>(Type.LTE, value);
 	}
 
-	public static Order greaterThanOrEqualTo(Comparable<?> value) {
-		return new Order(Type.GTE, value);
+	public static <T extends Comparable<T>> Order<T> greaterThanOrEqualTo(T value) {
+		return new Order<>(Type.GTE, value);
 	}
 
-	public static Order greaterThan(Comparable<?> value) {
-		return new Order(Type.GT, value);
+	public static <T extends Comparable<T>> Order<T> greaterThan(T value) {
+		return new Order<>(Type.GT, value);
 	}
 
 	public boolean lessThan() {
@@ -61,46 +61,45 @@ public final class Order extends Criteria<Comparable<?>> {
 	}
 
 	@Override
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Comparable searchValue = getValue();
-		Expression<? extends Comparable> rawPath = (Expression<? extends Comparable>) path;
-		ParameterExpression<? extends Comparable> parameter = parameterBuilder.build(searchValue);
+		Expression<T> typedPath = (Expression<T>) path;
+		ParameterExpression<T> parameter = parameterBuilder.build(getValue());
 
 		if (lessThan()) {
-			return criteriaBuilder.lessThan(rawPath, parameter);
+			return criteriaBuilder.lessThan(typedPath, parameter);
 		}
 		else if (lessThanOrEqualTo()) {
-			return criteriaBuilder.lessThanOrEqualTo(rawPath, parameter);
+			return criteriaBuilder.lessThanOrEqualTo(typedPath, parameter);
 		}
 		else if (greaterThanOrEqualTo()) {
-			return criteriaBuilder.greaterThanOrEqualTo(rawPath, parameter);
+			return criteriaBuilder.greaterThanOrEqualTo(typedPath, parameter);
 		}
 		else {
-			return criteriaBuilder.greaterThan(rawPath, parameter);
+			return criteriaBuilder.greaterThan(typedPath, parameter);
 		}
 	}
 
 	@Override
-	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@SuppressWarnings("unchecked")
 	public boolean applies(Object value) {
 		if (!(value instanceof Comparable)) {
 			return false;
 		}
 
-		Comparable valueAsComparable = (Comparable) value;
+		T typedValue = (T) value;
 
 		if (greaterThan()) {
-			return valueAsComparable.compareTo(getValue()) > 0;
+			return typedValue.compareTo(getValue()) > 0;
 		}
 		else if (greaterThanOrEqualTo()) {
-			return valueAsComparable.compareTo(getValue()) >= 0;
+			return typedValue.compareTo(getValue()) >= 0;
 		}
 		else if (lessThan()) {
-			return valueAsComparable.compareTo(getValue()) < 0;
+			return typedValue.compareTo(getValue()) < 0;
 		}
 		else {
-			return valueAsComparable.compareTo(getValue()) <= 0;
+			return typedValue.compareTo(getValue()) <= 0;
 		}
 	}
 
@@ -111,7 +110,7 @@ public final class Order extends Criteria<Comparable<?>> {
 
 	@Override
 	public boolean equals(Object object) {
-		return super.equals(object) && Objects.equals(type, ((Order) object).type);
+		return super.equals(object) && Objects.equals(type, ((Order<?>) object).type);
 	}
 
 	@Override

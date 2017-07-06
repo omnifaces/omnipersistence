@@ -11,33 +11,30 @@ import org.omnifaces.utils.data.Range;
  *
  * @author Bauke Scholtz
  */
-public final class Between extends Criteria<Range<? extends Comparable<?>>> {
+public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
-	private Between(Range<? extends Comparable<?>> value) {
+	private Between(Range<T> value) {
 		super(value);
 	}
 
-	public static Between value(Range<? extends Comparable<?>> value) {
-		return new Between(value);
+	public static <T extends Comparable<T>> Between<T> value(Range<T> value) {
+		return new Between<>(value);
 	}
 
-	public static <T extends Comparable<T>> Between range(T min, T max) {
-		return new Between(Range.ofClosed(min, max));
+	public static <T extends Comparable<T>> Between<T> range(T min, T max) {
+		return new Between<>(Range.ofClosed(min, max));
 	}
 
 	@Override
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Range<? extends Comparable> searchValue = getValue();
-		Expression<? extends Comparable> rawPath = (Expression<? extends Comparable>) path;
-		return criteriaBuilder.between(rawPath, parameterBuilder.build(searchValue.getMin()), parameterBuilder.build(searchValue.getMax()));
+		return criteriaBuilder.between((Expression<T>) path, parameterBuilder.build(getValue().getMin()), parameterBuilder.build(getValue().getMax()));
 	}
 
 	@Override
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public boolean applies(Object value) {
-		Range rawRange = getValue();
-		return value instanceof Comparable && rawRange.contains(value);
+	@SuppressWarnings("unchecked")
+	public boolean applies(Object modelValue) {
+		return modelValue instanceof Comparable && getValue().contains((T) modelValue);
 	}
 
 	@Override

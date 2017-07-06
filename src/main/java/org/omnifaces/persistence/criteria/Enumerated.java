@@ -17,8 +17,12 @@ public final class Enumerated extends Criteria<Enum<?>> {
 		super(value);
 	}
 
-	public static Enumerated value(Class<Enum<?>> type, Object value) {
-		return new Enumerated(parseEnum(type, value));
+	public static Enumerated value(Enum<?> value) {
+		return new Enumerated(value);
+	}
+
+	public static Enumerated parse(Object searchValue, Class<Enum<?>> targetType) {
+		return new Enumerated(parseEnum(searchValue, targetType));
 	}
 
 	@Override
@@ -27,24 +31,24 @@ public final class Enumerated extends Criteria<Enum<?>> {
 	}
 
 	@Override
-	public boolean applies(Object value) {
-		return value != null && Objects.equals(parseEnum(getValue().getClass(), value), getValue());
+	public boolean applies(Object modelValue) {
+		return modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getClass()), getValue());
 	}
 
 	@SuppressWarnings("unchecked")
-	private static Enum<?> parseEnum(Class<?> type, Object value) throws IllegalArgumentException {
-		if (value instanceof Enum) {
-			return (Enum<?>) value;
+	private static Enum<?> parseEnum(Object searchValue, Class<?> targetType) throws IllegalArgumentException {
+		if (searchValue instanceof Enum) {
+			return (Enum<?>) searchValue;
 		}
-		else if (type.isEnum()) {
-			for (Enum<?> enumConstant : ((Class<Enum<?>>) type).getEnumConstants()) {
-				if (enumConstant.name().equalsIgnoreCase(value.toString())) {
+		else if (targetType.isEnum()) {
+			for (Enum<?> enumConstant : ((Class<Enum<?>>) targetType).getEnumConstants()) {
+				if (enumConstant.name().equalsIgnoreCase(searchValue.toString())) {
 					return enumConstant;
 				}
 			}
 		}
 
-		throw new IllegalArgumentException(value.toString());
+		throw new IllegalArgumentException(searchValue.toString());
 	}
 
 }

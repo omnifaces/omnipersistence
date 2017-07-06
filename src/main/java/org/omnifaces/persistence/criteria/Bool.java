@@ -17,8 +17,12 @@ public final class Bool extends Criteria<Boolean> {
 		super(value);
 	}
 
-	public static Bool value(Object value) {
-		return new Bool(parseBoolean(value));
+	public static Bool value(Boolean value) {
+		return new Bool(value);
+	}
+
+	public static Bool parse(Object searchValue) {
+		return new Bool(parseBoolean(searchValue));
 	}
 
 	@Override
@@ -29,8 +33,8 @@ public final class Bool extends Criteria<Boolean> {
 	}
 
 	@Override
-	public boolean applies(Object value) {
-		return Objects.equals(parseBoolean(value), getValue());
+	public boolean applies(Object modelValue) {
+		return Objects.equals(parseBoolean(modelValue), getValue());
 	}
 
 	private static Boolean parseBoolean(Object value) {

@@ -27,12 +27,12 @@ public final class Not extends Criteria<Object> {
 	}
 
 	@Override
-	public boolean applies(Object value) {
-		if (value instanceof Criteria) {
-			return !((Criteria<?>) value).applies(getValue());
+	public boolean applies(Object modelValue) {
+		if (modelValue instanceof Criteria) {
+			return !((Criteria<?>) modelValue).applies(getValue());
 		}
 		else {
-			return !Objects.equals(value, getValue());
+			return !Objects.equals(modelValue, getValue());
 		}
 	}
 

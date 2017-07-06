@@ -769,26 +769,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			else if (isElementCollection(type)) {
 				predicate = buildInPredicate(path, alias, value, parameterBuilder);
 			}
-			else if (value instanceof Criteria) {
-				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
-			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, criteriaBuilder, parameterBuilder);
 			}
+			else if (value instanceof Criteria) {
+				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
+			}
 			else if (type.isEnum()) {
-				predicate = Enumerated.value((Class<Enum<?>>) type, value).build(path, criteriaBuilder, parameterBuilder);
+				predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (Number.class.isAssignableFrom(type)) {
-				predicate = Numeric.value((Class<Number>) type, value).build(path, criteriaBuilder, parameterBuilder);
+				predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (Boolean.class.isAssignableFrom(type)) {
-				predicate = Bool.value(value).build(path, criteriaBuilder, parameterBuilder);
+				predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (String.class.isAssignableFrom(type)) {
 				predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (value instanceof String) {
-				predicate = Like.contains(value.toString()).build(path, criteriaBuilder, parameterBuilder);
+				predicate = Like.contains((String) value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else {
 				throw new UnsupportedOperationException(String.format(ERROR_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
