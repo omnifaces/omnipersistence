@@ -9,7 +9,7 @@
 
 	<groupId>org.omnifaces</groupId>
 	<artifactId>omnipersistence</artifactId>
-	<version>0.2</version>
+	<version>0.3-SNAPSHOT</version>
 
 	<name>OmniPersistence</name>
 	<description>Utilities for JPA, JDBC and DataSources</description>
@@ -87,7 +87,7 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
 			<artifactId>omniutils</artifactId>
-			<version>0.4</version>
+			<version>0.5-SNAPSHOT</version>
 		</dependency>
 
 		<!-- TODO: Some code is now Hibernate specific.
