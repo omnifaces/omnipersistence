@@ -52,6 +52,28 @@ public final class JPA {
 
 	private static final Optional<Class<Object>> HIBERNATE_PROXY_CLASS = findClass("org.hibernate.proxy.HibernateProxy");
 
+	public enum Provider {
+		HIBERNATE,
+		ECLIPSELINK,
+		UNKNOWN;
+
+		public static Provider of(EntityManager entityManager) {
+			String packageName = entityManager.getDelegate().getClass().getPackage().getName();
+
+			if (packageName.startsWith("org.hibernate.")) {
+				return HIBERNATE;
+			}
+			else if (packageName.startsWith("org.eclipse.persistence.")) {
+				return ECLIPSELINK;
+			}
+			else {
+				return UNKNOWN;
+			}
+		}
+	}
+
+	private static volatile Provider provider;
+
 	private JPA() {
 		//
 	}
@@ -175,6 +197,14 @@ public final class JPA {
 
 		query.select(criteriaBuilder.count(root));
 		return entityManager.createQuery(query).getSingleResult();
+	}
+
+	public static Provider getProvider(EntityManager entityManager) {
+		if (provider == null) {
+			provider = Provider.of(entityManager);
+		}
+
+		return provider;
 	}
 
 }

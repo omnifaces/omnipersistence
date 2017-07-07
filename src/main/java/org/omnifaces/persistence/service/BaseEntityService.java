@@ -4,6 +4,8 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static org.omnifaces.persistence.JPA.Provider.ECLIPSELINK;
+import static org.omnifaces.persistence.JPA.Provider.HIBERNATE;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
@@ -30,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javax.annotation.PostConstruct;
 import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
@@ -53,6 +56,8 @@ import javax.persistence.metamodel.Attribute;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
+import org.omnifaces.persistence.JPA;
+import org.omnifaces.persistence.JPA.Provider;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
@@ -103,6 +108,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@PersistenceContext
 	private EntityManager entityManager;
+	private Provider provider;
 
 
 	// Init -----------------------------------------------------------------------------------------------------------
@@ -116,6 +122,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		SimpleEntry<Class<?>, Class<?>> typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
 		identifierType = (Class<I>) typeMapping.getKey();
 		entityType = (Class<E>) typeMapping.getValue();
+	}
+
+	@PostConstruct
+	public void initProvider() {
+		provider = JPA.getProvider(entityManager);
 	}
 
 	private static SimpleEntry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -198,7 +209,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY id DESC").getResultList();
+		return createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC").getResultList();
 	}
 
 	/**
@@ -597,9 +608,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				countQuery.select(criteriaBuilder.count(countRoot));
 
 				if (hasRestrictions(criteriaQuery)) {
-					// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
-					// See also https://stackoverflow.com/a/12076584/157882
-
 					Subquery<T> subQuery = countQuery.subquery(resultType);
 					Root<E> subQueryRoot = subQuery.from(entityType);
 					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
@@ -611,7 +619,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
 					}
 
-					countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
+					if (provider == HIBERNATE) {
+						// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
+						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
+						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery SELECT DISTINCT t.id.t.id
+					}
+					else if (provider == ECLIPSELINK) {
+						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t FROM T t WHERE [restrictions] AND t.id=e.id)
+						subQuery.where(criteriaBuilder.and(subQuery.getRestriction(), criteriaBuilder.equal(subQueryRoot.get(ID), countRoot.get(ID))));
+						countQuery.where(criteriaBuilder.exists(subQuery));
+						// Hibernate (tested 5.0.10) fails here when a DTO is used.
+					}
+					else {
+						throw new UnsupportedOperationException("Unsupported provider: " + entityManager.getDelegate());
+					}
 				}
 
 				TypedQuery<Long> typedCountQuery = entityManager.createQuery(countQuery);
