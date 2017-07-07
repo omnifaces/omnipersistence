@@ -1,4 +1,4 @@
-# OmniPersistence [![Maven](https://maven-badges.herokuapp.com/maven-central/org.omnifaces/omnipersistence/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.omnifaces/omnipersistence) [![Javadocs](http://javadoc.io/badge/org.omnifaces/omnipersistence.svg)](http://javadoc.io/doc/org.omnifaces/omnipersistence) [![Build Status](https://travis-ci.org/omnifaces/omnipersistence.svg?branch=develop)](https://travis-ci.org/omnifaces/omnipersistence) 
+# OmniPersistence [![Build Status](https://travis-ci.org/omnifaces/omnipersistence.svg?branch=develop)](https://travis-ci.org/omnifaces/omnipersistence) [![Maven](https://maven-badges.herokuapp.com/maven-central/org.omnifaces/omnipersistence/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.omnifaces/omnipersistence) [![Javadocs](http://javadoc.io/badge/org.omnifaces/omnipersistence.svg)](http://javadoc.io/doc/org.omnifaces/omnipersistence)
 
 Utilities for JPA, JDBC and DataSources.
 
