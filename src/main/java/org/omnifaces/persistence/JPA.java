@@ -16,6 +16,7 @@ import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -29,6 +30,7 @@ import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CollectionJoin;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.ListJoin;
 import javax.persistence.criteria.MapJoin;
@@ -71,8 +73,6 @@ public final class JPA {
 			}
 		}
 	}
-
-	private static volatile Provider provider;
 
 	private JPA() {
 		//
@@ -133,24 +133,6 @@ public final class JPA {
 						.sum();
 	}
 
-	public static boolean isProxy(Object object) {
-		return isHibernateProxy(object);
-	}
-
-	private static boolean isHibernateProxy(Object object) {
-		return HIBERNATE_PROXY_CLASS.isPresent() && HIBERNATE_PROXY_CLASS.get().isInstance(object);
-	}
-
-	@SuppressWarnings("unchecked")
-	public static <E> E dereferenceProxy(E entity) {
-		if (isHibernateProxy(entity)) {
-			return (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation");
-		}
-		else {
-			throw new UnsupportedOperationException();
-		}
-	}
-
 	private static <T, E> Stream<Attribute<?, ?>> getAttributesOfType(EntityType<T> entityType, Class<E> entityClass) {
 		return entityType.getAttributes()
 						 .stream()
@@ -199,12 +181,60 @@ public final class JPA {
 		return entityManager.createQuery(query).getSingleResult();
 	}
 
-	public static Provider getProvider(EntityManager entityManager) {
-		if (provider == null) {
-			provider = Provider.of(entityManager);
+	public static boolean isProxy(Object object) {
+		return isHibernateProxy(object);
+	}
+
+	private static boolean isHibernateProxy(Object object) {
+		return HIBERNATE_PROXY_CLASS.isPresent() && HIBERNATE_PROXY_CLASS.get().isInstance(object);
+	}
+
+	@SuppressWarnings("unchecked")
+	public static <E> E dereferenceProxy(E entity) {
+		if (isHibernateProxy(entity)) {
+			return (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation");
+		}
+		else {
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public static Expression<String> concat(CriteriaBuilder builder, Object... expressionsOrStrings) {
+		if (expressionsOrStrings.length < 2) {
+			throw new IllegalArgumentException("There must be at least 2 expressions or strings");
 		}
 
-		return provider;
+		Object expressionOrString = expressionsOrStrings[0];
+
+		if (expressionsOrStrings.length > 2) {
+			Object[] remainingExpressionsOrStrings = Arrays.copyOfRange(expressionsOrStrings, 1, expressionsOrStrings.length);
+
+			if (expressionOrString instanceof Expression) {
+				return builder.concat((Expression<String>) expressionOrString, concat(builder, remainingExpressionsOrStrings));
+			}
+			else {
+				return builder.concat(expressionOrString.toString(), concat(builder, remainingExpressionsOrStrings));
+			}
+		}
+		else {
+			Object lastExpressionOrString = expressionsOrStrings[1];
+
+			if (expressionOrString instanceof Expression) {
+				if (lastExpressionOrString instanceof Expression) {
+					return builder.concat((Expression<String>) expressionOrString, (Expression<String>) lastExpressionOrString);
+				}
+				else {
+					return builder.concat((Expression<String>) expressionOrString, lastExpressionOrString.toString());
+				}
+			}
+			else if (lastExpressionOrString instanceof Expression) {
+				return builder.concat(expressionOrString.toString(), (Expression<String>) lastExpressionOrString);
+			}
+			else {
+				throw new IllegalArgumentException("You should concatenate subsequent strings yourself");
+			}
+		}
 	}
 
 }

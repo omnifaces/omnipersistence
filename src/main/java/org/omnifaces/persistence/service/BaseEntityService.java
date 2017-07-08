@@ -56,6 +56,8 @@ import javax.persistence.metamodel.Attribute;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
+import org.eclipse.persistence.annotations.BatchFetchType;
+import org.eclipse.persistence.config.QueryHints;
 import org.omnifaces.persistence.JPA;
 import org.omnifaces.persistence.JPA.Provider;
 import org.omnifaces.persistence.criteria.Bool;
@@ -96,7 +98,7 @@ import org.omnifaces.utils.reflect.Getter;
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
-	private static final Map<Class<?>, SimpleEntry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
 
 	private static final String ERROR_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported."
@@ -118,17 +120,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	@SuppressWarnings("unchecked")
 	public BaseEntityService() {
-		SimpleEntry<Class<?>, Class<?>> typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
+		Entry<Class<?>, Class<?>> typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
 		identifierType = (Class<I>) typeMapping.getKey();
 		entityType = (Class<E>) typeMapping.getValue();
 	}
 
+	/**
+	 * The postconstruct determines the JPA provider of EntityManager.
+	 */
 	@PostConstruct
-	public void initProvider() {
-		provider = JPA.getProvider(entityManager);
+	private void initProvider() {
+		provider = JPA.Provider.of(entityManager);
 	}
 
-	private static SimpleEntry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
+	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
 		Type actualType = type.getGenericSuperclass();
 		Map<TypeVariable<?>, Type> typeMapping = new HashMap<>();
 
@@ -163,6 +168,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 
 	// Standard actions -----------------------------------------------------------------------------------------------
+
+	/**
+	 * Returns the JPA provider being used.
+	 * @return The JPA provider being used.
+	 */
+	protected Provider getProvider() {
+		return provider;
+	}
 
 	/**
 	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement.
@@ -248,7 +261,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	public E save(E entity) {
 		if (entity.getId() == null) {
-			return getById(persist(entity));
+			persist(entity);
+			return entity;
 		}
 		else {
 			return update(entity);
