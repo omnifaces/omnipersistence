@@ -612,8 +612,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					Root<E> subQueryRoot = subQuery.from(entityType);
 					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
-					if (!hasJoins(root)) {
-						copyRestrictions(criteriaQuery, subQuery); // No need to rebuild restrictions as they are the same anyway.
+					if (provider == HIBERNATE && !hasJoins(root)) {
+						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink only doesn't support this).
 					}
 					else {
 						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
@@ -622,13 +622,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					if (provider == HIBERNATE) {
 						// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
 						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
-						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery SELECT DISTINCT t.id.t.id
+						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE LOWER(t1.ID) LIKE ?)
 					}
 					else if (provider == ECLIPSELINK) {
 						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t FROM T t WHERE [restrictions] AND t.id=e.id)
-						subQuery.where(criteriaBuilder.and(subQuery.getRestriction(), criteriaBuilder.equal(subQueryRoot.get(ID), countRoot.get(ID))));
+						subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(subQueryRoot.get(ID), countRoot.get(ID))));
 						countQuery.where(criteriaBuilder.exists(subQuery));
-						// Hibernate (tested 5.0.10) fails here when a DTO is used.
+						// Hibernate (tested 5.0.10) fails here when a DTO is used: IllegalStateException: No explicit selection and an implicit one could not be determined
+						// EclipseLink (tested 2.6.4) also fails when a DTO is used with a missing selection in subquery: SQLException: Syntax error in SQL statement "SELECT COUNT(t0.ID) FROM PERSON t0 WHERE EXISTS (SELECT  FROM ...)
 					}
 					else {
 						throw new UnsupportedOperationException("Unsupported provider: " + entityManager.getDelegate());
