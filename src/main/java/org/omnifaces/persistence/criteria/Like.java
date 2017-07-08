@@ -51,9 +51,11 @@ public final class Like extends Criteria<String> {
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		String searchValue = (startsWith() ? "" : "%") + getValue().toLowerCase() + (endsWith() ? "" : "%");
-		return criteriaBuilder.like(criteriaBuilder.lower(path.as(String.class)), parameterBuilder.create(searchValue));
+		Expression<String> pathAsString = (path.getJavaType() == String.class) ? (Expression<String>) path : path.as(String.class);
+		return criteriaBuilder.like(criteriaBuilder.lower(pathAsString), parameterBuilder.create(searchValue));
 	}
 
 	@Override

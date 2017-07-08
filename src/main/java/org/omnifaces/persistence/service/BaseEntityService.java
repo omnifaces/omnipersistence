@@ -63,7 +63,6 @@ import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
 import org.omnifaces.persistence.criteria.Enumerated;
 import org.omnifaces.persistence.criteria.IgnoreCase;
-import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
@@ -621,15 +620,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 					if (provider == HIBERNATE) {
 						// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
-						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery.select(subQueryRoot.get(ID)).distinct(true)));
-						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE LOWER(t1.ID) LIKE ?)
+						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery));
+						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
 					}
 					else if (provider == ECLIPSELINK) {
-						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t FROM T t WHERE [restrictions] AND t.id=e.id)
-						subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(subQueryRoot.get(ID), countRoot.get(ID))));
+						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT DISTINCT t.id FROM T t WHERE [restrictions] AND t.id=e.id)
+						subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))));
 						countQuery.where(criteriaBuilder.exists(subQuery));
-						// Hibernate (tested 5.0.10) fails here when a DTO is used: IllegalStateException: No explicit selection and an implicit one could not be determined
-						// EclipseLink (tested 2.6.4) also fails when a DTO is used with a missing selection in subquery: SQLException: Syntax error in SQL statement "SELECT COUNT(t0.ID) FROM PERSON t0 WHERE EXISTS (SELECT  FROM ...)
+						// Hibernate (tested 5.0.10) also supports this but this is tad less efficient.
 					}
 					else {
 						throw new UnsupportedOperationException("Unsupported provider: " + entityManager.getDelegate());
@@ -655,19 +653,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private <T extends E> PathResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
 		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, query instanceof Subquery ? new SubQueryRoot<>(root) : root);
 
+		if (query instanceof Subquery) {
+			((Subquery<?>) query).select(root.get(ID)).distinct(true);
+		}
+
 		if (!isEmpty(mapping)) {
 			if (query instanceof CriteriaQuery) {
 				((CriteriaQuery<?>) query).multiselect(mapping.values().toArray(new Selection[mapping.size()]));
 			}
 
 			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
-			PathResolver pathResolver = field -> (field == null) ? root : paths.get(field);
 
 			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupBy)) {
 				groupByIfNecessary(query, root);
 			}
 
-			return pathResolver;
+			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (resultType == entityType) {
 			return new RootPathResolver(root);
@@ -822,11 +823,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			else if (Boolean.class.isAssignableFrom(type)) {
 				predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
 			}
-			else if (String.class.isAssignableFrom(type)) {
+			else if (String.class.isAssignableFrom(type) || value instanceof String) {
 				predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
-			}
-			else if (value instanceof String) {
-				predicate = Like.contains((String) value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else {
 				throw new UnsupportedOperationException(String.format(ERROR_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
@@ -878,12 +876,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static interface PathResolver {
 		Expression<?> get(String field);
 
-		default String forElementCollection(String attribute) {
-			return '@' + attribute;
+		default String forElementCollection(String field) {
+			return '@' + field;
 		}
 
-		default String inElementCollection(String attribute) {
-			return '@' + attribute + '@';
+		default String inElementCollection(String field) {
+			return forElementCollection(field) + '@';
 		}
 	}
 
@@ -973,11 +971,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return predicate.getAlias().startsWith(HAVING);
 		}
 
-		public static Entry<String, Integer> getFieldAndCount(Predicate predicate) {
-			String alias = predicate.getAlias();
-			String[] fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_')).split("_");
-			String field = fieldAndCount[0];
-			int count = Integer.valueOf(fieldAndCount[1]);
+		public static Entry<String, Integer> getFieldAndCount(Predicate inPredicate) {
+			String alias = inPredicate.getAlias();
+			String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
+			String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_'));
+			int count = Integer.valueOf(fieldAndCount.substring(field.length() + 1));
 			return new SimpleEntry<>(field, count);
 		}
 
