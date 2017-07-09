@@ -57,6 +57,7 @@ public final class JPA {
 	public enum Provider {
 		HIBERNATE,
 		ECLIPSELINK,
+		OPENJPA,
 		UNKNOWN;
 
 		public static Provider of(EntityManager entityManager) {
@@ -67,6 +68,9 @@ public final class JPA {
 			}
 			else if (packageName.startsWith("org.eclipse.persistence.")) {
 				return ECLIPSELINK;
+			}
+			else if (packageName.startsWith("org.apache.openjpa.")) {
+				return OPENJPA;
 			}
 			else {
 				return UNKNOWN;

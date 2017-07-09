@@ -6,6 +6,7 @@ import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.JPA.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.JPA.Provider.HIBERNATE;
+import static org.omnifaces.persistence.JPA.Provider.OPENJPA;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
@@ -21,6 +22,7 @@ import java.lang.reflect.TypeVariable;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -599,56 +601,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		try {
 			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
 			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
-			Root<E> root = buildRoot(criteriaQuery);
 
-			PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
-			buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
-
-			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
-			buildRange(page, typedQuery, root);
+			TypedQuery<T> typedQuery = buildQuery(page, resultType, criteriaBuilder, criteriaQuery, queryBuilder);
 			onPage(page, cacheable).accept(typedQuery);
-			parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
 			List<T> entities = typedQuery.getResultList();
 
 			int estimatedTotalNumberOfResults = -1;
 
 			if (count) {
-				CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
-				Root<E> countRoot = countQuery.from(entityType);
-				countQuery.select(criteriaBuilder.count(countRoot));
-
-				if (hasRestrictions(criteriaQuery)) {
-					Subquery<T> subQuery = countQuery.subquery(resultType);
-					Root<E> subQueryRoot = buildRoot(subQuery);
-					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
-
-					if (provider == HIBERNATE && !hasJoins(root)) {
-						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink only doesn't support this).
-					}
-					else {
-						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
-					}
-
-					if (provider == HIBERNATE) {
-						// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
-						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery));
-						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
-					}
-					else if (provider == ECLIPSELINK) {
-						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT DISTINCT t.id FROM T t WHERE [restrictions] AND t.id=e.id)
-						subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))));
-						countQuery.where(criteriaBuilder.exists(subQuery));
-						// Hibernate (tested 5.0.10) also supports this but this is tad less efficient.
-					}
-					else {
-						throw new UnsupportedOperationException("Unsupported provider: " + entityManager.getDelegate());
-					}
-				}
-
-				TypedQuery<Long> typedCountQuery = entityManager.createQuery(countQuery);
+				TypedQuery<Long> typedCountQuery = buildCountQuery(page, resultType, criteriaBuilder, criteriaQuery, queryBuilder);
 				onPage(page, cacheable).accept(typedCountQuery);
-				parameterValues.entrySet().forEach(parameter -> typedCountQuery.setParameter(parameter.getKey(), parameter.getValue()));
 				estimatedTotalNumberOfResults = typedCountQuery.getSingleResult().intValue();
 			}
 
@@ -657,6 +619,63 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		finally {
 			afterPage().accept(entityManager);
 		}
+	}
+
+	// Query building -------------------------------------------------------------------------------------------------
+
+	private <T extends E> TypedQuery<T> buildQuery(Page page, Class<T> resultType, CriteriaBuilder criteriaBuilder, CriteriaQuery<T> criteriaQuery, MappedQueryBuilder<T> queryBuilder) {
+		Root<E> root = buildRoot(criteriaQuery);
+		PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
+		buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
+		Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
+
+		TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
+		buildRange(page, typedQuery, root);
+		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+		return typedQuery;
+	}
+
+	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, Class<T> resultType, CriteriaBuilder criteriaBuilder, CriteriaQuery<T> criteriaQuery, MappedQueryBuilder<T> queryBuilder) {
+		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
+		Root<E> countRoot = countQuery.from(entityType);
+		countQuery.select(criteriaBuilder.count(countRoot));
+		Map<String, Object> parameterValues = Collections.emptyMap();
+
+		if (hasRestrictions(criteriaQuery)) {
+			Subquery<T> subQuery = countQuery.subquery(resultType);
+			Root<E> subQueryRoot = buildRoot(subQuery);
+			PathResolver pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
+
+			if (provider == HIBERNATE && !hasJoins(criteriaQuery.getRoots().iterator().next())) {
+				copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this).
+			}
+			else {
+				parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
+			}
+
+			if (provider == HIBERNATE) {
+				// SELECT COUNT(e) FROM E e WHERE e IN (SELECT DISTINCT t FROM T t WHERE [restrictions])
+				countQuery.where(criteriaBuilder.in(countRoot).value(subQuery));
+				// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
+				// OpenJPA (tested 2.4.2) fails here as it doesn't interpret root as @Id: org.apache.openjpa.persistence.ArgumentException: Filter invalid. Cannot compare value of type optimusfaces.test.Person to value of type java.lang.Long.
+			}
+			else if (provider == OPENJPA) {
+				// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
+				countQuery.where(criteriaBuilder.in(countRoot.get(ID)).value(subQuery));
+				// Hibernate (tested 5.0.10) fails here when DTO is used as it does not have a mapped ID.
+				// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
+			}
+			else {
+				// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT DISTINCT t.id FROM T t WHERE [restrictions] AND t.id=e.id)
+				subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))));
+				countQuery.where(criteriaBuilder.exists(subQuery));
+				// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
+			}
+		}
+
+		TypedQuery<Long> typedCountQuery = entityManager.createQuery(countQuery);
+		parameterValues.entrySet().forEach(parameter -> typedCountQuery.setParameter(parameter.getKey(), parameter.getValue()));
+		return typedCountQuery;
 	}
 
 

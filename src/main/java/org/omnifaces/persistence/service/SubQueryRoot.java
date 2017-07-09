@@ -1,6 +1,7 @@
 package org.omnifaces.persistence.service;
 
 import javax.persistence.criteria.Fetch;
+import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Root;
 
 /**
@@ -15,7 +16,8 @@ class SubQueryRoot<X> extends RootWrapper<X> {
 	@Override
 	@SuppressWarnings({ "unchecked", "hiding" })
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return (Fetch<X, Y>) join(attributeName);
+		Join<X, Y> join = join(attributeName);
+		return join instanceof Fetch ? (Fetch<X, Y>) join : new JoinFetchAdapter<>(join);
 	}
 
 }
