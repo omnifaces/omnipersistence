@@ -56,8 +56,6 @@ import javax.persistence.metamodel.Attribute;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
-import org.eclipse.persistence.annotations.BatchFetchType;
-import org.eclipse.persistence.config.QueryHints;
 import org.omnifaces.persistence.JPA;
 import org.omnifaces.persistence.JPA.Provider;
 import org.omnifaces.persistence.criteria.Bool;
@@ -601,11 +599,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		try {
 			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
 			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
-			Root<E> root = criteriaQuery.from(entityType);
+			Root<E> root = buildRoot(criteriaQuery);
 
 			PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
 			buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
+			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, root, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 			buildRange(page, typedQuery, root);
@@ -622,14 +620,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 				if (hasRestrictions(criteriaQuery)) {
 					Subquery<T> subQuery = countQuery.subquery(resultType);
-					Root<E> subQueryRoot = subQuery.from(entityType);
+					Root<E> subQueryRoot = buildRoot(subQuery);
 					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
 					if (provider == HIBERNATE && !hasJoins(root)) {
 						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink only doesn't support this).
 					}
 					else {
-						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
+						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, subQueryRoot, pathResolver);
 					}
 
 					if (provider == HIBERNATE) {
@@ -664,11 +662,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
+	private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
+		Root<E> root = query.from(entityType);
+		return (query instanceof Subquery) ? new SubQueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
+	}
+
 	private <T extends E> PathResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, query instanceof Subquery ? new SubQueryRoot<>(root) : root);
+		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, root);
 
 		if (query instanceof Subquery) {
-			((Subquery<?>) query).select(root.get(ID)).distinct(true);
+			((Subquery<?>) query).select(root.get(ID));
 		}
 
 		if (!isEmpty(mapping)) {
@@ -702,6 +705,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		if (hasJoins || page.getLimit() != MAX_VALUE) {
 			typedQuery.setMaxResults(page.getLimit());
 		}
+
+		if (hasJoins && root instanceof EclipseLinkRoot) {
+			((EclipseLinkRoot<?>) root).getPostponedFetches().forEach(fetch -> {
+				typedQuery.setHint("eclipselink.batch", "e." + fetch);
+			});
+		}
 	}
 
 
@@ -730,7 +739,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
-	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver) {
+	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, PathResolver pathResolver) {
 		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
 		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), criteriaBuilder, pathResolver, parameterValues);
 		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), criteriaBuilder, pathResolver, parameterValues);
@@ -766,7 +775,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (restriction != null) {
-			query.where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
+			query.distinct(true).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
@@ -948,11 +957,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return path;
 		}
 
-		private static Map<String, Path<?>> getJoins(From<?, ?> from) {
-			Map<String, Path<?>> joins = new HashMap<>(from.getJoins().stream().collect(toMap(join -> join.getAttribute().getName())));
-			joins.putAll(from.getFetches().stream().filter(fetch -> fetch instanceof Path).collect(toMap(fetch -> fetch.getAttribute().getName(), fetch -> (Path<?>) fetch)));
-			return joins;
-		}
 	}
 
 	private static class Alias {
@@ -1064,7 +1068,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean hasJoins(From<?, ?> from) {
-		return !from.getJoins().isEmpty() || from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path);
+		return !from.getJoins().isEmpty()
+			|| from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
+			|| (from instanceof EclipseLinkRoot && !((EclipseLinkRoot<?>) from).getPostponedFetches().isEmpty());
+	}
+
+	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
+		Map<String, Path<?>> joins = new HashMap<>(from.getJoins().stream().collect(toMap(join -> join.getAttribute().getName())));
+		joins.putAll(from.getFetches().stream().filter(fetch -> fetch instanceof Path).collect(toMap(fetch -> fetch.getAttribute().getName(), fetch -> (Path<?>) fetch)));
+
+		if (from instanceof EclipseLinkRoot) {
+			((EclipseLinkRoot<?>) from).getPostponedFetches().forEach(fetch -> joins.put(fetch, from.get(fetch)));
+		}
+
+		return joins;
 	}
 
 	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
