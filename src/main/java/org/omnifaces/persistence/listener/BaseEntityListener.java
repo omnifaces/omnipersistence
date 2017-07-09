@@ -4,6 +4,7 @@ import static org.omnifaces.utils.annotation.Annotations.createAnnotationInstanc
 
 import javax.enterprise.event.Observes;
 import javax.enterprise.inject.spi.BeanManager;
+import javax.enterprise.inject.spi.CDI;
 import javax.inject.Inject;
 import javax.persistence.PostPersist;
 import javax.persistence.PostRemove;
@@ -41,17 +42,25 @@ public class BaseEntityListener {
 
 	@PostPersist
 	public void onPostPersist(BaseEntity<?> entity) {
-		beanManager.fireEvent(entity, createAnnotationInstance(Created.class));
+		getBeanManager().fireEvent(entity, createAnnotationInstance(Created.class));
 	}
 
 	@PostUpdate
 	public void onPostUpdate(BaseEntity<?> entity) {
-		beanManager.fireEvent(entity, createAnnotationInstance(Updated.class));
+		getBeanManager().fireEvent(entity, createAnnotationInstance(Updated.class));
 	}
 
 	@PostRemove
 	public void onPostRemove(BaseEntity<?> entity) {
-		beanManager.fireEvent(entity, createAnnotationInstance(Deleted.class));
+		getBeanManager().fireEvent(entity, createAnnotationInstance(Deleted.class));
+	}
+
+	private BeanManager getBeanManager() {
+		if (beanManager == null) {
+			beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
+		}
+
+		return beanManager;
 	}
 
 }
