@@ -1056,9 +1056,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static void groupByIfNecessary(AbstractQuery<?> query, Expression<?> path) {
-		if (!query.getGroupList().contains(path)) {
+		Expression<?> groupByPath = (path instanceof RootWrapper) ? ((RootWrapper<?>) path).getWrapped() : path;
+
+		if (!query.getGroupList().contains(groupByPath)) {
 			List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
-			groupList.add(path);
+			groupList.add(groupByPath);
 			query.groupBy(groupList);
 		}
 	}
