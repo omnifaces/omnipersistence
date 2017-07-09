@@ -603,7 +603,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 			PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
 			buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, root, pathResolver);
+			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 			buildRange(page, typedQuery, root);
@@ -627,7 +627,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink only doesn't support this).
 					}
 					else {
-						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, subQueryRoot, pathResolver);
+						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
 					}
 
 					if (provider == HIBERNATE) {
@@ -739,7 +739,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
-	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, PathResolver pathResolver) {
+	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver) {
 		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
 		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), criteriaBuilder, pathResolver, parameterValues);
 		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), criteriaBuilder, pathResolver, parameterValues);
