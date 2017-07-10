@@ -8,7 +8,6 @@ import static org.omnifaces.persistence.JPA.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.JPA.Provider.HIBERNATE;
 import static org.omnifaces.persistence.JPA.Provider.OPENJPA;
 import static org.omnifaces.persistence.model.Identifiable.ID;
-import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
@@ -816,7 +815,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@SuppressWarnings("unchecked")
 	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		String alias = Alias.create(path, field);
+		Alias alias = Alias.create(path, field);
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -862,26 +861,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return null; // Likely custom search value referring illegal value.
 		}
 
-		alias = coalesce(predicate.getAlias(), alias);
-
 		if (negated) {
 			predicate = criteriaBuilder.not(predicate);
 		}
 
-		predicate.alias(alias);
+		predicate.alias(alias.value());
 		return predicate;
 	}
 
-	private Predicate buildInPredicate(Expression<?> path, String alias, Object value, ParameterBuilder parameterBuilder) {
+	private Predicate buildInPredicate(Expression<?> path, Alias alias, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value).map(parameterBuilder::create).collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
 		}
 
-		Predicate predicate = ((Join<?, ?>) path).in(in.toArray(new Expression[in.size()]));
-		predicate.alias(Alias.in(alias, in.size()));
-		return predicate;
+		alias.in(in.size());
+		return ((Join<?, ?>) path).in(in.toArray(new Expression[in.size()]));
 	}
 
 	private Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
@@ -970,16 +966,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private static final String HAVING = "having_";
 		private static final String IN = "_in";
 
-		public static String create(Expression<?> expression, String field) {
-			return (needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_");
+		private String value;
+
+		private Alias(String alias) {
+			this.value = alias;
 		}
 
-		public static String in(String alias, int count) {
-			return alias + "_" + count + IN;
+		public static Alias create(Expression<?> expression, String field) {
+			return new Alias((needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_"));
 		}
 
-		public static String having(Predicate predicate) {
-			return HAVING + predicate.getAlias().substring(predicate.getAlias().indexOf("_") + 1);
+		public void in(int count) {
+			value += "_" + count + IN;
+		}
+
+		public String value() {
+			return value;
+		}
+
+		public static String having(Predicate inPredicate) {
+			return HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf("_") + 1);
 		}
 
 		public static boolean isWhere(Predicate predicate) {
