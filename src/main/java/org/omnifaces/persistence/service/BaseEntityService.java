@@ -623,7 +623,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					Root<E> subQueryRoot = buildRoot(subQuery);
 					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
-					if (provider == HIBERNATE && !hasJoins(criteriaQuery.getRoots().iterator().next())) {
+					if (provider == HIBERNATE && !hasJoins(root)) {
 						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this).
 					}
 					else {
@@ -865,7 +865,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			predicate = criteriaBuilder.not(predicate);
 		}
 
-		predicate.alias(alias.value());
+		alias.set(predicate);
 		return predicate;
 	}
 
@@ -980,12 +980,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			value += "_" + count + IN;
 		}
 
-		public String value() {
-			return value;
-		}
-
-		public static String having(Predicate inPredicate) {
-			return HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf("_") + 1);
+		public void set(Predicate predicate) {
+			predicate.alias(value);
 		}
 
 		public static boolean isWhere(Predicate predicate) {
@@ -1006,6 +1002,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_'));
 			int count = Integer.valueOf(fieldAndCount.substring(field.length() + 1));
 			return new SimpleEntry<>(field, count);
+		}
+
+		public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
+			countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf("_") + 1));
 		}
 
 	}
@@ -1054,7 +1054,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		if (fieldAndCount.getValue() > 1) {
 			Expression<?> join = pathResolver.get(pathResolver.inElementCollection(fieldAndCount.getKey()));
 			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(join), fieldAndCount.getValue());
-			countPredicate.alias(Alias.having(inPredicate));
+			Alias.setHaving(inPredicate, countPredicate);
 			groupByIfNecessary(query, pathResolver.get(pathResolver.forElementCollection(fieldAndCount.getKey())));
 			return countPredicate;
 		}
