@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence;
 
+import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
@@ -19,6 +20,7 @@ import static org.omnifaces.utils.stream.Collectors.toMap;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -53,12 +55,36 @@ public final class JPA {
 	public static final String CACHE_RETRIEVE_MODE_HINT_KEY = "javax.persistence.cache.retrieveMode";
 
 	private static final Optional<Class<Object>> HIBERNATE_PROXY_CLASS = findClass("org.hibernate.proxy.HibernateProxy");
+	private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
+	private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
+	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
 	public enum Provider {
-		HIBERNATE,
-		ECLIPSELINK,
-		OPENJPA,
-		UNKNOWN;
+		HIBERNATE {
+			@Override
+			public boolean isAggregation(Expression<?> expression) {
+				return HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation");
+			}
+		},
+		ECLIPSELINK {
+			@Override
+			public boolean isAggregation(Expression<?> expression) {
+				return ECLIPSELINK_FUNCTION_EXPRESSION_IMPL.get().isInstance(expression) && AGGREGATE_FUNCTIONS.contains(invokeMethod(expression, "getOperation"));
+			}
+		},
+		OPENJPA {
+			@Override
+			public boolean isAggregation(Expression<?> expression) {
+				// We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not trivial to get here.
+				return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase());
+			}
+		},
+		UNKNOWN {
+			@Override
+			public boolean isAggregation(Expression<?> expression) {
+				throw new UnsupportedOperationException();
+			}
+		};
 
 		public static Provider of(EntityManager entityManager) {
 			String packageName = entityManager.getDelegate().getClass().getPackage().getName();
@@ -76,6 +102,8 @@ public final class JPA {
 				return UNKNOWN;
 			}
 		}
+
+		public abstract boolean isAggregation(Expression<?> expression);
 	}
 
 	private JPA() {

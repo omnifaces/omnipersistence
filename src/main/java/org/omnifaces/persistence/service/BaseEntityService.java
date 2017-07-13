@@ -180,7 +180,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param jpqlStatement The Java Persistence Query Language statement to be executed.
 	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement.
 	 */
-	protected final TypedQuery<E> createQuery(String jpqlStatement) {
+	protected TypedQuery<E> createQuery(String jpqlStatement) {
 		return entityManager.createQuery(jpqlStatement, entityType);
 	}
 
@@ -192,7 +192,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return An instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
 	 * by the given name.
 	 */
-	protected final TypedQuery<E> createNamedQuery(String name) {
+	protected TypedQuery<E> createNamedQuery(String name) {
 		return entityManager.createNamedQuery(name, entityType);
 	}
 
@@ -306,7 +306,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return The managed entity.
 	 * @throws IllegalEntityStateException When entity has no ID or has in meanwhile been deleted.
 	 */
-	protected final E manage(E entity) {
+	protected E manage(E entity) {
 		if (entity.getId() == null) {
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
 		}
@@ -334,8 +334,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param entity Entity instance to fetch lazy collections on.
 	 * @param getters Getters of those lazy collections.
 	 */
-	@SafeVarargs
-	protected final void fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
+	@SuppressWarnings("unchecked")
+	protected void fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
 		if (!isEmpty(getters)) {
 			stream(getters).forEach(getter -> getter.apply(entity).size());
 		}
@@ -351,8 +351,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param entity Entity instance to fetch lazy maps on.
 	 * @param getters Getters of those lazy collections.
 	 */
-	@SafeVarargs
-	protected final void fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
+	@SuppressWarnings("unchecked")
+	protected void fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
 		if (!isEmpty(getters)) {
 			stream(getters).forEach(getter -> getter.apply(entity).size());
 		}
@@ -375,7 +375,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch all blobs on.
 	 */
-	protected final void fetchLazyBlobs(E entity) {
+	protected void fetchLazyBlobs(E entity) {
 		E managed = entityManager.merge(entity);
 
 		for (Attribute<?, ?> a : entityManager.getMetamodel().entity(managed.getClass()).getSingularAttributes()) {
@@ -624,7 +624,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
 
 					if (provider == HIBERNATE && !hasJoins(root)) {
-						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this).
+						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this as they treat them as stateful).
 					}
 					else {
 						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
@@ -679,13 +679,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (!isEmpty(mapping)) {
+			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue(), (l, r) -> l, LinkedHashMap::new));
+
 			if (query instanceof CriteriaQuery) {
-				((CriteriaQuery<?>) query).multiselect(mapping.values().toArray(new Selection[mapping.size()]));
+				((CriteriaQuery<?>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
 			}
 
-			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue()));
-
-			if (paths.values().stream().anyMatch(BaseEntityService::needsGroupBy)) {
+			if (paths.values().stream().anyMatch(provider::isAggregation)) {
 				groupByIfNecessary(query, root);
 			}
 
@@ -779,7 +779,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (restriction != null) {
-			query.distinct(true).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
+			query.distinct(hasFetches((From<?, ?>) pathResolver.get(null))).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
@@ -815,7 +815,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@SuppressWarnings("unchecked")
 	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Alias alias = Alias.create(path, field);
+		Alias alias = Alias.create(provider, path, field);
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -962,6 +962,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static class Alias {
 
+		private static final String AS = "as_";
 		private static final String WHERE = "where_";
 		private static final String HAVING = "having_";
 		private static final String IN = "_in";
@@ -972,8 +973,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			this.value = alias;
 		}
 
-		public static Alias create(Expression<?> expression, String field) {
-			return new Alias((needsGroupBy(expression) ? HAVING : WHERE) + field.replace(".", "_"));
+		public static Selection<?> as(Entry<String, Expression<?>> mappingEntry) {
+			Selection<?> selection = mappingEntry.getValue();
+			return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace(".", "_"));
+		}
+
+		public static Alias create(Provider provider, Expression<?> expression, String field) {
+			return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace(".", "_"));
 		}
 
 		public void in(int count) {
@@ -1062,10 +1068,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return null;
 	}
 
-	private static boolean needsGroupBy(Expression<?> expression) {
-		return !(expression instanceof Path);
-	}
-
 	private static void groupByIfNecessary(AbstractQuery<?> query, Expression<?> path) {
 		Expression<?> groupByPath = (path instanceof RootWrapper) ? ((RootWrapper<?>) path).getWrapped() : path;
 
@@ -1081,8 +1083,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean hasJoins(From<?, ?> from) {
-		return !from.getJoins().isEmpty()
-			|| from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
+		return !from.getJoins().isEmpty() || hasFetches(from);
+	}
+
+	private static boolean hasFetches(From<?, ?> from) {
+		return from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
 			|| (from instanceof EclipseLinkRoot && !((EclipseLinkRoot<?>) from).getPostponedFetches().isEmpty());
 	}
 
