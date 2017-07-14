@@ -12,22 +12,17 @@
  */
 package org.omnifaces.persistence;
 
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
-import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.Query;
@@ -58,63 +53,6 @@ public final class JPA {
 	public static final String CACHE_RETRIEVE_MODE_HINT_KEY = "javax.persistence.cache.retrieveMode";
 
 	private static final Optional<Class<Object>> HIBERNATE_PROXY_CLASS = findClass("org.hibernate.proxy.HibernateProxy");
-	private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
-	private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
-	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
-
-	public enum Provider {
-		HIBERNATE {
-			@Override
-			public boolean isAggregation(Expression<?> expression) {
-				return HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation");
-			}
-		},
-		ECLIPSELINK {
-			@Override
-			public boolean isAggregation(Expression<?> expression) {
-				return ECLIPSELINK_FUNCTION_EXPRESSION_IMPL.get().isInstance(expression) && AGGREGATE_FUNCTIONS.contains(invokeMethod(expression, "getOperation"));
-			}
-		},
-		OPENJPA {
-			@Override
-			public boolean isAggregation(Expression<?> expression) {
-				// We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not trivial to get here.
-				return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase());
-			}
-
-			@Override
-			public boolean isElementCollection(Attribute<?, ?> attribute) {
-				// For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
-				return ((Field) attribute.getJavaMember()).getAnnotation(ElementCollection.class) != null;
-			}
-		},
-		UNKNOWN;
-
-		public static Provider of(EntityManager entityManager) {
-			String packageName = entityManager.getDelegate().getClass().getPackage().getName();
-
-			if (packageName.startsWith("org.hibernate.")) {
-				return HIBERNATE;
-			}
-			else if (packageName.startsWith("org.eclipse.persistence.")) {
-				return ECLIPSELINK;
-			}
-			else if (packageName.startsWith("org.apache.openjpa.")) {
-				return OPENJPA;
-			}
-			else {
-				return UNKNOWN;
-			}
-		}
-
-		public boolean isAggregation(Expression<?> expression) {
-			throw new UnsupportedOperationException(expression.toString());
-		}
-
-		public boolean isElementCollection(Attribute<?, ?> attribute) {
-			return attribute.getPersistentAttributeType() == ELEMENT_COLLECTION;
-		}
-	}
 
 	private JPA() {
 		//
@@ -223,6 +161,10 @@ public final class JPA {
 		return entityManager.createQuery(query).getSingleResult();
 	}
 
+	/**
+	 * @deprecated Use {@link Provider#isProxy(Object)} instead.
+	 */
+	@Deprecated
 	public static boolean isProxy(Object object) {
 		return isHibernateProxy(object);
 	}
@@ -231,6 +173,10 @@ public final class JPA {
 		return HIBERNATE_PROXY_CLASS.isPresent() && HIBERNATE_PROXY_CLASS.get().isInstance(object);
 	}
 
+	/**
+	 * @deprecated Use {@link Provider#dereferenceProxy(Object)} instead.
+	 */
+	@Deprecated
 	@SuppressWarnings("unchecked")
 	public static <E> E dereferenceProxy(E entity) {
 		if (isHibernateProxy(entity)) {

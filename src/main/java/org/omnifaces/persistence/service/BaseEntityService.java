@@ -5,9 +5,9 @@ import static java.util.Collections.unmodifiableSet;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
-import static org.omnifaces.persistence.JPA.Provider.ECLIPSELINK;
-import static org.omnifaces.persistence.JPA.Provider.HIBERNATE;
-import static org.omnifaces.persistence.JPA.Provider.OPENJPA;
+import static org.omnifaces.persistence.Provider.ECLIPSELINK;
+import static org.omnifaces.persistence.Provider.HIBERNATE;
+import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
@@ -37,6 +37,7 @@ import java.util.function.Function;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Stateless;
+import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
 import javax.persistence.PersistenceContext;
@@ -60,8 +61,8 @@ import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
-import org.omnifaces.persistence.JPA;
-import org.omnifaces.persistence.JPA.Provider;
+import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
@@ -109,11 +110,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
+	private Set<String> elementCollections;
 
 	@PersistenceContext
 	private EntityManager entityManager;
+
+	@Inject
 	private Provider provider;
-	private Set<String> elementCollections;
+
+	@Inject
+	private Database database;
 
 
 	// Init -----------------------------------------------------------------------------------------------------------
@@ -130,11 +136,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * The postconstruct determines the JPA provider of EntityManager and initializes the element collections.
+	 * The postconstruct initializes the element collections.
 	 */
 	@PostConstruct
 	private void initWithEntityManager() {
-		provider = JPA.Provider.of(entityManager);
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, type -> computeElementCollectionMapping(type, ""));
 	}
 
@@ -196,6 +201,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected Provider getProvider() {
 		return provider;
+	}
+
+	/**
+	 * Returns the SQL database being used.
+	 * @return The SQL database being used.
+	 */
+	protected Database getDatabase() {
+		return database;
 	}
 
 	/**
