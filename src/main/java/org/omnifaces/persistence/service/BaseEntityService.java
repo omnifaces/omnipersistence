@@ -1,6 +1,7 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.Integer.MAX_VALUE;
+import static java.util.Collections.unmodifiableSet;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
@@ -22,12 +23,14 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -53,6 +56,7 @@ import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Selection;
 import javax.persistence.criteria.Subquery;
 import javax.persistence.metamodel.Attribute;
+import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
 
@@ -97,6 +101,7 @@ import org.omnifaces.utils.reflect.Getter;
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
 	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
 
 	private static final String ERROR_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported."
@@ -108,6 +113,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@PersistenceContext
 	private EntityManager entityManager;
 	private Provider provider;
+	private Set<String> elementCollections;
 
 
 	// Init -----------------------------------------------------------------------------------------------------------
@@ -124,11 +130,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * The postconstruct determines the JPA provider of EntityManager.
+	 * The postconstruct determines the JPA provider of EntityManager and initializes the element collections.
 	 */
 	@PostConstruct
-	private void initProvider() {
+	private void initWithEntityManager() {
 		provider = JPA.Provider.of(entityManager);
+		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, type -> computeElementCollectionMapping(type, ""));
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -162,6 +169,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return (Class<?>) actualTypeArgument;
+	}
+
+	private Set<String> computeElementCollectionMapping(Class<?> type, String basePath) {
+		Set<String> elementCollections = new HashSet<>(1);
+		EntityType<?> entity = entityManager.getMetamodel().entity(type);
+
+		for (Attribute<?, ?> attribute : entity.getAttributes()) {
+			if (provider.isElementCollection(attribute)) {
+				elementCollections.add(basePath + attribute.getName());
+			}
+			else if (BaseEntity.class.isAssignableFrom(attribute.getJavaType())) {
+				elementCollections.addAll(computeElementCollectionMapping(attribute.getJavaType(), basePath + entity.getName() + "."));
+			}
+		}
+
+		return unmodifiableSet(elementCollections);
 	}
 
 
@@ -692,7 +715,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (resultType == entityType) {
-			return new RootPathResolver(root);
+			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType));
 		}
 		else {
 			throw new IllegalArgumentException(ERROR_ILLEGAL_MAPPING);
@@ -732,11 +755,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Expression<?> path = pathResolver.get(order.getKey());
-
-		if (isElementCollection(path.getJavaType())) {
-			path = pathResolver.get(pathResolver.forElementCollection(order.getKey()));
-		}
-
 		return order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 	}
 
@@ -803,14 +821,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return null; // Likely custom search key referring non-existent property.
 		}
 
-		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
-		Object value = parameter.getValue();
-
-		if (isElementCollection(type)) {
-			path = pathResolver.get(pathResolver.inElementCollection(field));
+		if (elementCollections.contains(field)) {
+			path = pathResolver.get(pathResolver.join(field));
 		}
 
-		return buildTypedPredicate(path, type, field, value, criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
+		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
+		return buildTypedPredicate(path, type, field, parameter.getValue(), criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -832,7 +848,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			if (value == null) {
 				predicate = criteriaBuilder.isNull(path);
 			}
-			else if (isElementCollection(type)) {
+			else if (elementCollections.contains(field)) {
 				predicate = buildInPredicate(path, alias, value, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
@@ -900,12 +916,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static interface PathResolver {
 		Expression<?> get(String field);
 
-		default String forElementCollection(String field) {
+		default String join(String field) {
 			return '@' + field;
-		}
-
-		default String inElementCollection(String field) {
-			return forElementCollection(field) + '@';
 		}
 	}
 
@@ -914,11 +926,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private Root<?> root;
 		private Map<String, Path<?>> joins;
 		private Map<String, Path<?>> paths;
+		private Set<String> elementCollections;
 
-		private RootPathResolver(Root<?> root) {
+		private RootPathResolver(Root<?> root, Set<String> elementCollections) {
 			this.root = root;
 			this.joins = getJoins(root);
 			this.paths = new HashMap<>();
+			this.elementCollections = elementCollections;
 		}
 
 		@Override
@@ -936,21 +950,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			path = root;
 			String[] attributes = field.split("\\.");
 			int depth = attributes.length;
+			boolean explicitJoin = field.startsWith("@");
 
 			for (int i = 0; i < depth; i++) {
-				String attribute = attributes[i];
+				String attribute = attributes[i].replaceAll("^@", "");
 
 				if (i + 1 < depth) {
 					path = joins.get(attribute);
 				}
-				else if (!attribute.startsWith("@")) {
+				else if (!elementCollections.contains(field.replaceAll("^@", ""))) {
 					path = path.get(attribute);
 				}
-				else if (!attribute.endsWith("@")) {
-					path = joins.get(attribute.substring(1));
+				else if (!explicitJoin) {
+					path = joins.get(attribute);
 				}
 				else {
-					path = ((From<?, ?>) path).join(attribute.substring(1, attribute.length() - 1));
+					path = ((From<?, ?>) path).join(attribute);
 				}
 			}
 
@@ -1038,10 +1053,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	}
 
-	private static boolean isElementCollection(Class<?> type) {
-		return Collection.class.isAssignableFrom(type);
-	}
-
 	private static Predicate[] toArray(List<Predicate> predicates) {
 		return predicates.toArray(new Predicate[predicates.size()]);
 	}
@@ -1058,10 +1069,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Entry<String, Integer> fieldAndCount = Alias.getFieldAndCount(inPredicate);
 
 		if (fieldAndCount.getValue() > 1) {
-			Expression<?> join = pathResolver.get(pathResolver.inElementCollection(fieldAndCount.getKey()));
+			Expression<?> join = pathResolver.get(pathResolver.join(fieldAndCount.getKey()));
 			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.count(join), fieldAndCount.getValue());
 			Alias.setHaving(inPredicate, countPredicate);
-			groupByIfNecessary(query, pathResolver.get(pathResolver.forElementCollection(fieldAndCount.getKey())));
+			groupByIfNecessary(query, pathResolver.get(fieldAndCount.getKey()));
 			return countPredicate;
 		}
 

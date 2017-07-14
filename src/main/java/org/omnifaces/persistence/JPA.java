@@ -12,11 +12,13 @@
  */
 package org.omnifaces.persistence;
 
+import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.Query;
@@ -78,13 +81,14 @@ public final class JPA {
 				// We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not trivial to get here.
 				return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase());
 			}
-		},
-		UNKNOWN {
+
 			@Override
-			public boolean isAggregation(Expression<?> expression) {
-				throw new UnsupportedOperationException();
+			public boolean isElementCollection(Attribute<?, ?> attribute) {
+				// For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
+				return ((Field) attribute.getJavaMember()).getAnnotation(ElementCollection.class) != null;
 			}
-		};
+		},
+		UNKNOWN;
 
 		public static Provider of(EntityManager entityManager) {
 			String packageName = entityManager.getDelegate().getClass().getPackage().getName();
@@ -103,7 +107,13 @@ public final class JPA {
 			}
 		}
 
-		public abstract boolean isAggregation(Expression<?> expression);
+		public boolean isAggregation(Expression<?> expression) {
+			throw new UnsupportedOperationException(expression.toString());
+		}
+
+		public boolean isElementCollection(Attribute<?, ?> attribute) {
+			return attribute.getPersistentAttributeType() == ELEMENT_COLLECTION;
+		}
 	}
 
 	private JPA() {
