@@ -5,19 +5,22 @@ import static java.time.Instant.now;
 import java.io.Serializable;
 import java.time.Instant;
 
+import javax.persistence.Column;
 import javax.persistence.MappedSuperclass;
 import javax.persistence.PrePersist;
 import javax.persistence.PreUpdate;
 import javax.persistence.Transient;
-import javax.validation.constraints.NotNull;
 
 @MappedSuperclass
 public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> implements Timestamped {
 
 	private static final long serialVersionUID = 1L;
 
-	private @NotNull Instant created;
-	private @NotNull Instant lastModified;
+	@Column(nullable = false)
+	private Instant created;
+
+	@Column(nullable = false)
+	private Instant lastModified;
 
 	@Transient
 	private boolean skipAdjustLastModified;

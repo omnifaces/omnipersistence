@@ -2,6 +2,7 @@ package org.omnifaces.persistence.model;
 
 import java.io.Serializable;
 
+import javax.persistence.Column;
 import javax.persistence.MappedSuperclass;
 import javax.persistence.Version;
 
@@ -11,6 +12,7 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
 	private static final long serialVersionUID = 1L;
 
 	@Version
+	@Column(nullable = false)
 	private Long version;
 
 	@Override
