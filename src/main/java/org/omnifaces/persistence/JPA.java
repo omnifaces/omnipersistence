@@ -12,13 +12,15 @@
  */
 package org.omnifaces.persistence;
 
+import static java.util.stream.Collectors.toList;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
+import static org.omnifaces.utils.stream.Streams.stream;
 
-import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -195,49 +197,29 @@ public final class JPA {
 			throw new IllegalArgumentException("There must be at least 2 expressions or strings");
 		}
 
-		Object expressionOrString = expressionsOrStrings[0];
-
-		if (expressionsOrStrings.length > 2) {
-			Object[] remainingExpressionsOrStrings = Arrays.copyOfRange(expressionsOrStrings, 1, expressionsOrStrings.length);
-
+		List<Expression<? extends Object>> expressions = stream(expressionsOrStrings).map(expressionOrString -> {
 			if (expressionOrString instanceof Expression) {
-				return builder.concat((Expression<String>) expressionOrString, concat(builder, remainingExpressionsOrStrings));
+				return castAsString(builder, (Expression<?>) expressionOrString);
 			}
 			else {
-				return builder.concat(expressionOrString.toString(), concat(builder, remainingExpressionsOrStrings));
+				return builder.literal(expressionOrString);
 			}
-		}
-		else {
-			Object lastExpressionOrString = expressionsOrStrings[1];
+		}).collect(toList());
 
-			if (expressionOrString instanceof Expression) {
-				if (lastExpressionOrString instanceof Expression) {
-					return builder.concat((Expression<String>) expressionOrString, (Expression<String>) lastExpressionOrString);
-				}
-				else {
-					return builder.concat((Expression<String>) expressionOrString, lastExpressionOrString.toString());
-				}
-			}
-			else if (lastExpressionOrString instanceof Expression) {
-				return builder.concat(expressionOrString.toString(), (Expression<String>) lastExpressionOrString);
-			}
-			else {
-				throw new IllegalArgumentException("You should concatenate subsequent strings yourself");
-			}
-		}
+		return builder.function("CONCAT", String.class, expressions.toArray(new Expression[expressions.size()]));
 	}
 
 	@SuppressWarnings("unchecked")
 	public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
-		boolean lowercaseable = !Number.class.isAssignableFrom(expression.getJavaType());
+		boolean numeric = Number.class.isAssignableFrom(expression.getJavaType());
 
-		if (lowercaseable || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation, need to delegate to DB specific function.
+		if (!numeric || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation, need to delegate to DB specific function.
 			return expression.as(String.class);
 		}
 		else if (Database.is(POSTGRESQL)) {
 			return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
 		}
-		else {
+		else { // H2 and MySQL are more lenient in this, no function call necessary.
 			return (Expression<String>) expression;
 		}
 	}
