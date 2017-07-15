@@ -4,7 +4,6 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.context.Dependent;
 import javax.enterprise.inject.Produces;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -34,13 +33,11 @@ public class Environment {
 	}
 
 	@Produces
-	@Dependent
 	public Provider getProvider() {
 		return provider;
 	}
 
 	@Produces
-	@Dependent
 	public Database getDatabase() {
 		return database;
 	}
