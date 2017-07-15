@@ -1,5 +1,7 @@
 package org.omnifaces.persistence.criteria;
 
+import static org.omnifaces.persistence.JPA.castAsString;
+
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
@@ -22,8 +24,7 @@ public final class IgnoreCase extends Criteria<String> {
 	@Override
 	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Expression<String> pathAsString = (path.getJavaType() == String.class) ? (Expression<String>) path : path.as(String.class);
-		return criteriaBuilder.equal(criteriaBuilder.lower(pathAsString), criteriaBuilder.lower(parameterBuilder.create(getValue())));
+		return criteriaBuilder.equal(criteriaBuilder.lower(castAsString(criteriaBuilder, path)), criteriaBuilder.lower(parameterBuilder.create(getValue())));
 	}
 
 	@Override

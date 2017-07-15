@@ -1,16 +1,11 @@
 package org.omnifaces.persistence.criteria;
 
-import static org.omnifaces.persistence.Database.POSTGRESQL;
-import static org.omnifaces.persistence.Provider.HIBERNATE;
-
+import static org.omnifaces.persistence.JPA.castAsString;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
-
-import org.omnifaces.persistence.Database;
-import org.omnifaces.persistence.Provider;
 
 /**
  * Creates <code>path LIKE value</code>.
@@ -57,19 +52,10 @@ public final class Like extends Criteria<String> {
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		boolean lowercaseable = !Number.class.isAssignableFrom(path.getJavaType());
 		String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
-		Expression<String> pathAsString = (Expression<String>) path;
-
-		if (lowercaseable || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation.
-			pathAsString = path.as(String.class);
-		}
-		else if (Database.is(POSTGRESQL)) {
-			pathAsString = criteriaBuilder.function("TO_CHAR", String.class, path, criteriaBuilder.literal("FM999999999999999999"));
-		}
-
+		Expression<String> pathAsString = castAsString(criteriaBuilder, path);
 		return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
 	}
 

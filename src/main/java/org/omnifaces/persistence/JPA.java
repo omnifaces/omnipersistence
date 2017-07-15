@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence;
 
+import static org.omnifaces.persistence.Database.POSTGRESQL;
+import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
@@ -222,6 +224,21 @@ public final class JPA {
 			else {
 				throw new IllegalArgumentException("You should concatenate subsequent strings yourself");
 			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
+		boolean lowercaseable = !Number.class.isAssignableFrom(expression.getJavaType());
+
+		if (lowercaseable || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation, need to delegate to DB specific function.
+			return expression.as(String.class);
+		}
+		else if (Database.is(POSTGRESQL)) {
+			return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
+		}
+		else {
+			return (Expression<String>) expression;
 		}
 	}
 
