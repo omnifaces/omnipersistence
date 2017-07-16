@@ -5,10 +5,12 @@ import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
+
 import javax.enterprise.inject.spi.CDI;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
@@ -38,12 +40,7 @@ public enum Provider {
 		@Override
 		@SuppressWarnings("unchecked")
 		public <E> E dereferenceProxy(E entity) {
-			if (isProxy(entity)) {
-				return (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation");
-			}
-			else {
-				throw new UnsupportedOperationException();
-			}
+			return isProxy(entity) ? (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation") : entity;
 		}
 	},
 
