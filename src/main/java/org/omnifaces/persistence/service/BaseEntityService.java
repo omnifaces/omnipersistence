@@ -910,8 +910,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
+	@SuppressWarnings("unchecked")
 	private Predicate buildInPredicate(Expression<?> path, Alias alias, Object value, ParameterBuilder parameterBuilder) {
-		List<Expression<?>> in = stream(value).map(parameterBuilder::create).collect(toList());
+		Class<?> type = path.getJavaType();
+		List<Expression<?>> in = stream(value).map(item -> {
+			Object searchValue = Criteria.unwrap(item); // TODO: support Criteria here?
+
+			if (type.isEnum()) {
+				try {
+					return Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue();
+				}
+				catch (IllegalArgumentException ignore) {
+					return null; // Likely custom search value referring illegal value.
+				}
+			}
+
+			return searchValue;
+		}).map(parameterBuilder::create).filter(Objects::nonNull).collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
