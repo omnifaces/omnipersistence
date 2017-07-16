@@ -57,6 +57,7 @@ import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Selection;
 import javax.persistence.criteria.Subquery;
 import javax.persistence.metamodel.Attribute;
+import javax.persistence.metamodel.Bindable;
 import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
@@ -140,7 +141,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	@PostConstruct
 	private void initWithEntityManager() {
-		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, type -> computeElementCollectionMapping(type, ""));
+		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -176,7 +177,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return (Class<?>) actualTypeArgument;
 	}
 
-	private Set<String> computeElementCollectionMapping(Class<?> type, String basePath) {
+	private Set<String> computeElementCollectionMapping(Class<?> type) {
+		return computeElementCollectionMapping(type, "", new HashSet<>());
+	}
+
+	private Set<String> computeElementCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes) {
 		Set<String> elementCollections = new HashSet<>(1);
 		EntityType<?> entity = entityManager.getMetamodel().entity(type);
 
@@ -184,8 +189,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			if (provider.isElementCollection(attribute)) {
 				elementCollections.add(basePath + attribute.getName());
 			}
-			else if (BaseEntity.class.isAssignableFrom(attribute.getJavaType())) {
-				elementCollections.addAll(computeElementCollectionMapping(attribute.getJavaType(), basePath + entity.getName() + "."));
+			else if (attribute instanceof Bindable) {
+				Class<?> nestedType = ((Bindable<?>) attribute).getBindableJavaType();
+
+				if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
+					elementCollections.addAll(computeElementCollectionMapping(nestedType, basePath + attribute.getName() + ".", nestedTypes));
+				}
 			}
 		}
 
