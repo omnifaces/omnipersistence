@@ -212,24 +212,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement.
-	 * @param jpqlStatement The Java Persistence Query Language statement to be executed.
-	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement.
-	 */
-	protected TypedQuery<E> createQuery(String jpqlStatement) {
-		return entityManager.createQuery(jpqlStatement, entityType);
-	}
-
-	/**
 	 * Create an instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
-	 * by the given name.
+	 * by the given name, usually to perform a SELECT.
 	 * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either
 	 * a {@link NamedQuery} or a <code>&lt;persistence-unit&gt;&lt;mapping-file&gt;</code>.
 	 * @return An instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
-	 * by the given name.
+	 * by the given name, usually to perform a SELECT.
 	 */
-	protected TypedQuery<E> createNamedQuery(String name) {
+	protected TypedQuery<E> createNamedTypedQuery(String name) {
 		return entityManager.createNamedQuery(name, entityType);
+	}
+
+	/**
+	 * Create an instance of {@link Query} for executing a Java Persistence Query Language statement identified
+	 * by the given name, usually to perform an INSERT, UPDATE or DELETE.
+	 * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either
+	 * a {@link NamedQuery} or a <code>&lt;persistence-unit&gt;&lt;mapping-file&gt;</code>.
+	 * @return An instance of {@link Query} for executing a Java Persistence Query Language statement identified
+	 * by the given name, usually to perform an INSERT, UPDATE or DELETE.
+	 */
+	protected Query createNamedQuery(String name) {
+		return entityManager.createNamedQuery(name);
 	}
 
 	/**
@@ -255,7 +258,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC").getResultList();
+		return entityManager.createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
 	}
 
 	/**
