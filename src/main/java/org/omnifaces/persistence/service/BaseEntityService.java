@@ -822,7 +822,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (restriction != null) {
-			query.distinct(hasFetches((From<?, ?>) pathResolver.get(null))).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
+			query.distinct(hasJoins((From<?, ?>) pathResolver.get(null))).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
@@ -926,7 +926,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 
 			return searchValue;
-		}).map(parameterBuilder::create).filter(Objects::nonNull).collect(toList());
+		}).filter(Objects::nonNull).map(parameterBuilder::create).collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
