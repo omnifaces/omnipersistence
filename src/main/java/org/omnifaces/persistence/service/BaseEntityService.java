@@ -492,23 +492,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * }
 	 * </pre>
 	 * <pre>
-     * &#64;Stateless
-     * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
-     *
-     *     public void getPageOfYourEntityDTO(Page page, boolean count) {
-     *         return getPage(page, count, YourEntityDTO.class (criteriaBuilder, query, root) -&gt; {
-     *             Join&lt;YourEntityDTO, YourChildEntity&gt; child = root.join("child");
-     *
-     *             LinkedHashMap&lt;Getter&lt;YourEntityDTO&gt;, Expression&lt;?&gt;&gt; mapping = new LinkedHashMap&lt;&gt;();
-     *             mapping.put(YourEntityDTO::getId, root.get("id"));
-     *             mapping.put(YourEntityDTO::getName, root.get("name"));
-     *             mapping.put(YourEntityDTO::getTotalPrice, builder.sum(child.get("price")));
-     *
-     *             return mapping;
-     *         });
-     *     }
-     *
-     * }
+	 * &#64;Stateless
+	 * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+	 *
+	 *     public void getPageOfYourEntityDTO(Page page, boolean count) {
+	 *         return getPage(page, count, YourEntityDTO.class (criteriaBuilder, query, root) -&gt; {
+	 *             Join&lt;YourEntityDTO, YourChildEntity&gt; child = root.join("child");
+	 *
+	 *             LinkedHashMap&lt;Getter&lt;YourEntityDTO&gt;, Expression&lt;?&gt;&gt; mapping = new LinkedHashMap&lt;&gt;();
+	 *             mapping.put(YourEntityDTO::getId, root.get("id"));
+	 *             mapping.put(YourEntityDTO::getName, root.get("name"));
+	 *             mapping.put(YourEntityDTO::getTotalPrice, builder.sum(child.get("price")));
+	 *
+	 *             return mapping;
+	 *         });
+	 *     }
+	 *
+	 * }
 	 * </pre>
 	 * @param <T> The generic base entity type or from a DTO subclass thereof.
 	 */
