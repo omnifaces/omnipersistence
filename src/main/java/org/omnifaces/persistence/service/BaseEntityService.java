@@ -110,12 +110,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA =
 		"Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK =
+		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA =
 		"Sorry, OpenJPA does not support sorting a @OneToMany relationship. Consider using a DTO instead.";
-	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
-			"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK =
-			"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
+		"Sorry, EclipseLink does not support searching in a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
+		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
@@ -794,11 +796,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
-		if (provider == OPENJPA && oneToManyCollections.test(order.getKey())) {
+		String field = order.getKey();
+
+		if (provider == ECLIPSELINK && (oneToManyCollections.test(field) || elementCollections.contains(field))) {
+			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
+		}
+		else if (provider == OPENJPA && oneToManyCollections.test(field)) {
 			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA); // OpenJPA somehow adds a second join to the main query on the join table referenced in ORDER BY column.
 		}
 
-		Expression<?> path = pathResolver.get(order.getKey());
+		Expression<?> path = pathResolver.get(field);
 		return order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 	}
 
@@ -869,11 +876,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Subquery<Long> oneToManySubQuery = null;
 
 		if (oneToManyCollections.test(field) && (value instanceof Iterable || value.getClass().isArray())) {
-			if (provider == OPENJPA) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA does not support setting parameters in a nested subquery.
-			}
-			else if (provider == ECLIPSELINK) {
+			if (provider == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
+			}
+			else if (provider == OPENJPA) {
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA does not support setting parameters in a nested subquery.
 			}
 
 			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
@@ -884,6 +891,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			oneToManySubQuery.select(criteriaBuilder.countDistinct(path)).where(criteriaBuilder.equal(pathResolver.get(ID), subQueryRoot.get(ID)));
 		}
 		else if (elementCollections.contains(field)) {
+			if (provider == ECLIPSELINK) {
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a GROUP BY when setFirstResult/setMaxResults is used.
+			}
+
 			path = pathResolver.get(pathResolver.join(field));
 		}
 
