@@ -110,13 +110,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA =
 		"Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
-	private static final String ERROR_UNSUPPORTED_ORDERBY_ECLIPSELINK =
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK =
 		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
-	private static final String ERROR_UNSUPPORTED_ORDERBY_OPENJPA =
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA =
 		"Sorry, OpenJPA does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
-	private static final String ERROR_UNSUPPORTED_CRITERIA_ECLIPSELINK =
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK =
 		"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
-	private static final String ERROR_UNSUPPORTED_CRITERIA_OPENJPA =
+	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
 		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
 
 	private final Class<I> identifierType;
@@ -666,9 +666,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
 
 			Root<E> root = buildRoot(criteriaQuery);
-			PathResolver pathResolver = buildSelection(criteriaBuilder, criteriaQuery, root, resultType, queryBuilder);
-			buildOrderBy(page, criteriaBuilder, criteriaQuery, pathResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaBuilder, criteriaQuery, pathResolver);
+			PathResolver pathResolver = buildSelection(resultType, criteriaQuery, root, criteriaBuilder, queryBuilder);
+			buildOrderBy(page, criteriaQuery, criteriaBuilder, pathResolver);
+			Map<String, Object> parameterValues = buildRestrictions(page, criteriaQuery, criteriaBuilder, pathResolver);
 
 			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 			buildRange(page, typedQuery, root);
@@ -686,13 +686,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				if (hasRestrictions(criteriaQuery)) {
 					Subquery<T> subQuery = countQuery.subquery(resultType);
 					Root<E> subQueryRoot = buildRoot(subQuery);
-					pathResolver = buildSelection(criteriaBuilder, subQuery, subQueryRoot, resultType, queryBuilder);
+					pathResolver = buildSelection(resultType, subQuery, subQueryRoot, criteriaBuilder, queryBuilder);
 
 					if (provider == HIBERNATE && !hasJoins(root)) {
 						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this as they treat them as stateful).
 					}
 					else {
-						parameterValues = buildRestrictions(page, criteriaBuilder, subQuery, pathResolver);
+						parameterValues = buildRestrictions(page, subQuery, criteriaBuilder, pathResolver);
 					}
 
 					if (provider == HIBERNATE) {
@@ -709,8 +709,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					}
 					else {
 						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT DISTINCT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
-						subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))));
-						countQuery.where(criteriaBuilder.exists(subQuery));
+						countQuery.where(criteriaBuilder.exists(subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))))));
 						// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
 					}
 				}
@@ -736,7 +735,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return (query instanceof Subquery) ? new SubQueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
 	}
 
-	private <T extends E> PathResolver buildSelection(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<E> root, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
+	private <T extends E> PathResolver buildSelection(Class<T> resultType, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
 		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, root);
 
 		if (query instanceof Subquery) {
@@ -764,7 +763,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private <T> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+	private <T extends E> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
 		boolean hasJoins = hasJoins(root);
 
 		if (hasJoins || page.getOffset() != 0) {
@@ -785,7 +784,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
-	private <T> void buildOrderBy(Page page, CriteriaBuilder criteriaBuilder, CriteriaQuery<T> criteriaQuery, PathResolver pathResolver) {
+	private <T extends E> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Map<String, Boolean> ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
@@ -800,10 +799,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		if (oneToManyCollections.test(field) || elementCollections.contains(field)) {
 			if (provider == ECLIPSELINK) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
 			else if (provider == OPENJPA) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ORDERBY_OPENJPA); // OpenJPA somehow adds a second join to the main query on the join table referenced in ORDER BY column.
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA); // OpenJPA adds for some reason a second JOIN on the join table referenced in ORDER BY column causing it to be not sorted on the intended join.
 			}
 		}
 
@@ -814,10 +813,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
-	private <T> Map<String, Object> buildRestrictions(Page page, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver) {
+	private <T extends E> Map<String, Object> buildRestrictions(Page page, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
-		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), criteriaBuilder, query, pathResolver, parameterValues);
-		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), criteriaBuilder, query, pathResolver, parameterValues);
+		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
+		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
@@ -856,14 +855,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return parameterValues;
 	}
 
-	private <T> List<Predicate> buildPredicates(Map<String, Object> criteria, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver, Map<String, Object> parameterValues) {
+	private <T extends E> List<Predicate> buildPredicates(Map<String, Object> criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
 		return stream(criteria)
-			.map(parameter -> buildPredicate(parameter, criteriaBuilder, query, pathResolver, parameterValues))
+			.map(parameter -> buildPredicate(parameter, query, criteriaBuilder, pathResolver, parameterValues))
 			.filter(Objects::nonNull)
 			.collect(toList());
 	}
 
-	private <T> Predicate buildPredicate(Entry<String, Object> parameter, CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, PathResolver pathResolver, Map<String, Object> parameterValues) {
+	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
 		String field = parameter.getKey();
 		Expression<?> path;
 
@@ -875,42 +874,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		Object value = parameter.getValue();
-		Subquery<Long> oneToManySubQuery = null;
 
-		if (oneToManyCollections.test(field) && (value instanceof Iterable || value.getClass().isArray())) {
-			if (provider == ECLIPSELINK) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
-			}
-			else if (provider == OPENJPA) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_CRITERIA_OPENJPA); // OpenJPA does not support setting parameters in a nested subquery.
-			}
-
-			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
-			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
-			oneToManySubQuery = query.subquery(Long.class);
-			Root<E> subQueryRoot = oneToManySubQuery.from(entityType);
-			path = new RootPathResolver(subQueryRoot, elementCollections).get(pathResolver.join(field));
-			oneToManySubQuery.select(criteriaBuilder.countDistinct(path)).where(criteriaBuilder.equal(pathResolver.get(ID), subQueryRoot.get(ID)));
-		}
-		else if (elementCollections.contains(field)) {
+		if (elementCollections.contains(field)) {
 			path = pathResolver.get(pathResolver.join(field));
 		}
 
 		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
-		Predicate predicate = buildTypedPredicate(path, type, field, value, criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
-
-		if (oneToManySubQuery != null) {
-			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
-			Long actualCount = Alias.getFieldAndCount(predicate).getValue();
-			predicate = criteriaBuilder.equal(oneToManySubQuery.where(criteriaBuilder.and(predicate, oneToManySubQuery.getRestriction())), actualCount);
-			Alias.create(provider, pathResolver.get(pathResolver.join(field)), field).set(predicate);
-		}
-
-		return predicate;
+		return buildTypedPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
 	}
 
 	@SuppressWarnings("unchecked")
-	private Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+	private <T extends E> Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
 		Alias alias = Alias.create(provider, path, field);
 		Object value = criteria;
 		boolean negated = value instanceof Not;
@@ -932,7 +906,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = buildInPredicate(alias, path, value, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
-				predicate = buildArrayPredicate(alias, path, type, field, value, criteriaBuilder, parameterBuilder);
+				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof Criteria) {
 				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
@@ -991,9 +965,32 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return path.in(in.toArray(new Expression[in.size()]));
 	}
 
-	private Predicate buildArrayPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
+
+		Subquery<Long> oneToManySubQuery = null;
+		Expression<?> oneToManyPath;
+
+		if (oneToManyCollections.test(field)) {
+			if (provider == ECLIPSELINK) {
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
+			}
+			else if (provider == OPENJPA) {
+				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
+			}
+
+			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
+			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
+			oneToManySubQuery = query.subquery(Long.class);
+			Root<E> subQueryRoot = oneToManySubQuery.from(entityType);
+			oneToManyPath = new RootPathResolver(subQueryRoot, elementCollections).get(pathResolver.join(field));
+			oneToManySubQuery.select(criteriaBuilder.countDistinct(oneToManyPath)).where(criteriaBuilder.equal(pathResolver.get(ID), subQueryRoot.get(ID)));
+		}
+		else {
+			oneToManyPath = path;
+		}
+
 		List<Predicate> predicates = stream(value)
-			.map(item -> buildTypedPredicate(path, type, field, item, criteriaBuilder, parameterBuilder))
+			.map(item -> buildTypedPredicate(oneToManyPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
 			.filter(Objects::nonNull)
 			.collect(toList());
 
@@ -1001,8 +998,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalArgumentException(value.toString());
 		}
 
-		alias.in(predicates.size());
-		return criteriaBuilder.or(toArray(predicates));
+		Predicate predicate = criteriaBuilder.or(toArray(predicates));
+
+		if (oneToManySubQuery != null) {
+			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
+			Long actualCount = (long) predicates.size();
+			predicate = criteriaBuilder.equal(oneToManySubQuery.where(criteriaBuilder.and(predicate, oneToManySubQuery.getRestriction())), actualCount);
+			Alias.create(provider, pathResolver.get(pathResolver.join(field)), field).set(predicate);
+		}
+
+		return predicate;
 	}
 
 
@@ -1071,7 +1076,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private static final String AS = "as_";
 		private static final String WHERE = "where_";
 		private static final String HAVING = "having_";
-		private static final String IN_ELEMENT_COLLECTION = "_in";
+		private static final String IN = "_in";
 
 		private String value;
 
@@ -1089,7 +1094,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		public void in(int count) {
-			value += "_" + count + IN_ELEMENT_COLLECTION;
+			value += "_" + count + IN;
 		}
 
 		public void set(Predicate predicate) {
@@ -1101,7 +1106,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		public static boolean isIn(Predicate predicate) {
-			return predicate.getAlias().endsWith(IN_ELEMENT_COLLECTION);
+			return predicate.getAlias().endsWith(IN);
 		}
 
 		public static boolean isHaving(Predicate predicate) {
