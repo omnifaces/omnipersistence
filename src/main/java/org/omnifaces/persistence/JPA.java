@@ -16,7 +16,6 @@ import static java.util.stream.Collectors.toList;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
-import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
@@ -163,32 +162,6 @@ public final class JPA {
 
 		query.select(criteriaBuilder.count(root));
 		return entityManager.createQuery(query).getSingleResult();
-	}
-
-	/**
-	 * @deprecated Use {@link Provider#isProxy(Object)} instead.
-	 */
-	@Deprecated
-	public static boolean isProxy(Object object) {
-		return isHibernateProxy(object);
-	}
-
-	private static boolean isHibernateProxy(Object object) {
-		return HIBERNATE_PROXY_CLASS.isPresent() && HIBERNATE_PROXY_CLASS.get().isInstance(object);
-	}
-
-	/**
-	 * @deprecated Use {@link Provider#dereferenceProxy(Object)} instead.
-	 */
-	@Deprecated
-	@SuppressWarnings("unchecked")
-	public static <E> E dereferenceProxy(E entity) {
-		if (isHibernateProxy(entity)) {
-			return (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation");
-		}
-		else {
-			throw new UnsupportedOperationException();
-		}
 	}
 
 	@SuppressWarnings("unchecked")
