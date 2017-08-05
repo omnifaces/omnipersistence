@@ -1,6 +1,7 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.Integer.MAX_VALUE;
+import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -338,16 +339,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity has no ID or has in meanwhile been deleted.
 	 */
 	public void refresh(E entity) {
-		if (entity.getId() == null) {
-			throw new IllegalEntityStateException(entity, "Entity has no ID.");
-		}
-
-		E managed = getById(entity.getId());
-
-		if (managed == null) {
-			throw new IllegalEntityStateException(entity, "Entity has in meanwhile been deleted.");
-		}
-
+		E managed = manage(entity);
 		entityManager.getMetamodel().entity(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
@@ -663,64 +655,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
-			CriteriaQuery<T> criteriaQuery = criteriaBuilder.createQuery(resultType);
-
-			Root<E> root = buildRoot(criteriaQuery);
-			PathResolver pathResolver = buildSelection(resultType, criteriaQuery, root, criteriaBuilder, queryBuilder);
-			buildOrderBy(page, criteriaQuery, criteriaBuilder, pathResolver);
-			Map<String, Object> parameterValues = buildRestrictions(page, criteriaQuery, criteriaBuilder, pathResolver);
-
-			TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
-			buildRange(page, typedQuery, root);
-			parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
-			onPage(page, cacheable).accept(typedQuery);
-			List<T> entities = typedQuery.getResultList();
-
-			int estimatedTotalNumberOfResults = -1;
-
-			if (count) {
-				CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
-				Root<E> countRoot = countQuery.from(entityType);
-				countQuery.select(criteriaBuilder.count(countRoot));
-
-				if (hasRestrictions(criteriaQuery)) {
-					Subquery<T> subQuery = countQuery.subquery(resultType);
-					Root<E> subQueryRoot = buildRoot(subQuery);
-					pathResolver = buildSelection(resultType, subQuery, subQueryRoot, criteriaBuilder, queryBuilder);
-
-					if (provider == HIBERNATE && !hasJoins(root)) {
-						copyRestrictions(criteriaQuery, subQuery); // Optimization: No need to rebuild restrictions as they are the same anyway (EclipseLink and OpenJPA only doesn't support this as they treat them as stateful).
-					}
-					else {
-						parameterValues = buildRestrictions(page, subQuery, criteriaBuilder, pathResolver);
-					}
-
-					if (provider == HIBERNATE) {
-						// SELECT COUNT(e) FROM E e WHERE e IN (SELECT DISTINCT t FROM T t WHERE [restrictions])
-						countQuery.where(criteriaBuilder.in(countRoot).value(subQuery));
-						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
-						// OpenJPA (tested 2.4.2) fails here as it doesn't interpret root as @Id: org.apache.openjpa.persistence.ArgumentException: Filter invalid. Cannot compare value of type optimusfaces.test.Person to value of type java.lang.Long.
-					}
-					else if (provider == OPENJPA) {
-						// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT DISTINCT t.id FROM T t WHERE [restrictions])
-						countQuery.where(criteriaBuilder.in(countRoot.get(ID)).value(subQuery));
-						// Hibernate (tested 5.0.10) fails here when DTO is used as it does not have a mapped ID.
-						// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
-					}
-					else {
-						// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT DISTINCT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
-						countQuery.where(criteriaBuilder.exists(subQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, subQuery.getRestriction(), criteriaBuilder.equal(pathResolver.get(ID), countRoot.get(ID))))));
-						// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
-					}
-				}
-
-				TypedQuery<Long> typedCountQuery = entityManager.createQuery(countQuery);
-				parameterValues.entrySet().forEach(parameter -> typedCountQuery.setParameter(parameter.getKey(), parameter.getValue()));
-				onPage(page, cacheable).accept(typedCountQuery);
-				estimatedTotalNumberOfResults = typedCountQuery.getSingleResult().intValue();
-			}
-
-			return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
+			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
+			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, !entityQuery.getParameters().isEmpty(), criteriaBuilder, queryBuilder) : null;
+			return executeQuery(page, entityQuery, countQuery);
 		}
 		finally {
 			afterPage().accept(entityManager);
@@ -728,11 +665,72 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 
+	// Query actions --------------------------------------------------------------------------------------------------
+
+	private <T extends E> TypedQuery<T> buildEntityQuery(Page page, boolean cacheable, Class<T> resultType, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
+		CriteriaQuery<T> entityQuery = criteriaBuilder.createQuery(resultType);
+		Root<E> entityQueryRoot = buildRoot(entityQuery);
+		PathResolver pathResolver = buildSelection(resultType, entityQuery, entityQueryRoot, criteriaBuilder, queryBuilder);
+		buildOrderBy(page, entityQuery, criteriaBuilder, pathResolver);
+		Map<String, Object> parameterValues = buildRestrictions(page, entityQuery, criteriaBuilder, pathResolver);
+		return buildTypedQuery(page, cacheable, entityQuery, entityQueryRoot, parameterValues);
+	}
+
+	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, boolean cacheable, Class<T> resultType, boolean buildCountSubquery, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
+		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
+		Root<E> countQueryRoot = buildRoot(countQuery);
+		countQuery.select(criteriaBuilder.count(countQueryRoot));
+		Map<String, Object> parameterValues = buildCountSubquery ? buildCountSubquery(page, resultType, countQuery, countQueryRoot, criteriaBuilder, queryBuilder) : emptyMap();
+		return buildTypedQuery(page, cacheable, countQuery, null, parameterValues);
+	}
+
+	private <T extends E> Map<String, Object> buildCountSubquery(Page page, Class<T> resultType, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
+		Subquery<T> countSubquery = countQuery.subquery(resultType);
+		Root<E> countSubqueryRoot = buildRoot(countSubquery);
+		PathResolver subqueryPathResolver = buildSelection(resultType, countSubquery, countSubqueryRoot, criteriaBuilder, queryBuilder);
+		Map<String, Object> parameterValues = buildRestrictions(page, countSubquery, criteriaBuilder, subqueryPathResolver);
+
+		if (provider == HIBERNATE) {
+			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
+			countQuery.where(criteriaBuilder.in(countRoot).value(countSubquery));
+			// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
+			// OpenJPA (tested 2.4.2) fails here as it doesn't interpret root as @Id: org.apache.openjpa.persistence.ArgumentException: Filter invalid. Cannot compare value of type optimusfaces.test.Person to value of type java.lang.Long.
+		}
+		else if (provider == OPENJPA) {
+			// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT t.id FROM T t WHERE [restrictions])
+			countQuery.where(criteriaBuilder.in(countRoot.get(ID)).value(countSubquery));
+			// Hibernate (tested 5.0.10) fails here when DTO is used as it does not have a mapped ID.
+			// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
+		}
+		else {
+			// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
+			countQuery.where(criteriaBuilder.exists(countSubquery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, countSubquery.getRestriction(), criteriaBuilder.equal(countSubqueryRoot.get(ID), countRoot.get(ID))))));
+			// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
+		}
+
+		return parameterValues;
+	}
+
+	private <T> TypedQuery<T> buildTypedQuery(Page page, boolean cacheable, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
+		TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
+		buildRange(page, typedQuery, root);
+		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+		onPage(page, cacheable).accept(typedQuery);
+		return typedQuery;
+	}
+
+	private <T extends E> PartialResultList<T> executeQuery(Page page, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
+		List<T> entities = entityQuery.getResultList();
+		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
+		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
+	}
+
+
 	// Selection actions ----------------------------------------------------------------------------------------------
 
-	private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
+	private Root<E> buildRoot(AbstractQuery<?> query) {
 		Root<E> root = query.from(entityType);
-		return (query instanceof Subquery) ? new SubQueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
+		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
 	}
 
 	private <T extends E> PathResolver buildSelection(Class<T> resultType, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
@@ -763,7 +761,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private <T extends E> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+	private <T> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+		if (root == null) {
+			return;
+		}
+
 		boolean hasJoins = hasJoins(root);
 
 		if (hasJoins || page.getOffset() != 0) {
@@ -784,7 +786,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
-	private <T extends E> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private <T> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Map<String, Boolean> ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
@@ -903,7 +905,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = criteriaBuilder.isNull(path);
 			}
 			else if (elementCollections.contains(field)) {
-				predicate = buildInPredicate(alias, path, value, parameterBuilder);
+				predicate = buildElementCollectionPredicate(alias, path, type, value, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -939,23 +941,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	@SuppressWarnings("unchecked")
-	private Predicate buildInPredicate(Alias alias, Expression<?> path, Object value, ParameterBuilder parameterBuilder) {
-		Class<?> type = path.getJavaType();
-		List<Expression<?>> in = stream(value).map(item -> {
-			Object searchValue = Criteria.unwrap(item); // TODO: support Criteria here?
-
-			if (type.isEnum()) {
-				try {
-					return Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue();
-				}
-				catch (IllegalArgumentException ignore) {
-					return null; // Likely custom search value referring illegal value.
-				}
-			}
-
-			return searchValue;
-		}).filter(Objects::nonNull).map(parameterBuilder::create).collect(toList());
+	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+		List<Expression<?>> in = stream(value)
+			.map(item -> parseElementCollectionValue(type, item))
+			.filter(Objects::nonNull)
+			.map(parameterBuilder::create)
+			.collect(toList());
 
 		if (in.isEmpty()) {
 			throw new IllegalArgumentException(value.toString());
@@ -965,10 +956,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return path.in(in.toArray(new Expression[in.size()]));
 	}
 
-	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
+	@SuppressWarnings("unchecked")
+	private Object parseElementCollectionValue(Class<?> type, Object value) {
+		Object searchValue = Criteria.unwrap(value); // TODO: Log warning here? @ElementCollection usually represent enums only anyway. There's no business interest of performing e.g. LIKE on them.
 
-		Subquery<Long> oneToManySubQuery = null;
-		Expression<?> oneToManyPath;
+		if (type.isEnum()) {
+			try {
+				return Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue();
+			}
+			catch (IllegalArgumentException ignore) {
+				return null; // Likely custom search value referring illegal value.
+			}
+		}
+
+		return searchValue;
+	}
+
+	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
+		Subquery<Long> oneToManySubquery = null;
+		Expression<?> fieldPath;
 
 		if (oneToManyCollections.test(field)) {
 			if (provider == ECLIPSELINK) {
@@ -980,17 +986,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
 			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
-			oneToManySubQuery = query.subquery(Long.class);
-			Root<E> subQueryRoot = oneToManySubQuery.from(entityType);
-			oneToManyPath = new RootPathResolver(subQueryRoot, elementCollections).get(pathResolver.join(field));
-			oneToManySubQuery.select(criteriaBuilder.countDistinct(oneToManyPath)).where(criteriaBuilder.equal(pathResolver.get(ID), subQueryRoot.get(ID)));
+			oneToManySubquery = query.subquery(Long.class);
+			Root<E> subqueryRoot = oneToManySubquery.from(entityType);
+			fieldPath = new RootPathResolver(subqueryRoot, elementCollections).get(pathResolver.join(field));
+			oneToManySubquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
 		}
 		else {
-			oneToManyPath = path;
+			fieldPath = path;
 		}
 
 		List<Predicate> predicates = stream(value)
-			.map(item -> buildTypedPredicate(oneToManyPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
+			.map(item -> buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
 			.filter(Objects::nonNull)
 			.collect(toList());
 
@@ -1000,10 +1006,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		Predicate predicate = criteriaBuilder.or(toArray(predicates));
 
-		if (oneToManySubQuery != null) {
+		if (oneToManySubquery != null) {
 			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
 			Long actualCount = (long) predicates.size();
-			predicate = criteriaBuilder.equal(oneToManySubQuery.where(criteriaBuilder.and(predicate, oneToManySubQuery.getRestriction())), actualCount);
+			predicate = criteriaBuilder.equal(oneToManySubquery.where(criteriaBuilder.and(predicate, oneToManySubquery.getRestriction())), actualCount);
 			Alias.create(provider, pathResolver.get(pathResolver.join(field)), field).set(predicate);
 		}
 
@@ -1185,10 +1191,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private static boolean hasRestrictions(AbstractQuery<?> query) {
-		return query.getRestriction() != null || !query.getGroupList().isEmpty() || query.getGroupRestriction() != null;
-	}
-
 	private static boolean hasJoins(From<?, ?> from) {
 		return !from.getJoins().isEmpty() || hasFetches(from);
 	}
@@ -1207,18 +1209,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return joins;
-	}
-
-	private static void copyRestrictions(AbstractQuery<?> source, AbstractQuery<?> target) {
-		if (source.getRestriction() != null) {
-			target.where(source.getRestriction());
-		}
-
-		target.groupBy(source.getGroupList());
-
-		if (source.getGroupRestriction() != null) {
-			target.having(source.getGroupRestriction());
-		}
 	}
 
 	private static <T> T noop() {

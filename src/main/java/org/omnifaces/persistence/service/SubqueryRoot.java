@@ -7,9 +7,9 @@ import javax.persistence.criteria.Root;
 /**
  * Fetch joins are not supported in subqueries, so delegate to normal joins.
  */
-class SubQueryRoot<X> extends RootWrapper<X> {
+class SubqueryRoot<X> extends RootWrapper<X> {
 
-	public SubQueryRoot(Root<X> wrapped) {
+	public SubqueryRoot(Root<X> wrapped) {
 		super(wrapped);
 	}
 
