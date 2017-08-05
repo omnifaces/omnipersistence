@@ -1,8 +1,12 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.Integer.MAX_VALUE;
+import static java.lang.String.format;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableSet;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.FINER;
+import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
@@ -36,6 +40,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Stateless;
@@ -103,9 +108,16 @@ import org.omnifaces.utils.reflect.Getter;
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
-	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> ONE_TO_MANY_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
+
+	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
+	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
+	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
+	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
+	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
+	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
+	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, unwrapping!";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -119,6 +131,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
 		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
+
+	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Set<String>> ONE_TO_MANY_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
@@ -178,7 +194,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			actualType = ((Class<?>) actualType).getGenericSuperclass();
 		}
 
-		return new SimpleEntry<>(getActualTypeArgument(actualType, 0, typeMapping), getActualTypeArgument(actualType, 1, typeMapping));
+		Class<?> identifierType = getActualTypeArgument(actualType, 0, typeMapping);
+		Class<?> entityType = getActualTypeArgument(actualType, 1, typeMapping);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, type, identifierType, entityType));
+		return new SimpleEntry<>(identifierType, entityType);
 	}
 
 	private static Class<?> getActualTypeArgument(Type type, int index, Map<TypeVariable<?>, Type> typeMapping) {
@@ -192,11 +211,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<?> type) {
-		return computeCollectionMapping(type, "", new HashSet<>(), provider::isElementCollection);
+		Set<String> elementCollectionMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isElementCollection);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, type, elementCollectionMapping));
+		return elementCollectionMapping;
 	}
 
 	private Set<String> computeOneToManyCollectionMapping(Class<?> type) {
-		return computeCollectionMapping(type, "", new HashSet<>(), a -> !provider.isElementCollection(a) && a.getPersistentAttributeType() == ONE_TO_MANY);
+		Set<String> oneToManyCollectionMapping = computeCollectionMapping(type, "", new HashSet<>(), a -> !provider.isElementCollection(a) && a.getPersistentAttributeType() == ONE_TO_MANY);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, type, oneToManyCollectionMapping));
+		return oneToManyCollectionMapping;
 	}
 
 	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
@@ -654,6 +677,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		beforePage().accept(entityManager);
 
 		try {
+			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
 			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
 			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, !entityQuery.getParameters().isEmpty(), criteriaBuilder, queryBuilder) : null;
@@ -714,14 +738,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private <T> TypedQuery<T> buildTypedQuery(Page page, boolean cacheable, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
 		TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 		buildRange(page, typedQuery, root);
-		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+		setParameterValues(typedQuery, parameterValues);
 		onPage(page, cacheable).accept(typedQuery);
 		return typedQuery;
+	}
+
+	private <T> void setParameterValues(TypedQuery<T> typedQuery, Map<String, Object> parameterValues) {
+		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, parameterValues));
+		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
 	}
 
 	private <T extends E> PartialResultList<T> executeQuery(Page page, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
 		List<T> entities = entityQuery.getResultList();
 		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
+		logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, entities, estimatedTotalNumberOfResults));
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
 	}
 
@@ -866,23 +896,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
 		String field = parameter.getKey();
-		Expression<?> path;
-
-		try {
-			path = pathResolver.get(field);
-		}
-		catch (IllegalArgumentException ignore) {
-			return null; // Likely custom search key referring non-existent property.
-		}
-
-		Object value = parameter.getValue();
-
-		if (elementCollections.contains(field)) {
-			path = pathResolver.get(pathResolver.join(field));
-		}
-
+		Expression<?> path = pathResolver.get(elementCollections.contains(field) ? pathResolver.join(field) : field);
 		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
-		return buildTypedPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
+		return buildTypedPredicate(path, type, field,  parameter.getValue(), query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -905,7 +921,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = criteriaBuilder.isNull(path);
 			}
 			else if (elementCollections.contains(field)) {
-				predicate = buildElementCollectionPredicate(alias, path, type, value, parameterBuilder);
+				predicate = buildElementCollectionPredicate(alias, path, type, field, value, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -926,11 +942,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else {
-				throw new UnsupportedOperationException(String.format(ERROR_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
+				throw new UnsupportedOperationException(format(ERROR_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
 			}
 		}
 		catch (IllegalArgumentException e) {
-			return null; // Likely custom search value referring illegal value.
+			logger.log(WARNING, e, () -> format(LOG_WARNING_ILLEGAL_CRITERIA_VALUE, field, type, criteria, criteria != null ? criteria.getClass() : null));
+			return null;
 		}
 
 		if (negated) {
@@ -941,9 +958,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value)
-			.map(item -> parseElementCollectionValue(type, item))
+			.map(item -> parseElementCollectionValue(type, field, item))
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
 			.collect(toList());
@@ -957,19 +974,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	@SuppressWarnings("unchecked")
-	private Object parseElementCollectionValue(Class<?> type, Object value) {
-		Object searchValue = Criteria.unwrap(value); // TODO: Log warning here? @ElementCollection usually represent enums only anyway. There's no business interest of performing e.g. LIKE on them.
+	private Object parseElementCollectionValue(Class<?> type, String field, Object value) {
+		Object searchValue = value;
 
-		if (type.isEnum()) {
-			try {
-				return Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue();
-			}
-			catch (IllegalArgumentException ignore) {
-				return null; // Likely custom search value referring illegal value.
-			}
+		if (value instanceof Criteria) {
+			logger.log(WARNING, () -> format(LOG_WARNING_ELEMENTCOLLECTION_CRITERIA, field, type, value));
+			searchValue = Criteria.unwrap(searchValue);
 		}
 
-		return searchValue;
+		return type.isEnum() ? Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue() : searchValue;
 	}
 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
