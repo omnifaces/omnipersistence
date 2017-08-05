@@ -678,7 +678,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, boolean cacheable, Class<T> resultType, boolean buildCountSubquery, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
 		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
-		Root<E> countQueryRoot = buildRoot(countQuery);
+		Root<E> countQueryRoot = countQuery.from(entityType);
 		countQuery.select(criteriaBuilder.count(countQueryRoot));
 		Map<String, Object> parameterValues = buildCountSubquery ? buildCountSubquery(page, resultType, countQuery, countQueryRoot, criteriaBuilder, queryBuilder) : emptyMap();
 		return buildTypedQuery(page, cacheable, countQuery, null, parameterValues);
