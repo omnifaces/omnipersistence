@@ -357,11 +357,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Refresh given entity. This will discard any changes in given entity.
+	 * Refresh given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
+	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
+	 * which might have been edited in the client, without changing the reference. This is generally useful when the
+	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
 	 * @param entity Entity to refresh.
-	 * @throws IllegalEntityStateException When entity has no ID or has in meanwhile been deleted.
+	 * @throws IllegalEntityStateException When entity is managed or has no ID or has in meanwhile been deleted.
 	 */
 	public void refresh(E entity) {
+		if (entityManager.contains(entity)) {
+			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be refreshed.");
+		}
+
 		E managed = manage(entity);
 		entityManager.getMetamodel().entity(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
