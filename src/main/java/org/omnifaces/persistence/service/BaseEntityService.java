@@ -40,13 +40,16 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Stateless;
 import javax.inject.Inject;
+import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
+import javax.persistence.OneToMany;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
@@ -100,6 +103,17 @@ import org.omnifaces.utils.reflect.Getter;
  * <li>{@link VersionedEntity}
  * </ul>
  *
+ * <h3>Logging</h3>
+ * <p>
+ * {@link BaseEntityService} uses JULI {@link Logger} for logging.
+ * <ul>
+ * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
+ * any discovered {@link ElementCollection} and {@link OneToMany} mappings of the entity. This is internally used in order to be able
+ * to build proper queries to perform a search inside a {@link ElementCollection} or {@link OneToMany} field.
+ * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
+ * </ul>
+ *
  * @param <I> The generic ID type, usually {@link Long}.
  * @param <E> The generic base entity type.
  * @see BaseEntity
@@ -110,14 +124,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
+	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, unwrapping!";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
 	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
 	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
-	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
-	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, unwrapping!";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -171,7 +185,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private void initWithEntityManager() {
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
-			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + "."));
+			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -234,7 +248,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				Class<?> nestedType = ((Bindable<?>) attribute).getBindableJavaType();
 
 				if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
-					collectionMapping.addAll(computeCollectionMapping(nestedType, basePath + attribute.getName() + ".", nestedTypes, attributePredicate));
+					collectionMapping.addAll(computeCollectionMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
 				}
 			}
 		}
@@ -1030,7 +1044,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
 			Long actualCount = (long) predicates.size();
 			predicate = criteriaBuilder.equal(oneToManySubquery.where(criteriaBuilder.and(predicate, oneToManySubquery.getRestriction())), actualCount);
-			Alias.create(provider, pathResolver.get(pathResolver.join(field)), field).set(predicate);
 		}
 
 		return predicate;
@@ -1112,15 +1125,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		public static Selection<?> as(Entry<String, Expression<?>> mappingEntry) {
 			Selection<?> selection = mappingEntry.getValue();
-			return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace(".", "_"));
+			return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace('.', '$'));
 		}
 
 		public static Alias create(Provider provider, Expression<?> expression, String field) {
-			return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace(".", "$"));
+			return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace('.', '$'));
 		}
 
 		public void in(int count) {
-			value += "_" + count + IN;
+			value += '_' + count + IN;
 		}
 
 		public void set(Predicate predicate) {
@@ -1148,7 +1161,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
-			countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf("_") + 1));
+			countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf('_') + 1));
 		}
 
 	}
@@ -1160,7 +1173,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private Map<String, Object> parameterValues;
 
 		private UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-			this.field = field.replace(".", "_") + "_";
+			this.field = field.replace('.', '$') + '_';
 			this.criteriaBuilder = criteriaBuilder;
 			this.parameterValues = parameterValues;
 		}
