@@ -11,12 +11,15 @@ import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 
-import javax.enterprise.inject.spi.CDI;
+import javax.ejb.SessionContext;
+import javax.naming.InitialContext;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.criteria.Expression;
 import javax.persistence.metamodel.Attribute;
+
+import org.omnifaces.persistence.service.BaseEntityService;
 
 public enum Provider {
 
@@ -107,8 +110,16 @@ public enum Provider {
 		return current() == provider;
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static Provider current() {
-		return CDI.current().select(Provider.class).get();
+		try {
+			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
+			BaseEntityService service = (BaseEntityService) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
+			return service.getProvider();
+		}
+		catch (Exception ignore) {
+			return UNKNOWN;
+		}
 	}
 
 	public String getDialectName(EntityManagerFactory entityManagerFactory) {

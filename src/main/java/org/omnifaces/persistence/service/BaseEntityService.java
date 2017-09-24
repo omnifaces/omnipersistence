@@ -179,7 +179,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@PostConstruct
 	private void initWithEntityManager() {
 		provider = Provider.of(getEntityManager());
-		database = Database.of(provider, getEntityManager().getEntityManagerFactory());
+		database = Database.of(getEntityManager());
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
 			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
@@ -261,7 +261,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * based on {@link #getEntityManager()}.
 	 * @return The JPA provider being used.
 	 */
-	protected Provider getProvider() {
+	public Provider getProvider() {
 		return provider;
 	}
 
@@ -270,7 +270,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * based on {@link #getEntityManager()}.
 	 * @return The SQL database being used.
 	 */
-	protected Database getDatabase() {
+	public Database getDatabase() {
 		return database;
 	}
 
@@ -1234,7 +1234,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Expression<?> join = pathResolver.get(pathResolver.join(fieldAndCount.getKey()));
 			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.countDistinct(join), fieldAndCount.getValue());
 			Alias.setHaving(inPredicate, countPredicate);
-			groupByIfNecessary(query, join);
+			groupByIfNecessary(query, pathResolver.get(fieldAndCount.getKey()));
 			return countPredicate;
 		}
 

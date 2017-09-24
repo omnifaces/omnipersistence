@@ -9,8 +9,12 @@ import static org.omnifaces.utils.Lang.startsWithOneOf;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
-import javax.enterprise.inject.spi.CDI;
+import javax.ejb.SessionContext;
+import javax.naming.InitialContext;
+import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
+
+import org.omnifaces.persistence.service.BaseEntityService;
 
 public enum Database {
 
@@ -30,7 +34,10 @@ public enum Database {
 		this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
 	}
 
-	public static Database of(Provider provider, EntityManagerFactory entityManagerFactory) {
+	public static Database of(EntityManager entityManager) {
+		Provider provider = Provider.of(entityManager);
+		EntityManagerFactory entityManagerFactory = entityManager.getEntityManagerFactory();
+
 		try {
 			String uppercasedDialectName = provider.getDialectName(entityManagerFactory).toUpperCase();
 
@@ -51,8 +58,16 @@ public enum Database {
 		return current() == database;
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static Database current() {
-		return CDI.current().select(Database.class).get();
+		try {
+			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
+			BaseEntityService service = (BaseEntityService) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
+			return service.getDatabase();
+		}
+		catch (Exception ignore) {
+			return UNKNOWN;
+		}
 	}
 
 }
