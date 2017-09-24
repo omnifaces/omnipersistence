@@ -45,7 +45,6 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Stateless;
-import javax.inject.Inject;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
@@ -152,17 +151,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
+	private Provider provider;
+	private Database database;
 	private Set<String> elementCollections;
 	private java.util.function.Predicate<String> oneToManyCollections;
 
 	@PersistenceContext
 	private EntityManager entityManager;
-
-	@Inject
-	private Provider provider;
-
-	@Inject
-	private Database database;
 
 
 	// Init -----------------------------------------------------------------------------------------------------------
@@ -183,6 +178,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	@PostConstruct
 	private void initWithEntityManager() {
+		provider = Provider.of(getEntityManager());
+		database = Database.of(provider, getEntityManager().getEntityManagerFactory());
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
 			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
@@ -238,7 +235,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
 		Set<String> collectionMapping = new HashSet<>(1);
-		EntityType<?> entity = entityManager.getMetamodel().entity(type);
+		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
 
 		for (Attribute<?, ?> attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
@@ -260,7 +257,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Standard actions -----------------------------------------------------------------------------------------------
 
 	/**
-	 * Returns the JPA provider being used.
+	 * Returns the JPA provider being used. Normally, you don't need to override this. This is automatically determined
+	 * based on {@link #getEntityManager()}.
 	 * @return The JPA provider being used.
 	 */
 	protected Provider getProvider() {
@@ -268,11 +266,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the SQL database being used.
+	 * Returns the SQL database being used. Normally, you don't need to override this. This is automatically determined
+	 * based on {@link #getEntityManager()}.
 	 * @return The SQL database being used.
 	 */
 	protected Database getDatabase() {
 		return database;
+	}
+
+	/**
+	 * Returns the entity manager being used. When you have only one persistence unit, then you don't need to override
+	 * this. When you have multiple persistence units, then you need to extend the {@link BaseEntityService} like below
+	 * wherein you supply the persistence unit specific entity manager and then let all your service classes extend
+	 * from it instead.
+	 * <pre>
+	 * public abstract class YourBaseEntityService&lt;E extends BaseEntity&lt;Long&gt;&gt; extends BaseEntityService&lt;Long, E&gt; {
+	 *
+	 *     &#64;PersistenceContext(unitName = "yourPersistenceUnitName")
+	 *     private EntityManager entityManager;
+	 *
+	 *     &#64;Override
+	 *     public EntityManager getEntityManager() {
+	 *         return entityManager;
+	 *     }
+	 *
+	 * }
+	 * </pre>
+	 *
+	 * @return The entity manager being used.
+	 */
+	protected EntityManager getEntityManager() {
+		return entityManager;
 	}
 
 	/**
@@ -284,7 +308,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * by the given name, usually to perform a SELECT.
 	 */
 	protected TypedQuery<E> createNamedTypedQuery(String name) {
-		return entityManager.createNamedQuery(name, entityType);
+		return getEntityManager().createNamedQuery(name, entityType);
 	}
 
 	/**
@@ -296,7 +320,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * by the given name, usually to perform an INSERT, UPDATE or DELETE.
 	 */
 	protected Query createNamedQuery(String name) {
-		return entityManager.createNamedQuery(name);
+		return getEntityManager().createNamedQuery(name);
 	}
 
 	/**
@@ -314,7 +338,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
 	public E getById(I id) {
-		return entityManager.find(entityType, id);
+		return getEntityManager().find(entityType, id);
 	}
 
 	/**
@@ -322,7 +346,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return entityManager.createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
+		return getEntityManager().createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
 	}
 
 	/**
@@ -336,7 +360,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has an ID. Use update() instead.");
 		}
 
-		entityManager.persist(entity);
+		getEntityManager().persist(entity);
 		return entity.getId();
 	}
 
@@ -351,7 +375,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID. Use persist() instead.");
 		}
 
-		return entityManager.merge(entity);
+		return getEntityManager().merge(entity);
 	}
 
 	/**
@@ -379,12 +403,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is managed or has no ID or has in meanwhile been deleted.
 	 */
 	public void refresh(E entity) {
-		if (entityManager.contains(entity)) {
+		if (getEntityManager().contains(entity)) {
 			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be refreshed.");
 		}
 
 		E managed = manage(entity);
-		entityManager.getMetamodel().entity(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getEntityManager().getMetamodel().entity(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
 	/**
@@ -398,7 +422,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new NonDeletableEntityException(entity);
 		}
 
-		entityManager.remove(manage(entity));
+		getEntityManager().remove(manage(entity));
 	}
 
 	/**
@@ -412,7 +436,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
 		}
 
-		if (entityManager.contains(entity)) {
+		if (getEntityManager().contains(entity)) {
 			return entity;
 		}
 
@@ -463,7 +487,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private void fetchEveryPluralAttribute(E entity, java.util.function.Predicate<CollectionType> ofType) {
-		for (PluralAttribute<?, ?, ?> a : entityManager.getMetamodel().entity(entity.getClass()).getPluralAttributes()) {
+		for (PluralAttribute<?, ?, ?> a : getEntityManager().getMetamodel().entity(entity.getClass()).getPluralAttributes()) {
 			if (ofType.test(a.getCollectionType())) {
 				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
 				invokeMethod(invokeMethod(entity, "get" + name), "size");
@@ -477,9 +501,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param entity Entity instance to fetch all blobs on.
 	 */
 	protected void fetchLazyBlobs(E entity) {
-		E managed = entityManager.merge(entity);
+		E managed = getEntityManager().merge(entity);
 
-		for (Attribute<?, ?> a : entityManager.getMetamodel().entity(managed.getClass()).getSingularAttributes()) {
+		for (Attribute<?, ?> a : getEntityManager().getMetamodel().entity(managed.getClass()).getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
 				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
 				byte[] blob = (byte[]) invokeMethod(managed, "get" + name);
@@ -699,7 +723,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
-			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
 			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, !entityQuery.getParameters().isEmpty(), criteriaBuilder, queryBuilder) : null;
 			return executeQuery(page, entityQuery, countQuery);
@@ -757,7 +781,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T> TypedQuery<T> buildTypedQuery(Page page, boolean cacheable, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
-		TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
+		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(page, typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
 		onPage(page, cacheable).accept(typedQuery);
@@ -980,6 +1004,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, ParameterBuilder parameterBuilder) {
+
+		// criteriaQuery.where(criteriaBuilder.and(criteriaBuilder.isMember(Group.USER, join), criteriaBuilder.isMember(Group.DEVELOPER, join)));
+
 		List<Expression<?>> in = stream(value)
 			.map(item -> parseElementCollectionValue(type, field, item))
 			.filter(Objects::nonNull)
@@ -1133,7 +1160,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		public void in(int count) {
-			value += '_' + count + IN;
+			value += "_" + count + IN;
 		}
 
 		public void set(Predicate predicate) {
@@ -1173,7 +1200,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private Map<String, Object> parameterValues;
 
 		private UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-			this.field = field.replace('.', '$') + '_';
+			this.field = field.replace('.', '$') + "_";
 			this.criteriaBuilder = criteriaBuilder;
 			this.parameterValues = parameterValues;
 		}
@@ -1207,7 +1234,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Expression<?> join = pathResolver.get(pathResolver.join(fieldAndCount.getKey()));
 			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.countDistinct(join), fieldAndCount.getValue());
 			Alias.setHaving(inPredicate, countPredicate);
-			groupByIfNecessary(query, pathResolver.get(fieldAndCount.getKey()));
+			groupByIfNecessary(query, join);
 			return countPredicate;
 		}
 

@@ -30,7 +30,7 @@ public enum Database {
 		this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
 	}
 
-	static Database of(Provider provider, EntityManagerFactory entityManagerFactory) {
+	public static Database of(Provider provider, EntityManagerFactory entityManagerFactory) {
 		try {
 			String uppercasedDialectName = provider.getDialectName(entityManagerFactory).toUpperCase();
 

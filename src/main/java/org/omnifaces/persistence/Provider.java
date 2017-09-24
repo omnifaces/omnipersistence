@@ -86,7 +86,7 @@ public enum Provider {
 	private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
 	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
-	static Provider of(EntityManager entityManager) {
+	public static Provider of(EntityManager entityManager) {
 		String packageName = entityManager.getDelegate().getClass().getPackage().getName();
 
 		if (packageName.startsWith("org.hibernate.")) {
