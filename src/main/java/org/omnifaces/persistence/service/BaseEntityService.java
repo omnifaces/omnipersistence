@@ -44,7 +44,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
+import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
+import javax.naming.InitialContext;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.NamedQuery;
@@ -233,9 +235,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return oneToManyCollectionMapping;
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
 		Set<String> collectionMapping = new HashSet<>(1);
-		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
+		EntityType<?> entity = getMetamodel((Class<? extends BaseEntity>) type);
 
 		for (Attribute<?, ?> attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
@@ -272,6 +275,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	public Database getDatabase() {
 		return database;
+	}
+
+	/**
+	 * Returns the metamodel of given base entity.
+	 * @return The metamodel of given base entity.
+	 */
+	@SuppressWarnings("rawtypes")
+	public EntityType<? extends BaseEntity> getMetamodel(Class<? extends BaseEntity> type) {
+		return getEntityManager().getMetamodel().entity(type);
 	}
 
 	/**
@@ -408,7 +420,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getEntityManager().getMetamodel().entity(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getMetamodel(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
 	/**
@@ -487,7 +499,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private void fetchEveryPluralAttribute(E entity, java.util.function.Predicate<CollectionType> ofType) {
-		for (PluralAttribute<?, ?, ?> a : getEntityManager().getMetamodel().entity(entity.getClass()).getPluralAttributes()) {
+		for (PluralAttribute<?, ?, ?> a : getMetamodel(entity.getClass()).getPluralAttributes()) {
 			if (ofType.test(a.getCollectionType())) {
 				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
 				invokeMethod(invokeMethod(entity, "get" + name), "size");
@@ -503,7 +515,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected void fetchLazyBlobs(E entity) {
 		E managed = getEntityManager().merge(entity);
 
-		for (Attribute<?, ?> a : getEntityManager().getMetamodel().entity(managed.getClass()).getSingularAttributes()) {
+		for (Attribute<?, ?> a : getMetamodel(managed.getClass()).getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
 				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
 				byte[] blob = (byte[]) invokeMethod(managed, "get" + name);
@@ -1078,6 +1090,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 
 	// Helpers --------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Returns the currently active {@link BaseEntityService} from the {@link SessionContext}.
+	 * @return The currently active {@link BaseEntityService} from the {@link SessionContext}.
+	 * @throws IllegalStateException if there is none, which can happen if this method is called outside EJB context,
+	 * or when currently invoked EJB service is not an instance of {@link BaseEntityService}.
+	 */
+	@SuppressWarnings("unchecked")
+	public static BaseEntityService<?, ?> getCurrentInstance() {
+		try {
+			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
+			return (BaseEntityService<?, ?>) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
+		}
+		catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
 
 	@FunctionalInterface
 	private static interface PathResolver {

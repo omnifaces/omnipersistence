@@ -17,13 +17,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.enterprise.inject.spi.CDI;
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
 import javax.persistence.PostLoad;
 import javax.persistence.PreUpdate;
 import javax.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
@@ -36,9 +35,6 @@ import org.omnifaces.persistence.model.BaseEntity;
 public abstract class AuditListener<I extends Comparable<I> & Serializable> {
 
 	private static final Map<Class<?>, Map<PropertyDescriptor, Map<?, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
-
-	@PersistenceContext
-	private EntityManager entityManager;
 
 	@PostLoad
 	public void beforeUpdate(BaseEntity<I> entity) {
@@ -61,14 +57,14 @@ public abstract class AuditListener<I extends Comparable<I> & Serializable> {
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Map<PropertyDescriptor, Map<I, Object>> getAuditableProperties(BaseEntity<I> entity) {
-		Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), type -> {
-			Set<String> auditablePropertyNames = entityManager.getMetamodel().entity(type).getDeclaredAttributes().stream()
+		Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
+			Set<String> auditablePropertyNames = BaseEntityService.getCurrentInstance().getMetamodel(entity.getClass()).getDeclaredAttributes().stream()
 				.filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).getAnnotation(Audit.class) != null)
 				.map(Attribute::getName)
 				.collect(toSet());
 
 			try {
-				return stream(getBeanInfo(type).getPropertyDescriptors())
+				return stream(getBeanInfo(entity.getClass()).getPropertyDescriptors())
 					.filter(p -> auditablePropertyNames.contains(p.getName()))
 					.collect(toConcurrentMap(identity(), v -> new ConcurrentHashMap<>()));
 			}

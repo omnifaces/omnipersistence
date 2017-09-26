@@ -11,8 +11,6 @@ import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 
-import javax.ejb.SessionContext;
-import javax.naming.InitialContext;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -107,19 +105,7 @@ public enum Provider {
 	}
 
 	public static boolean is(Provider provider) {
-		return current() == provider;
-	}
-
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public static Provider current() {
-		try {
-			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
-			BaseEntityService service = (BaseEntityService) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
-			return service.getProvider();
-		}
-		catch (Exception ignore) {
-			return UNKNOWN;
-		}
+		return BaseEntityService.getCurrentInstance().getProvider() == provider;
 	}
 
 	public String getDialectName(EntityManagerFactory entityManagerFactory) {

@@ -9,8 +9,6 @@ import static org.omnifaces.utils.Lang.startsWithOneOf;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
-import javax.ejb.SessionContext;
-import javax.naming.InitialContext;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 
@@ -55,19 +53,7 @@ public enum Database {
 	}
 
 	public static boolean is(Database database) {
-		return current() == database;
-	}
-
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public static Database current() {
-		try {
-			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
-			BaseEntityService service = (BaseEntityService) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
-			return service.getDatabase();
-		}
-		catch (Exception ignore) {
-			return UNKNOWN;
-		}
+		return BaseEntityService.getCurrentInstance().getDatabase() == database;
 	}
 
 }
