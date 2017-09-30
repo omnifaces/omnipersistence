@@ -180,8 +180,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	@PostConstruct
 	private void initWithEntityManager() {
-		provider = Provider.of(getEntityManager());
-		database = Database.of(getEntityManager());
+		provider = Provider.of(entityManager);
+		database = Database.of(entityManager);
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
 			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
@@ -261,7 +261,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns the JPA provider being used. Normally, you don't need to override this. This is automatically determined
-	 * based on {@link #getEntityManager()}.
+	 * based on {@link EntityManager}.
 	 * @return The JPA provider being used.
 	 */
 	public Provider getProvider() {
@@ -270,7 +270,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns the SQL database being used. Normally, you don't need to override this. This is automatically determined
-	 * based on {@link #getEntityManager()}.
+	 * based on {@link EntityManager}.
 	 * @return The SQL database being used.
 	 */
 	public Database getDatabase() {
@@ -283,32 +283,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	@SuppressWarnings("rawtypes")
 	public EntityType<? extends BaseEntity> getMetamodel(Class<? extends BaseEntity> type) {
-		return getEntityManager().getMetamodel().entity(type);
-	}
-
-	/**
-	 * Returns the entity manager being used. When you have only one persistence unit, then you don't need to override
-	 * this. When you have multiple persistence units, then you need to extend the {@link BaseEntityService} like below
-	 * wherein you supply the persistence unit specific entity manager and then let all your service classes extend
-	 * from it instead.
-	 * <pre>
-	 * public abstract class YourBaseEntityService&lt;E extends BaseEntity&lt;Long&gt;&gt; extends BaseEntityService&lt;Long, E&gt; {
-	 *
-	 *     &#64;PersistenceContext(unitName = "yourPersistenceUnitName")
-	 *     private EntityManager entityManager;
-	 *
-	 *     &#64;Override
-	 *     public EntityManager getEntityManager() {
-	 *         return entityManager;
-	 *     }
-	 *
-	 * }
-	 * </pre>
-	 *
-	 * @return The entity manager being used.
-	 */
-	protected EntityManager getEntityManager() {
-		return entityManager;
+		return entityManager.getMetamodel().entity(type);
 	}
 
 	/**
@@ -320,7 +295,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * by the given name, usually to perform a SELECT.
 	 */
 	protected TypedQuery<E> createNamedTypedQuery(String name) {
-		return getEntityManager().createNamedQuery(name, entityType);
+		return entityManager.createNamedQuery(name, entityType);
 	}
 
 	/**
@@ -332,7 +307,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * by the given name, usually to perform an INSERT, UPDATE or DELETE.
 	 */
 	protected Query createNamedQuery(String name) {
-		return getEntityManager().createNamedQuery(name);
+		return entityManager.createNamedQuery(name);
 	}
 
 	/**
@@ -350,7 +325,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
 	public E getById(I id) {
-		return getEntityManager().find(entityType, id);
+		return entityManager.find(entityType, id);
 	}
 
 	/**
@@ -358,7 +333,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return getEntityManager().createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
+		return entityManager.createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
 	}
 
 	/**
@@ -372,7 +347,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has an ID. Use update() instead.");
 		}
 
-		getEntityManager().persist(entity);
+		entityManager.persist(entity);
 		return entity.getId();
 	}
 
@@ -387,7 +362,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID. Use persist() instead.");
 		}
 
-		return getEntityManager().merge(entity);
+		return entityManager.merge(entity);
 	}
 
 	/**
@@ -415,7 +390,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is managed or has no ID or has in meanwhile been deleted.
 	 */
 	public void refresh(E entity) {
-		if (getEntityManager().contains(entity)) {
+		if (entityManager.contains(entity)) {
 			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be refreshed.");
 		}
 
@@ -434,7 +409,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new NonDeletableEntityException(entity);
 		}
 
-		getEntityManager().remove(manage(entity));
+		entityManager.remove(manage(entity));
 	}
 
 	/**
@@ -448,7 +423,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
 		}
 
-		if (getEntityManager().contains(entity)) {
+		if (entityManager.contains(entity)) {
 			return entity;
 		}
 
@@ -513,7 +488,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param entity Entity instance to fetch all blobs on.
 	 */
 	protected void fetchLazyBlobs(E entity) {
-		E managed = getEntityManager().merge(entity);
+		E managed = entityManager.merge(entity);
 
 		for (Attribute<?, ?> a : getMetamodel(managed.getClass()).getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
@@ -735,7 +710,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
-			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+			CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
 			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, !entityQuery.getParameters().isEmpty(), criteriaBuilder, queryBuilder) : null;
 			return executeQuery(page, entityQuery, countQuery);
@@ -793,7 +768,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T> TypedQuery<T> buildTypedQuery(Page page, boolean cacheable, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
-		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
+		TypedQuery<T> typedQuery = entityManager.createQuery(criteriaQuery);
 		buildRange(page, typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
 		onPage(page, cacheable).accept(typedQuery);
