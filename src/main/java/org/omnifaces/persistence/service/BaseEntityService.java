@@ -986,6 +986,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			else if (value instanceof Criteria) {
 				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
 			}
+			else if (value instanceof BaseEntity) {
+				predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
+			}
 			else if (type.isEnum()) {
 				predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
 			}
