@@ -126,7 +126,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
-	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, unwrapping!";
+	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, skipping!";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
@@ -1042,7 +1042,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		if (value instanceof Criteria) {
 			logger.log(WARNING, () -> format(LOG_WARNING_ELEMENTCOLLECTION_CRITERIA, field, type, value));
-			searchValue = Criteria.unwrap(searchValue);
+			return null; // TODO: implement CAST AS VARCHAR?
 		}
 
 		return type.isEnum() ? Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue() : searchValue;
