@@ -1034,7 +1034,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("unchecked")
 	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value)
-			.map(item -> type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type).getValue() : value)
+			.map(item -> type.isEnum() ? Enumerated.parse(item, (Class<Enum<?>>) type).getValue() : item)
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
 			.collect(toList());
