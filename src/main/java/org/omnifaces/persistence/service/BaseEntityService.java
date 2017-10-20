@@ -11,6 +11,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -50,6 +51,7 @@ import javax.ejb.Stateless;
 import javax.naming.InitialContext;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
+import javax.persistence.EntityNotFoundException;
 import javax.persistence.NamedQuery;
 import javax.persistence.OneToMany;
 import javax.persistence.PersistenceContext;
@@ -407,16 +409,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Refresh given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
+	 * Reset given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
 	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
 	 * which might have been edited in the client, without changing the reference. This is generally useful when the
 	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
-	 * @param entity Entity to refresh.
-	 * @throws IllegalEntityStateException When entity is managed or has no ID or has in meanwhile been deleted.
+	 * @param entity Entity to reset.
+	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
-	public void refresh(E entity) {
+	public void reset(E entity) {
 		if (getEntityManager().contains(entity)) {
-			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be refreshed.");
+			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
 		}
 
 		E managed = manage(entity);
@@ -427,7 +430,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Delete given entity.
 	 * @param entity Entity to delete.
 	 * @throws NonDeletableEntityException When entity has {@link NonDeletable} annotation set.
-	 * @throws IllegalEntityStateException When entity has no ID or has in meanwhile been deleted.
+	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	public void delete(E entity) {
 		if (entity.getClass().isAnnotationPresent(NonDeletable.class)) {
@@ -438,10 +442,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Make given entity managed.
+	 * Make given entity managed. NOTE: This will discard any changes in the given entity!
+	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
 	 * @param entity Entity to manage.
 	 * @return The managed entity.
-	 * @throws IllegalEntityStateException When entity has no ID or has in meanwhile been deleted.
+	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	protected E manage(E entity) {
 		if (entity.getId() == null) {
@@ -455,10 +461,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		E managed = getById(entity.getId());
 
 		if (managed == null) {
-			throw new IllegalEntityStateException(entity, "Entity has in meanwhile been deleted.");
+			throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
 		}
 
 		return managed;
+	}
+
+	/**
+	 * Returns count of all foreign key references to given entity.
+	 * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
+	 * @param entity Entity to count all foreign key references for.
+	 * @return Count of all foreign key references to given entity.
+	 */
+	protected long countForeignKeyReferencesTo(E entity) {
+		return countForeignKeyReferences(getEntityManager(), entityType, identifierType, manage(entity).getId());
 	}
 
 

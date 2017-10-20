@@ -151,7 +151,7 @@ public final class JPA {
 
 	/**
 	 * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type.
-	 * This is particularly useful in case you intend to check if the given entity is orphaned in that perspective.
+	 * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
 	 * @param <T> The generic result type.
 	 * @param <I> The generic identifier type.
 	 * @param entityManager The involved entity manager.
@@ -160,7 +160,7 @@ public final class JPA {
 	 * @param id Entity ID.
 	 * @return Count of all foreign key references to entity of given entity type with given ID of given identifier type.
 	 */
-	public static <T, I> Long countForeignKeyReferences(EntityManager entityManager, Class<T> entityType, Class<I> identifierType, I id) {
+	public static <T, I> long countForeignKeyReferences(EntityManager entityManager, Class<T> entityType, Class<I> identifierType, I id) {
 		Metamodel metamodel = entityManager.getMetamodel();
 		SingularAttribute<? super T, I> idAttribute = metamodel.entity(entityType).getId(identifierType);
 		return metamodel.getEntities().stream()

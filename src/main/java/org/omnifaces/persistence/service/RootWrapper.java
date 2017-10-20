@@ -26,6 +26,13 @@ import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.SetAttribute;
 import javax.persistence.metamodel.SingularAttribute;
 
+/**
+ * <p>
+ * A wrapper for {@link Root}, useful in case you intend to decorate it.
+ *
+ * @author Bauke Scholtz
+ * @param <X> Generic entity type referenced by root.
+ */
 public class RootWrapper<X> implements Root<X> {
 
 	private Root<X> wrapped;

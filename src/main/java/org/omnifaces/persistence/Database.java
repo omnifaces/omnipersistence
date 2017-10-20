@@ -14,6 +14,9 @@ import javax.persistence.EntityManagerFactory;
 
 import org.omnifaces.persistence.service.BaseEntityService;
 
+/**
+ * Enumeration of all supported databases.
+ */
 public enum Database {
 
 	H2,

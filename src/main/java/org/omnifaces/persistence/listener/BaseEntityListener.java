@@ -34,6 +34,10 @@ import org.omnifaces.persistence.model.BaseEntity;
  *     // ...
  * }
  * </pre>
+ *
+ * @see Created
+ * @see Updated
+ * @see Deleted
  */
 public class BaseEntityListener {
 

@@ -19,6 +19,9 @@ import javax.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.service.BaseEntityService;
 
+/**
+ * Enumeration of all supported JPA providers.
+ */
 public enum Provider {
 
 	HIBERNATE {
