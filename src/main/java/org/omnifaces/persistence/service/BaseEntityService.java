@@ -16,6 +16,7 @@ import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
+import static org.omnifaces.utils.Lang.toTitleCase;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Collectors.toMap;
@@ -469,15 +470,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch lazy collections on.
 	 * @param getters Getters of those lazy collections.
+	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
 	@SuppressWarnings("unchecked")
-	protected void fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
-		if (!isEmpty(getters)) {
-			stream(getters).forEach(getter -> getter.apply(entity).size());
-		}
-		else {
-			fetchEveryPluralAttribute(entity, type -> type != MAP);
-		}
+	protected E fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
+		return fetchPluralAttributes(entity, type -> type != MAP, getters);
 	}
 
 	/**
@@ -486,41 +483,46 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch lazy maps on.
 	 * @param getters Getters of those lazy collections.
+	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
 	@SuppressWarnings("unchecked")
-	protected void fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
-		if (!isEmpty(getters)) {
-			stream(getters).forEach(getter -> getter.apply(entity).size());
-		}
-		else {
-			fetchEveryPluralAttribute(entity, type -> type == MAP);
-		}
+	protected E fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
+		return fetchPluralAttributes(entity, type -> type == MAP, getters);
 	}
 
-	private void fetchEveryPluralAttribute(E entity, java.util.function.Predicate<CollectionType> ofType) {
-		for (PluralAttribute<?, ?, ?> a : getMetamodel(entity.getClass()).getPluralAttributes()) {
-			if (ofType.test(a.getCollectionType())) {
-				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
-				invokeMethod(invokeMethod(entity, "get" + name), "size");
+	@SuppressWarnings("unchecked")
+	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
+		if (isEmpty(getters)) {
+			for (PluralAttribute<?, ?, ?> a : getMetamodel(entity.getClass()).getPluralAttributes()) {
+				if (ofType.test(a.getCollectionType())) {
+					invokeMethod(invokeMethod(entity, "get" + toTitleCase(a.getName())), "size");
+				}
 			}
 		}
+		else {
+			stream(getters).forEach(getter -> invokeMethod(getter.apply(entity), "size"));
+		}
+
+		return entity;
 	}
 
 	/**
 	 * Fetch all lazy blobs of given entity.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
 	 * @param entity Entity instance to fetch all blobs on.
+	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
-	protected void fetchLazyBlobs(E entity) {
+	protected E fetchLazyBlobs(E entity) {
 		E managed = getEntityManager().merge(entity);
 
 		for (Attribute<?, ?> a : getMetamodel(managed.getClass()).getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
-				String name = Character.toUpperCase(a.getName().charAt(0)) + a.getName().substring(1);
-				byte[] blob = (byte[]) invokeMethod(managed, "get" + name);
-				invokeMethod(entity, "set" + name, blob);
+				String name = toTitleCase(a.getName());
+				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));
 			}
 		}
+
+		return entity;
 	}
 
 
