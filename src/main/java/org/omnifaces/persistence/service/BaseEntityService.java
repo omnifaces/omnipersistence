@@ -126,7 +126,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
-	private static final String LOG_WARNING_ELEMENTCOLLECTION_CRITERIA = "@ElementCollection %s(%s) does not support Criteria %s, skipping!";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
@@ -969,22 +968,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			value = ((Not) value).getValue();
 		}
 
-		if (value instanceof Criteria && ((Criteria<?>) value).getValue() == null) {
-			value = null;
-		}
-
 		try {
-			if (value == null) {
+			if (value == null || (value instanceof Criteria && ((Criteria<?>) value).getValue() == null)) {
 				predicate = criteriaBuilder.isNull(path);
-			}
-			else if (elementCollections.contains(field)) {
-				predicate = buildElementCollectionPredicate(alias, path, type, field, value, parameterBuilder);
-			}
-			else if (value instanceof Iterable || value.getClass().isArray()) {
-				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof Criteria) {
 				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
+			}
+			else if (elementCollections.contains(field)) {
+				predicate = buildElementCollectionPredicate(alias, path, type, value, parameterBuilder);
+			}
+			else if (value instanceof Iterable || value.getClass().isArray()) {
+				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof BaseEntity) {
 				predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
@@ -1018,12 +1013,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, ParameterBuilder parameterBuilder) {
-
-		// criteriaQuery.where(criteriaBuilder.and(criteriaBuilder.isMember(Group.USER, join), criteriaBuilder.isMember(Group.DEVELOPER, join)));
-
+	@SuppressWarnings("unchecked")
+	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value)
-			.map(item -> parseElementCollectionValue(type, field, item))
+			.map(item -> type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type).getValue() : value)
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
 			.collect(toList());
@@ -1034,18 +1027,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		alias.in(in.size());
 		return path.in(in.toArray(new Expression[in.size()]));
-	}
-
-	@SuppressWarnings("unchecked")
-	private Object parseElementCollectionValue(Class<?> type, String field, Object value) {
-		Object searchValue = value;
-
-		if (value instanceof Criteria) {
-			logger.log(WARNING, () -> format(LOG_WARNING_ELEMENTCOLLECTION_CRITERIA, field, type, value));
-			return null; // TODO: implement CAST AS VARCHAR?
-		}
-
-		return type.isEnum() ? Enumerated.parse(searchValue, (Class<Enum<?>>) type).getValue() : searchValue;
 	}
 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
