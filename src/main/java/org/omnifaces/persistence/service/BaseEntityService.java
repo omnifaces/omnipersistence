@@ -393,6 +393,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Update given entities.
+	 * @param entities Entities to update.
+	 * @return Updated entities.
+	 * @throws IllegalEntityStateException When at least one entity has no ID.
+	 */
+	public List<E> update(List<E> entities) {
+		return entities.stream().map(this::update).collect(toList());
+	}
+
+	/**
 	 * Save given entity. This will automatically determine based on presence of entity ID whether to
 	 * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
 	 * @param entity Entity to save.
@@ -439,6 +449,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		getEntityManager().remove(manage(entity));
+	}
+
+	/**
+	 * Delete given entities.
+	 * @param entities Entities to delete.
+	 * @throws NonDeletableEntityException When at least one entity has {@link NonDeletable} annotation set.
+	 * @throws IllegalEntityStateException When at least one entity has no ID.
+	 * @throws EntityNotFoundException When at least one entity has in meanwhile been deleted.
+	 */
+	public void delete(List<E> entities) {
+		entities.forEach(this::delete);
 	}
 
 	/**
