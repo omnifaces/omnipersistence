@@ -1155,7 +1155,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				String attribute = attributes[i];
 
 				if (i + 1 < depth || elementCollections.contains(originalField)) {
-					path = explicitJoin ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
+					path = explicitJoin || !joins.containsKey(attribute) ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
 				}
 				else {
 					path = path.get(attribute);
