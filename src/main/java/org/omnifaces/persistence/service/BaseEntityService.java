@@ -398,8 +398,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Updated entities.
 	 * @throws IllegalEntityStateException When at least one entity has no ID.
 	 */
-	public List<E> update(List<E> entities) {
-		return entities.stream().map(this::update).collect(toList());
+	public List<E> update(Iterable<E> entities) {
+		return stream(entities).map(this::update).collect(toList());
 	}
 
 	/**
@@ -458,7 +458,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When at least one entity has no ID.
 	 * @throws EntityNotFoundException When at least one entity has in meanwhile been deleted.
 	 */
-	public void delete(List<E> entities) {
+	public void delete(Iterable<E> entities) {
 		entities.forEach(this::delete);
 	}
 
