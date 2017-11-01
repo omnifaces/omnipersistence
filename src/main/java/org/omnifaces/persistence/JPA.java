@@ -29,6 +29,7 @@ import java.util.stream.Stream;
 import javax.enterprise.inject.Typed;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
+import javax.persistence.NonUniqueResultException;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
@@ -73,6 +74,7 @@ public final class JPA {
 	 * @param <T> The generic result type.
 	 * @param typedQuery The involved typed query.
 	 * @return Single result of given typed query as {@link Optional}.
+	 * @throws NonUniqueResultException When there is no unique result.
 	 */
 	public static <T> Optional<T> getOptionalSingleResult(TypedQuery<T> typedQuery) {
 		return ofNullable(getSingleResultOrNull(typedQuery));
@@ -82,12 +84,12 @@ public final class JPA {
 	 * Returns single result of given query as {@link Optional}.
 	 * @param <T> The expected result type.
 	 * @param query The involved query.
-	 * @param resultType The expected result type.
 	 * @return Single result of given query as {@link Optional}.
+	 * @throws NonUniqueResultException When there is no unique result.
 	 * @throws ClassCastException When <code>T</code> is of wrong type.
 	 */
-	public static <T> Optional<T> getOptionalSingleResult(Query query, Class<T> resultType) {
-		return ofNullable(getSingleResultOrNull(query, resultType));
+	public static <T> Optional<T> getOptionalSingleResult(Query query) {
+		return ofNullable(getSingleResultOrNull(query));
 	}
 
 	/**
@@ -95,29 +97,79 @@ public final class JPA {
 	 * @param <T> The generic result type.
 	 * @param typedQuery The involved typed query.
 	 * @return Single result of given typed query, or <code>null</code> if there is none.
+	 * @throws NonUniqueResultException When there is no unique result.
 	 */
 	public static <T> T getSingleResultOrNull(TypedQuery<T> typedQuery) {
-		return getSingleResultOrNull(typedQuery, null);
+		try {
+			return typedQuery.getSingleResult();
+		}
+		catch (NoResultException e) {
+			return null;
+		}
 	}
 
 	/**
 	 * Returns single result of given query, or <code>null</code> if there is none.
 	 * @param <T> The expected result type.
 	 * @param query The involved query.
-	 * @param resultType The expected result type.
 	 * @return Single result of given query, or <code>null</code> if there is none.
+	 * @throws NonUniqueResultException When there is no unique result.
 	 * @throws ClassCastException When <code>T</code> is of wrong type.
 	 */
 	@SuppressWarnings("unchecked")
-	public static <T> T getSingleResultOrNull(Query query, Class<T> resultType) {
+	public static <T> T getSingleResultOrNull(Query query) {
 		try {
-			query.setMaxResults(1);
-			Object singleResult = query.getSingleResult();
-			return resultType == null ? (T) singleResult : resultType.cast(singleResult);
+			return (T) query.getSingleResult();
 		}
 		catch (NoResultException e) {
 			return null;
 		}
+	}
+
+	/**
+	 * Returns first result of given typed query as {@link Optional}.
+	 * @param <T> The generic result type.
+	 * @param typedQuery The involved typed query.
+	 * @return First result of given typed query as {@link Optional}.
+	 */
+	public static <T> Optional<T> getOptionalFirstResult(TypedQuery<T> typedQuery) {
+		typedQuery.setMaxResults(1);
+		return typedQuery.getResultList().stream().findFirst();
+	}
+
+	/**
+	 * Returns first result of given query as {@link Optional}.
+	 * @param <T> The expected result type.
+	 * @param query The involved query.
+	 * @return First result of given query as {@link Optional}.
+	 * @throws ClassCastException When <code>T</code> is of wrong type.
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> Optional<T> getOptionalFirstResult(Query query) {
+		query.setMaxResults(1);
+		return query.getResultList().stream().findFirst();
+	}
+
+	/**
+	 * Returns first result of given typed query, or <code>null</code> if there is none.
+	 * @param <T> The generic result type.
+	 * @param typedQuery The involved typed query.
+	 * @return First result of given typed query, or <code>null</code> if there is none.
+	 */
+	public static <T> T getFirstResultOrNull(TypedQuery<T> typedQuery) {
+		return getOptionalFirstResult(typedQuery).orElse(null);
+	}
+
+	/**
+	 * Returns first result of given query, or <code>null</code> if there is none.
+	 * @param <T> The expected result type.
+	 * @param query The involved query.
+	 * @return First result of given query, or <code>null</code> if there is none.
+	 * @throws ClassCastException When <code>T</code> is of wrong type.
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> T getFirstResultOrNull(Query query) {
+		return (T) getOptionalFirstResult(query).orElse(null);
 	}
 
 	/**
@@ -137,13 +189,13 @@ public final class JPA {
 	 * @param <K> The generic map key type.
 	 * @param <T> The generic result type.
 	 * @param <V> The generic map value type.
-	 * @param query The involved typed query.
+	 * @param typedQuery The involved typed query.
 	 * @param keyMapper The key mapper.
 	 * @param valueMapper The value mapper.
 	 * @return The result list of given typed query as a map mapped by the given key and value mappers.
 	 */
-	public static <K, T, V> Map<K, V> getResultMap(TypedQuery<T> query, Function<? super T, ? extends K> keyMapper, Function<? super T, ? extends V> valueMapper) {
-		return query.getResultList().stream().collect(Collectors.toMap(keyMapper, valueMapper));
+	public static <K, T, V> Map<K, V> getResultMap(TypedQuery<T> typedQuery, Function<? super T, ? extends K> keyMapper, Function<? super T, ? extends V> valueMapper) {
+		return typedQuery.getResultList().stream().collect(Collectors.toMap(keyMapper, valueMapper));
 	}
 
 
