@@ -1060,6 +1060,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 		}
 		else {
+			// For other cases, a real IN predicate is more efficient than an array predicate, even though both approaches are supported.
 			return buildInPredicate(alias, path, type, value, parameterBuilder);
 		}
 	}
