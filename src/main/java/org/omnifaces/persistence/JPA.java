@@ -19,6 +19,9 @@ import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -301,17 +304,30 @@ public final class JPA {
 	 */
 	@SuppressWarnings("unchecked")
 	public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
-		boolean numeric = Number.class.isAssignableFrom(expression.getJavaType());
-
-		if (!numeric || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation, need to delegate to DB specific function.
+		if (Provider.is(HIBERNATE)) {
 			return expression.as(String.class);
 		}
-		else if (Database.is(POSTGRESQL)) {
-			return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
+
+		// EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
+
+		// PostgreSQL is quite strict in string casting.
+		if (Database.is(POSTGRESQL)) {
+			if (Number.class.isAssignableFrom(expression.getJavaType())) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
+			}
+			else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal("YYYY-MM-DD"));
+			}
+			else if (LocalDateTime.class.isAssignableFrom(expression.getJavaType())) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal("YYYY-MM-DD'T'HH24:MI:SS'Z'"));
+			}
+			else if (LocalTime.class.isAssignableFrom(expression.getJavaType())) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal("HH24:MI:SS.MS"));
+			}
 		}
-		else { // H2 and MySQL are more lenient in this, no function call necessary.
-			return (Expression<String>) expression;
-		}
+
+		// H2 and MySQL are more lenient in this, no function call necessary.
+		return (Expression<String>) expression;
 	}
 
 }
