@@ -11,6 +11,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
@@ -1015,7 +1016,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (elementCollections.contains(field)) {
-				predicate = buildElementCollectionPredicate(alias, path, type, value, parameterBuilder);
+				predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -1052,10 +1053,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	@SuppressWarnings("unchecked")
-	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+	private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
+		if (provider == HIBERNATE && database == POSTGRESQL) { // Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
+			return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+		}
+		else {
+			return buildInPredicate(alias, path, type, value, parameterBuilder);
+		}
+	}
+
+	private Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value)
-			.map(item -> type.isEnum() ? Enumerated.parse(item, (Class<Enum<?>>) type).getValue() : item)
+			.map(item -> createElementCollectionCriteria(type, item).getValue())
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
 			.collect(toList());
@@ -1069,30 +1078,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		Subquery<Long> oneToManySubquery = null;
-		Expression<?> fieldPath;
+		boolean oneToManyField = oneToManyCollections.test(field);
 
-		if (oneToManyCollections.test(field)) {
+		if (oneToManyField) {
 			if (provider == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
 			else if (provider == OPENJPA) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
 			}
+		}
 
-			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
-			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
-			oneToManySubquery = query.subquery(Long.class);
-			Root<E> subqueryRoot = oneToManySubquery.from(entityType);
+		boolean elementCollectionField = elementCollections.contains(field);
+		Subquery<Long> subquery = null;
+		Expression<?> fieldPath;
+
+		if (oneToManyField || elementCollectionField) {
+			// This subquery must simulate an IN clause on a field of a @OneToMany or @ElementCollection relationship.
+			// Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
+			subquery = query.subquery(Long.class);
+			Root<E> subqueryRoot = subquery.from(entityType);
 			fieldPath = new RootPathResolver(subqueryRoot, elementCollections).get(pathResolver.join(field));
-			oneToManySubquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
+			subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
 		}
 		else {
 			fieldPath = path;
 		}
 
 		List<Predicate> predicates = stream(value)
-			.map(item -> buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
+			.map(item -> elementCollectionField
+					? createElementCollectionCriteria(type, item).build(fieldPath, criteriaBuilder, parameterBuilder)
+					: buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
 			.filter(Objects::nonNull)
 			.collect(toList());
 
@@ -1102,13 +1118,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		Predicate predicate = criteriaBuilder.or(toArray(predicates));
 
-		if (oneToManySubquery != null) {
+		if (subquery != null) {
 			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
 			Long actualCount = (long) predicates.size();
-			predicate = criteriaBuilder.equal(oneToManySubquery.where(criteriaBuilder.and(predicate, oneToManySubquery.getRestriction())), actualCount);
+			predicate = criteriaBuilder.equal(subquery.where(criteriaBuilder.and(predicate, subquery.getRestriction())), actualCount);
 		}
 
 		return predicate;
+	}
+
+	@SuppressWarnings("unchecked")
+	private Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
+		return type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type) : IgnoreCase.value(value.toString());
 	}
 
 
