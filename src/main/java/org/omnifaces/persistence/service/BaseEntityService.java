@@ -12,10 +12,16 @@ import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
@@ -50,6 +56,8 @@ import javax.annotation.PostConstruct;
 import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
 import javax.naming.InitialContext;
+import javax.persistence.CacheRetrieveMode;
+import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
@@ -658,7 +666,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
 	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
-	 * The default implementation sets the Hibernate <code>cacheable</code> and <code>cacheRegion</code> hints.
+	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
+	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
+	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
+	 * {@link Page#toString()}.
 	 * @param page The page on which this query is based.
 	 * @param cacheable Whether the results should be cacheable.
 	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about
@@ -666,9 +677,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected Consumer<TypedQuery<?>> onPage(Page page, boolean cacheable) {
 		return typedQuery -> {
+			if (provider == HIBERNATE) {
+				typedQuery
+					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable)
+					.setHint(QUERY_HINT_HIBERNATE_CACHE_REGION, page.toString());
+			}
+			else if (provider == ECLIPSELINK) {
+				typedQuery
+					.setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
+					.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
+			}
+
+			// NOTE: OpenJPA doesn't support 2nd level cache.
+
 			typedQuery
-				.setHint("org.hibernate.cacheable", cacheable) // TODO: EclipseLink? JPA 2.0?
-				.setHint("org.hibernate.cacheRegion", page.toString());
+				.setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
+				.setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
 		};
 	}
 
@@ -887,7 +911,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private <T> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+	private void buildRange(Page page, Query query, Root<E> root) {
 		if (root == null) {
 			return;
 		}
@@ -895,17 +919,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		boolean hasJoins = hasJoins(root);
 
 		if (hasJoins || page.getOffset() != 0) {
-			typedQuery.setFirstResult(page.getOffset());
+			query.setFirstResult(page.getOffset());
 		}
 
 		if (hasJoins || page.getLimit() != MAX_VALUE) {
-			typedQuery.setMaxResults(page.getLimit());
+			query.setMaxResults(page.getLimit());
 		}
 
 		if (hasJoins && root instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<?>) root).getPostponedFetches().forEach(fetch -> {
-				typedQuery.setHint("eclipselink.batch", "e." + fetch);
-			});
+			((EclipseLinkRoot<?>) root).runPostponedFetches(query);
 		}
 	}
 

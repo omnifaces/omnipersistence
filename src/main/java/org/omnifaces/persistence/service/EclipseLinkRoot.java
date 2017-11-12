@@ -3,6 +3,7 @@ package org.omnifaces.persistence.service;
 import java.util.HashSet;
 import java.util.Set;
 
+import javax.persistence.Query;
 import javax.persistence.criteria.Fetch;
 import javax.persistence.criteria.Root;
 
@@ -29,6 +30,10 @@ class EclipseLinkRoot<X> extends RootWrapper<X> {
 
 	public Set<String> getPostponedFetches() {
 		return postponedFetches;
+	}
+
+	public void runPostponedFetches(Query query) {
+		getPostponedFetches().forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
 	}
 
 }

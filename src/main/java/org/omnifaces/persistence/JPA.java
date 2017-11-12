@@ -22,6 +22,8 @@ import static org.omnifaces.utils.stream.Streams.stream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,9 +60,10 @@ public final class JPA {
 
 	// Public constants -------------------------------------------------------------------------------------------------------------------
 
-	public static final String LOAD_GRAPH_HINT_KEY = "javax.persistence.loadgraph";
-	public static final String FETCH_GRAPH_HINT_KEY = "javax.persistence.fetchgraph";
-	public static final String CACHE_RETRIEVE_MODE_HINT_KEY = "javax.persistence.cache.retrieveMode";
+	public static final String QUERY_HINT_LOAD_GRAPH = "javax.persistence.loadgraph";
+	public static final String QUERY_HINT_FETCH_GRAPH = "javax.persistence.fetchgraph";
+	public static final String QUERY_HINT_CACHE_STORE_MODE = "javax.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
+	public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "javax.persistence.cache.retrieveMode"; // USE | BYPASS
 
 
 	// Constructors -----------------------------------------------------------------------------------------------------------------------
@@ -310,23 +313,35 @@ public final class JPA {
 
 		// EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
 
-		// PostgreSQL is quite strict in string casting.
+		// PostgreSQL is quite strict in string casting, it has to be performed explicitly.
 		if (Database.is(POSTGRESQL)) {
+			String pattern = null;
+
 			if (Number.class.isAssignableFrom(expression.getJavaType())) {
-				return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
+				pattern = "FM999999999999999999"; // NOTE: Amount of digits matches match amount of Long.MAX_VALUE digits minus one.
 			}
 			else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
-				return builder.function("TO_CHAR", String.class, expression, builder.literal("YYYY-MM-DD"));
-			}
-			else if (LocalDateTime.class.isAssignableFrom(expression.getJavaType())) {
-				return builder.function("TO_CHAR", String.class, expression, builder.literal("YYYY-MM-DD'T'HH24:MI:SS'Z'"));
+				pattern = "YYYY-MM-DD";
 			}
 			else if (LocalTime.class.isAssignableFrom(expression.getJavaType())) {
-				return builder.function("TO_CHAR", String.class, expression, builder.literal("HH24:MI:SS.MS"));
+				pattern = "HH24:MI:SS";
+			}
+			else if (LocalDateTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "YYYY-MM-DD'T'HH24:MI:SS'Z'"; // NOTE: PostgreSQL uses ISO_INSTANT instead of ISO_LOCAL_DATE_TIME.
+			}
+			else if (OffsetTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "HH24:MI:SS-OF";
+			}
+			else if (OffsetDateTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "YYYY-MM-DD'T'HH24:MI:SS-OF";
+			}
+
+			if (pattern != null) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal(pattern));
 			}
 		}
 
-		// H2 and MySQL are more lenient in this, no function call necessary.
+		// H2 and MySQL are more lenient in this, they can do implicit casting with sane defaults, so no custom function call necessary.
 		return (Expression<String>) expression;
 	}
 
