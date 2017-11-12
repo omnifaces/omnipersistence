@@ -42,9 +42,20 @@ public enum Provider {
 		}
 
 		@Override
+		public boolean isProxyInitialized(Object entity) {
+			return isProxy(entity) && !(boolean) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "isUninitialized");
+		}
+
+		@Override
 		@SuppressWarnings("unchecked")
 		public <E> E dereferenceProxy(E entity) {
 			return isProxy(entity) ? (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation") : entity;
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public <E> Class<E> getEntityType(E entity) {
+			return isProxy(entity) ? (Class<E>) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getPersistentClass") : super.getEntityType(entity);
 		}
 	},
 
@@ -127,8 +138,17 @@ public enum Provider {
 		throw new UnsupportedOperationException(String.valueOf(entity));
 	}
 
+	public boolean isProxyInitialized(Object entity) {
+		throw new UnsupportedOperationException(String.valueOf(entity));
+	}
+
 	public <E> E dereferenceProxy(E entity) {
 		throw new UnsupportedOperationException(String.valueOf(entity));
+	}
+
+	@SuppressWarnings("unchecked")
+	public <E> Class<E> getEntityType(E entity) {
+		return (Class<E>) entity.getClass();
 	}
 
 }
