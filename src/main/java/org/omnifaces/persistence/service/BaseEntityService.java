@@ -281,8 +281,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the metamodel of given base entity.
-	 * @return The metamodel of given base entity.
+	 * Returns the metamodel of given base entity type.
+	 * @return The metamodel of given base entity type.
 	 */
 	@SuppressWarnings("rawtypes")
 	public EntityType<? extends BaseEntity> getMetamodel(Class<? extends BaseEntity> type) {
@@ -434,7 +434,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getMetamodel(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getMetamodel(entity.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
 	/**
@@ -646,7 +646,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked before any of
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked before any of
 	 * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
@@ -656,7 +656,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked when any query involved in
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
 	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
 	 * The default implementation sets the Hibernate <code>cacheable</code> and <code>cacheRegion</code> hints.
 	 * @param page The page on which this query is based.
@@ -673,7 +673,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked after any of
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked after any of
 	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
@@ -770,7 +770,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
 	 */
 	protected <T extends E> PartialResultList<T> getPage(Page page, boolean count, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-		beforePage().accept(entityManager);
+		beforePage().accept(getEntityManager());
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
@@ -780,7 +780,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return executeQuery(page, entityQuery, countQuery);
 		}
 		finally {
-			afterPage().accept(entityManager);
+			afterPage().accept(getEntityManager());
 		}
 	}
 
