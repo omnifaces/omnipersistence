@@ -38,7 +38,7 @@ public enum Provider {
 
 		@Override
 		public boolean isAggregation(Expression<?> expression) {
-			return HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION.orElse(HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION.get()).isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation");
+			return HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION.orElse(HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION.orElse(null)).isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation");
 		}
 
 		@Override
