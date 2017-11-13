@@ -15,6 +15,7 @@ import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
+import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -55,6 +56,7 @@ import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
 import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
+import javax.enterprise.inject.spi.CDI;
 import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
@@ -66,6 +68,7 @@ import javax.persistence.OneToMany;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
+import javax.persistence.ValidationMode;
 import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
@@ -83,6 +86,9 @@ import javax.persistence.metamodel.Bindable;
 import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
+import javax.validation.ConstraintViolation;
+import javax.validation.ConstraintViolationException;
+import javax.validation.Validator;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
@@ -120,11 +126,15 @@ import org.omnifaces.utils.reflect.Getter;
  * <p>
  * {@link BaseEntityService} uses JULI {@link Logger} for logging.
  * <ul>
- * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
  * any discovered {@link ElementCollection} and {@link OneToMany} mappings of the entity. This is internally used in order to be able
  * to build proper queries to perform a search inside a {@link ElementCollection} or {@link OneToMany} field.
- * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
+ * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
+ * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
+ * happen when <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set to
+ * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
  * @param <I> The generic ID type, usually {@link Long}.
@@ -137,13 +147,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
-	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
-	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
-	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
-	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
 	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
 	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
+	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
+	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
+	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
+	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "javax.validation.ConstraintViolation: @%s %s#%s %s on %s";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -164,10 +175,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
+
 	private Provider provider;
 	private Database database;
 	private Set<String> elementCollections;
 	private java.util.function.Predicate<String> oneToManyCollections;
+	private Validator validator;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -196,6 +209,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
 			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
+
+		if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
+			validator = CDI.current().select(Validator.class).get();
+		}
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -249,7 +266,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
 		Set<String> collectionMapping = new HashSet<>(1);
-		EntityType<?> entity = getMetamodel((Class<? extends BaseEntity>) type);
+		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
 
 		for (Attribute<?, ?> attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
@@ -289,12 +306,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the metamodel of given base entity type.
-	 * @return The metamodel of given base entity type.
+	 * Returns the metamodel of current base entity.
+	 * @return The metamodel of current base entity.
 	 */
-	@SuppressWarnings("rawtypes")
-	public EntityType<? extends BaseEntity> getMetamodel(Class<? extends BaseEntity> type) {
-		return getEntityManager().getMetamodel().entity(type);
+	protected EntityType<E> getMetamodel() {
+		return getEntityManager().getMetamodel().entity(entityType);
+	}
+
+	/**
+	 * Returns the metamodel of given base entity.
+	 * @return The metamodel of given base entity.
+	 */
+	@SuppressWarnings("unchecked")
+	public <T extends Comparable<T> & Serializable> EntityType<BaseEntity<T>> getMetamodel(BaseEntity<T> entity) {
+		return getEntityManager().getMetamodel().entity((Class<BaseEntity<T>>) entity.getClass());
 	}
 
 	/**
@@ -373,7 +398,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Persist given entity.
+	 * Persist given entity. Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
 	 * @return Entity ID.
 	 * @throws IllegalEntityStateException When entity has an ID.
@@ -383,12 +408,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has an ID. Use update() instead.");
 		}
 
-		getEntityManager().persist(entity);
+		try {
+			getEntityManager().persist(entity);
+		}
+		catch (ConstraintViolationException e) {
+			logConstraintViolations(e.getConstraintViolations());
+			throw e;
+		}
+
 		return entity.getId();
 	}
 
 	/**
-	 * Update given entity.
+	 * Update given entity. If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
+	 * to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be
+	 * logged separately. Due to technical limitations, this effectively means that bean validation is invoked twice. First in this method
+	 * in order to be able to obtain the constraint violations and then once more while JTA is committing the transaction, but is executed
+	 * beyond the scope of this method.
 	 * @param entity Entity to update.
 	 * @return Updated entity.
 	 * @throws IllegalEntityStateException When entity has no ID.
@@ -398,7 +434,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID. Use persist() instead.");
 		}
 
+		if (validator != null) {
+			// EntityManager#merge() doesn't directly throw ConstraintViolationException without performing flush, so we can't put it in a
+			// try-catch, and we can't even use an @Interceptor as it happens in JTA side not in EJB side. Hence, we're manually performing
+			// bean validation here so that we can capture them.
+			logConstraintViolations(validator.validate(entity));
+		}
+
 		return getEntityManager().merge(entity);
+	}
+
+	private void logConstraintViolations(Set<? extends ConstraintViolation<?>> constraintViolations) {
+		constraintViolations.forEach(violation -> {
+			String constraintName = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
+			String beanName = violation.getRootBeanClass().getSimpleName();
+			String propertyName = violation.getPropertyPath().toString();
+			String violationMessage = violation.getMessage();
+			Object beanInstance = violation.getRootBean();
+			logger.severe(format(LOG_SEVERE_CONSTRAINT_VIOLATION, constraintName, beanName, propertyName, violationMessage, beanInstance));
+		});
 	}
 
 	/**
@@ -442,7 +496,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getMetamodel(entity.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getMetamodel(entity).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
 	/**
@@ -539,7 +593,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("unchecked")
 	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
 		if (isEmpty(getters)) {
-			for (PluralAttribute<?, ?, ?> a : getMetamodel(entity.getClass()).getPluralAttributes()) {
+			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
 				if (ofType.test(a.getCollectionType())) {
 					invokeMethod(invokeMethod(entity, "get" + toTitleCase(a.getName())), "size");
 				}
@@ -559,9 +613,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
 	protected E fetchLazyBlobs(E entity) {
-		E managed = getEntityManager().merge(entity);
+		E managed = update(entity);
 
-		for (Attribute<?, ?> a : getMetamodel(managed.getClass()).getSingularAttributes()) {
+		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
 				String name = toTitleCase(a.getName());
 				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));

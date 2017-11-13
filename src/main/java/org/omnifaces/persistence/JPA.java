@@ -37,6 +37,7 @@ import javax.persistence.NoResultException;
 import javax.persistence.NonUniqueResultException;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
+import javax.persistence.ValidationMode;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
@@ -64,12 +65,27 @@ public final class JPA {
 	public static final String QUERY_HINT_FETCH_GRAPH = "javax.persistence.fetchgraph";
 	public static final String QUERY_HINT_CACHE_STORE_MODE = "javax.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
 	public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "javax.persistence.cache.retrieveMode"; // USE | BYPASS
+	public static final String PROPERTY_VALIDATION_MODE = "javax.persistence.validation.mode"; // AUTO | CALLBACK | NONE
 
 
 	// Constructors -----------------------------------------------------------------------------------------------------------------------
 
 	private JPA() {
 		throw new AssertionError();
+	}
+
+
+	// Configuration utils ----------------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Returns the currently configured bean validation mode for given entity manager.
+	 * This consults the {@value #PROPERTY_VALIDATION_MODE} property in <code>persistence.xml</code>.
+	 * @param entityManager The involved entity manager.
+	 * @return The currently configured bean validation mode.
+	 */
+	public static ValidationMode getValidationMode(EntityManager entityManager) {
+		Object validationMode = entityManager.getEntityManagerFactory().getProperties().get(PROPERTY_VALIDATION_MODE);
+		return validationMode != null ? ValidationMode.valueOf(validationMode.toString().toUpperCase()) : ValidationMode.AUTO;
 	}
 
 
@@ -318,7 +334,7 @@ public final class JPA {
 			String pattern = null;
 
 			if (Number.class.isAssignableFrom(expression.getJavaType())) {
-				pattern = "FM999999999999999999"; // NOTE: Amount of digits matches match amount of Long.MAX_VALUE digits minus one.
+				pattern = "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
 			}
 			else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
 				pattern = "YYYY-MM-DD";

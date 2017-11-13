@@ -58,7 +58,7 @@ public abstract class AuditListener<I extends Comparable<I> & Serializable> {
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Map<PropertyDescriptor, Map<I, Object>> getAuditableProperties(BaseEntity<I> entity) {
 		Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
-			Set<String> auditablePropertyNames = BaseEntityService.getCurrentInstance().getMetamodel(entity.getClass()).getDeclaredAttributes().stream()
+			Set<String> auditablePropertyNames = BaseEntityService.getCurrentInstance().getMetamodel(entity).getDeclaredAttributes().stream()
 				.filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).getAnnotation(Audit.class) != null)
 				.map(Attribute::getName)
 				.collect(toSet());
