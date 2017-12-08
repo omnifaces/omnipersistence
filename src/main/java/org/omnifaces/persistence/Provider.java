@@ -14,6 +14,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
@@ -32,7 +33,13 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			return invokeMethod(invokeMethod(entityManagerFactory, "getSessionFactory"), "getDialect").getClass().getSimpleName();
+			if (HIBERNATE_SESSION_FACTORY.get().isInstance(entityManagerFactory)) {
+				// 5.2+ has merged hibernate-entitymanager into hibernate-core, and made EntityManagerFactory impl an instance of SessionFactory, and removed getDialect() shortcut method.
+				return invokeMethod(invokeMethod(invokeMethod(entityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
+			}
+			else {
+				return invokeMethod(invokeMethod(entityManagerFactory, "getSessionFactory"), "getDialect").getClass().getSimpleName();
+			}
 		}
 
 		@Override
@@ -42,13 +49,24 @@ public enum Provider {
 
 		@Override
 		public boolean isProxy(Object object) {
-			return HIBERNATE_PROXY_CLASS.get().isInstance(object);
+			return HIBERNATE_PROXY.get().isInstance(object);
+		}
+
+		@Override
+		public boolean isProxyInitialized(Object entity) {
+			return isProxy(entity) && !(boolean) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "isUninitialized");
 		}
 
 		@Override
 		@SuppressWarnings("unchecked")
 		public <E> E dereferenceProxy(E entity) {
 			return isProxy(entity) ? (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation") : entity;
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public <E> Class<E> getEntityType(E entity) {
+			return isProxy(entity) ? (Class<E>) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getPersistentClass") : super.getEntityType(entity);
 		}
 	},
 
@@ -95,8 +113,17 @@ public enum Provider {
 
 	UNKNOWN;
 
-	private static final Optional<Class<Object>> HIBERNATE_PROXY_CLASS = findClass("org.hibernate.proxy.HibernateProxy");
-	private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
+	public static final String QUERY_HINT_HIBERNATE_CACHEABLE = "org.hibernate.cacheable"; // true | false
+	public static final String QUERY_HINT_HIBERNATE_CACHE_REGION = "org.hibernate.cacheRegion"; // 2nd level cache region ID
+	public static final String QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE = "eclipselink.maintain-cache"; // true | false
+	public static final String QUERY_HINT_ECLIPSELINK_REFRESH = "eclipselink.refresh"; // true | false
+
+	private static final Optional<Class<Object>> HIBERNATE_PROXY = findClass("org.hibernate.proxy.HibernateProxy");
+	private static final Optional<Class<Object>> HIBERNATE_SESSION_FACTORY = findClass("org.hibernate.SessionFactory");
+	private static final Optional<Class<Object>> HIBERNATE_3_5_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.ejb.criteria.expression.function.BasicFunctionExpression");
+	private static final Optional<Class<Object>> HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
+	private static final Optional<Class<Object>> HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.query.criteria.internal.expression.function.BasicFunctionExpression");
+	private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = Stream.of(HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_3_5_0_BASIC_FUNCTION_EXPRESSION).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
 	private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
 	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
@@ -145,8 +172,17 @@ public enum Provider {
 		throw new UnsupportedOperationException(String.valueOf(entity));
 	}
 
+	public boolean isProxyInitialized(Object entity) {
+		throw new UnsupportedOperationException(String.valueOf(entity));
+	}
+
 	public <E> E dereferenceProxy(E entity) {
 		throw new UnsupportedOperationException(String.valueOf(entity));
+	}
+
+	@SuppressWarnings("unchecked")
+	public <E> Class<E> getEntityType(E entity) {
+		return (Class<E>) entity.getClass();
 	}
 
 }

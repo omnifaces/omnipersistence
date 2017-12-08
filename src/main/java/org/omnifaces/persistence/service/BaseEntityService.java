@@ -10,10 +10,18 @@ import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static org.omnifaces.persistence.Database.POSTGRESQL;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
+import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
+import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
@@ -47,7 +55,10 @@ import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
 import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
+import javax.enterprise.inject.spi.CDI;
 import javax.naming.InitialContext;
+import javax.persistence.CacheRetrieveMode;
+import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
@@ -58,6 +69,7 @@ import javax.persistence.OneToOne;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
+import javax.persistence.ValidationMode;
 import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
@@ -75,6 +87,9 @@ import javax.persistence.metamodel.Bindable;
 import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.PluralAttribute.CollectionType;
+import javax.validation.ConstraintViolation;
+import javax.validation.ConstraintViolationException;
+import javax.validation.Validator;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
@@ -112,11 +127,15 @@ import org.omnifaces.utils.reflect.Getter;
  * <p>
  * {@link BaseEntityService} uses JULI {@link Logger} for logging.
  * <ul>
- * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
  * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
  * internally used in order to be able to build proper queries to perform a search inside those fields.
- * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
+ * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
+ * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
+ * happen when <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set to
+ * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
  * @param <I> The generic ID type, usually {@link Long}.
@@ -129,14 +148,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
-	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
+	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
+	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
-	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
-	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
-	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
+	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "javax.validation.ConstraintViolation: @%s %s#%s %s on %s";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -160,11 +180,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
+
 	private Provider provider;
 	private Database database;
 	private Set<String> elementCollections;
 	private Set<String> manyOrOneToOnes;
 	private java.util.function.Predicate<String> oneToManys;
+	private Validator validator;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -194,6 +216,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		manyOrOneToOnes = MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
 		oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping)
 			.stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
+
+		if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
+			validator = CDI.current().select(Validator.class).get();
+		}
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -253,7 +279,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
 		Set<String> collectionMapping = new HashSet<>(1);
-		EntityType<?> entity = getMetamodel((Class<? extends BaseEntity>) type);
+		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
 
 		for (Attribute<?, ?> attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
@@ -294,12 +320,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Returns the metamodel of current base entity.
+	 * @return The metamodel of current base entity.
+	 */
+	protected EntityType<E> getMetamodel() {
+		return getEntityManager().getMetamodel().entity(entityType);
+	}
+
+	/**
 	 * Returns the metamodel of given base entity.
 	 * @return The metamodel of given base entity.
 	 */
-	@SuppressWarnings("rawtypes")
-	public EntityType<? extends BaseEntity> getMetamodel(Class<? extends BaseEntity> type) {
-		return getEntityManager().getMetamodel().entity(type);
+	@SuppressWarnings("unchecked")
+	public <T extends Comparable<T> & Serializable> EntityType<BaseEntity<T>> getMetamodel(BaseEntity<T> entity) {
+		return getEntityManager().getMetamodel().entity((Class<BaseEntity<T>>) entity.getClass());
 	}
 
 	/**
@@ -378,7 +412,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Persist given entity.
+	 * Persist given entity. Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
 	 * @return Entity ID.
 	 * @throws IllegalEntityStateException When entity has an ID.
@@ -388,12 +422,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has an ID. Use update() instead.");
 		}
 
-		getEntityManager().persist(entity);
+		try {
+			getEntityManager().persist(entity);
+		}
+		catch (ConstraintViolationException e) {
+			logConstraintViolations(e.getConstraintViolations());
+			throw e;
+		}
+
 		return entity.getId();
 	}
 
 	/**
-	 * Update given entity.
+	 * Update given entity. If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
+	 * to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be
+	 * logged separately. Due to technical limitations, this effectively means that bean validation is invoked twice. First in this method
+	 * in order to be able to obtain the constraint violations and then once more while JTA is committing the transaction, but is executed
+	 * beyond the scope of this method.
 	 * @param entity Entity to update.
 	 * @return Updated entity.
 	 * @throws IllegalEntityStateException When entity has no ID.
@@ -403,7 +448,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Entity has no ID. Use persist() instead.");
 		}
 
+		if (validator != null) {
+			// EntityManager#merge() doesn't directly throw ConstraintViolationException without performing flush, so we can't put it in a
+			// try-catch, and we can't even use an @Interceptor as it happens in JTA side not in EJB side. Hence, we're manually performing
+			// bean validation here so that we can capture them.
+			logConstraintViolations(validator.validate(entity));
+		}
+
 		return getEntityManager().merge(entity);
+	}
+
+	private void logConstraintViolations(Set<? extends ConstraintViolation<?>> constraintViolations) {
+		constraintViolations.forEach(violation -> {
+			String constraintName = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
+			String beanName = violation.getRootBeanClass().getSimpleName();
+			String propertyName = violation.getPropertyPath().toString();
+			String violationMessage = violation.getMessage();
+			Object beanInstance = violation.getRootBean();
+			logger.severe(format(LOG_SEVERE_CONSTRAINT_VIOLATION, constraintName, beanName, propertyName, violationMessage, beanInstance));
+		});
 	}
 
 	/**
@@ -447,7 +510,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getMetamodel(managed.getClass()).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getMetamodel(entity).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
 	}
 
 	/**
@@ -544,7 +607,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("unchecked")
 	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
 		if (isEmpty(getters)) {
-			for (PluralAttribute<?, ?, ?> a : getMetamodel(entity.getClass()).getPluralAttributes()) {
+			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
 				if (ofType.test(a.getCollectionType())) {
 					invokeMethod(invokeMethod(entity, "get" + toTitleCase(a.getName())), "size");
 				}
@@ -564,9 +627,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
 	protected E fetchLazyBlobs(E entity) {
-		E managed = getEntityManager().merge(entity);
+		E managed = update(entity);
 
-		for (Attribute<?, ?> a : getMetamodel(managed.getClass()).getSingularAttributes()) {
+		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
 			if (a.getJavaType() == byte[].class) {
 				String name = toTitleCase(a.getName());
 				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));
@@ -659,7 +722,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked before any of
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked before any of
 	 * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
@@ -669,9 +732,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked when any query involved in
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
 	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
-	 * The default implementation sets the Hibernate <code>cacheable</code> and <code>cacheRegion</code> hints.
+	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
+	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
+	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
+	 * {@link Page#toString()}.
 	 * @param page The page on which this query is based.
 	 * @param cacheable Whether the results should be cacheable.
 	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about
@@ -679,14 +745,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected Consumer<TypedQuery<?>> onPage(Page page, boolean cacheable) {
 		return typedQuery -> {
+			if (provider == HIBERNATE) {
+				typedQuery
+					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable)
+					.setHint(QUERY_HINT_HIBERNATE_CACHE_REGION, page.toString());
+			}
+			else if (provider == ECLIPSELINK) {
+				typedQuery
+					.setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
+					.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
+			}
+
+			// NOTE: OpenJPA doesn't support 2nd level cache.
+
 			typedQuery
-				.setHint("org.hibernate.cacheable", cacheable) // TODO: EclipseLink? JPA 2.0?
-				.setHint("org.hibernate.cacheRegion", page.toString());
+				.setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
+				.setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
 		};
 	}
 
 	/**
-	 * Here you can in your DTO subclass define the callback method which needs to be invoked after any of
+	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked after any of
 	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
 	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
@@ -783,7 +862,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
 	 */
 	protected <T extends E> PartialResultList<T> getPage(Page page, boolean count, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-		beforePage().accept(entityManager);
+		beforePage().accept(getEntityManager());
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
@@ -793,7 +872,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return executeQuery(page, entityQuery, countQuery);
 		}
 		finally {
-			afterPage().accept(entityManager);
+			afterPage().accept(getEntityManager());
 		}
 	}
 
@@ -900,7 +979,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private <T> void buildRange(Page page, TypedQuery<T> typedQuery, Root<E> root) {
+	private void buildRange(Page page, Query query, Root<E> root) {
 		if (root == null) {
 			return;
 		}
@@ -908,17 +987,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		boolean hasJoins = hasJoins(root);
 
 		if (hasJoins || page.getOffset() != 0) {
-			typedQuery.setFirstResult(page.getOffset());
+			query.setFirstResult(page.getOffset());
 		}
 
 		if (hasJoins || page.getLimit() != MAX_VALUE) {
-			typedQuery.setMaxResults(page.getLimit());
+			query.setMaxResults(page.getLimit());
 		}
 
 		if (hasJoins && root instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<?>) root).getPostponedFetches().forEach(fetch -> {
-				typedQuery.setHint("eclipselink.batch", "e." + fetch);
-			});
+			((EclipseLinkRoot<?>) root).runPostponedFetches(query);
 		}
 	}
 
@@ -1029,7 +1106,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (elementCollections.contains(field)) {
-				predicate = buildElementCollectionPredicate(alias, path, type, value, parameterBuilder);
+				predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
 				predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -1066,10 +1143,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return predicate;
 	}
 
-	@SuppressWarnings("unchecked")
-	private Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+	private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
+		if (provider == ECLIPSELINK || (provider == HIBERNATE && database == POSTGRESQL)) {
+			// EclipseLink refuses to perform GROUP BY on IN clause on @ElementCollection, causing a cartesian product.
+			// Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
+			return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+		}
+		else {
+			// For other cases, a real IN predicate is more efficient than an array predicate, even though both approaches are supported.
+			return buildInPredicate(alias, path, type, value, parameterBuilder);
+		}
+	}
+
+	private Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
 		List<Expression<?>> in = stream(value)
-			.map(item -> type.isEnum() ? Enumerated.parse(item, (Class<Enum<?>>) type).getValue() : item)
+			.map(item -> createElementCollectionCriteria(type, item).getValue())
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
 			.collect(toList());
@@ -1083,30 +1171,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		Subquery<Long> oneToManySubquery = null;
-		Expression<?> fieldPath;
+		boolean oneToManyField = oneToManys.test(field);
 
-		if (oneToManys.test(field)) {
+		if (oneToManyField) {
 			if (provider == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
 			else if (provider == OPENJPA) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
 			}
+		}
 
-			// This subquery must simulate an IN clause on a field of a @OneToMany relationship which behaves exactly the same as an IN clause on a @ElementCollection field.
-			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
-			oneToManySubquery = query.subquery(Long.class);
-			Root<E> subqueryRoot = oneToManySubquery.from(entityType);
+		boolean elementCollectionField = elementCollections.contains(field);
+		Subquery<Long> subquery = null;
+		Expression<?> fieldPath;
+
+		if (oneToManyField || elementCollectionField) {
+			// This subquery must simulate an IN clause on a field of a @OneToMany or @ElementCollection relationship.
+			// Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
+			subquery = query.subquery(Long.class);
+			Root<E> subqueryRoot = subquery.from(entityType);
 			fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
-			oneToManySubquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
+			subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
 		}
 		else {
 			fieldPath = path;
 		}
 
 		List<Predicate> predicates = stream(value)
-			.map(item -> buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
+			.map(item -> elementCollectionField
+					? createElementCollectionCriteria(type, item).build(fieldPath, criteriaBuilder, parameterBuilder)
+					: buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
 			.filter(Objects::nonNull)
 			.collect(toList());
 
@@ -1116,13 +1211,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		Predicate predicate = criteriaBuilder.or(toArray(predicates));
 
-		if (oneToManySubquery != null) {
+		if (subquery != null) {
 			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
 			Long actualCount = (long) predicates.size();
-			predicate = criteriaBuilder.equal(oneToManySubquery.where(criteriaBuilder.and(predicate, oneToManySubquery.getRestriction())), actualCount);
+			predicate = criteriaBuilder.equal(subquery.where(criteriaBuilder.and(predicate, subquery.getRestriction())), actualCount);
 		}
 
 		return predicate;
+	}
+
+	@SuppressWarnings("unchecked")
+	private Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
+		return type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type) : IgnoreCase.value(value.toString());
 	}
 
 
