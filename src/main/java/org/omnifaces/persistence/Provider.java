@@ -1,7 +1,11 @@
 package org.omnifaces.persistence;
 
 import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
+import static javax.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
+import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
+import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
+import static org.omnifaces.utils.Lang.isOneOf;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
@@ -81,6 +85,12 @@ public enum Provider {
 			// For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
 			return ((Field) attribute.getJavaMember()).getAnnotation(ElementCollection.class) != null;
 		}
+
+		@Override
+		public boolean isOneToMany(Attribute<?, ?> attribute) {
+			// For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
+			return !isElementCollection(attribute) && super.isOneToMany(attribute);
+		}
 	},
 
 	UNKNOWN;
@@ -121,6 +131,14 @@ public enum Provider {
 
 	public boolean isElementCollection(Attribute<?, ?> attribute) {
 		return attribute.getPersistentAttributeType() == ELEMENT_COLLECTION;
+	}
+
+	public boolean isOneToMany(Attribute<?, ?> attribute) {
+		return attribute.getPersistentAttributeType() == ONE_TO_MANY;
+	}
+
+	public boolean isManyOrOneToOne(Attribute<?, ?> attribute) {
+		return isOneOf(attribute.getPersistentAttributeType(), MANY_TO_ONE, ONE_TO_ONE);
 	}
 
 	public boolean isProxy(Object entity) {

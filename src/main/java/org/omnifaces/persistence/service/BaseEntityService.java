@@ -9,7 +9,6 @@ import static java.util.logging.Level.FINER;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
@@ -52,8 +51,10 @@ import javax.naming.InitialContext;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
+import javax.persistence.ManyToOne;
 import javax.persistence.NamedQuery;
 import javax.persistence.OneToMany;
+import javax.persistence.OneToOne;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
@@ -113,8 +114,8 @@ import org.omnifaces.utils.reflect.Getter;
  * <ul>
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
- * any discovered {@link ElementCollection} and {@link OneToMany} mappings of the entity. This is internally used in order to be able
- * to build proper queries to perform a search inside a {@link ElementCollection} or {@link OneToMany} field.
+ * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
+ * internally used in order to be able to build proper queries to perform a search inside those fields.
  * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * </ul>
  *
@@ -131,6 +132,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
+	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
 	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
@@ -140,6 +142,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA =
 		"Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
+	private static final String ERROR_UNKNOWN_FIELD =
+		"Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK =
 		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA =
@@ -151,14 +155,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<?>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> ONE_TO_MANY_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
 	private Provider provider;
 	private Database database;
 	private Set<String> elementCollections;
-	private java.util.function.Predicate<String> oneToManyCollections;
+	private Set<String> manyOrOneToOnes;
+	private java.util.function.Predicate<String> oneToManys;
 
 	@PersistenceContext
 	private EntityManager entityManager;
@@ -185,8 +191,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		provider = Provider.of(getEntityManager());
 		database = Database.of(getEntityManager());
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
-		oneToManyCollections = field -> ONE_TO_MANY_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyCollectionMapping)
-			.stream().anyMatch(oneToManyCollection -> field.startsWith(oneToManyCollection + '.'));
+		manyOrOneToOnes = MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
+		oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping)
+			.stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
 	}
 
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
@@ -231,10 +238,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return elementCollectionMapping;
 	}
 
-	private Set<String> computeOneToManyCollectionMapping(Class<?> type) {
-		Set<String> oneToManyCollectionMapping = computeCollectionMapping(type, "", new HashSet<>(), a -> !provider.isElementCollection(a) && a.getPersistentAttributeType() == ONE_TO_MANY);
-		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, type, oneToManyCollectionMapping));
-		return oneToManyCollectionMapping;
+	private Set<String> computeManyOrOneToOneMapping(Class<?> type) {
+		Set<String> manyOrOneToOneMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isManyOrOneToOne);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, type, manyOrOneToOneMapping));
+		return manyOrOneToOneMapping;
+	}
+
+	private Set<String> computeOneToManyMapping(Class<?> type) {
+		Set<String> oneToManyMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isOneToMany);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, type, oneToManyMapping));
+		return oneToManyMapping;
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -246,7 +259,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			if (attributePredicate.test(attribute)) {
 				collectionMapping.add(basePath + attribute.getName());
 			}
-			else if (attribute instanceof Bindable) {
+
+			if (attribute instanceof Bindable) {
 				Class<?> nestedType = ((Bindable<?>) attribute).getBindableJavaType();
 
 				if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
@@ -879,7 +893,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (resultType == entityType) {
-			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType));
+			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else {
 			throw new IllegalArgumentException(ERROR_ILLEGAL_MAPPING);
@@ -924,7 +938,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		String field = order.getKey();
 
-		if (oneToManyCollections.test(field) || elementCollections.contains(field)) {
+		if (oneToManys.test(field) || elementCollections.contains(field)) {
 			if (provider == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
@@ -1072,7 +1086,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Subquery<Long> oneToManySubquery = null;
 		Expression<?> fieldPath;
 
-		if (oneToManyCollections.test(field)) {
+		if (oneToManys.test(field)) {
 			if (provider == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
@@ -1084,7 +1098,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			// Otherwise the query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
 			oneToManySubquery = query.subquery(Long.class);
 			Root<E> subqueryRoot = oneToManySubquery.from(entityType);
-			fieldPath = new RootPathResolver(subqueryRoot, elementCollections).get(pathResolver.join(field));
+			fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
 			oneToManySubquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
 		}
 		else {
@@ -1146,12 +1160,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		private Map<String, Path<?>> joins;
 		private Map<String, Path<?>> paths;
 		private Set<String> elementCollections;
+		private Set<String> manyOrOneToOnes;
 
-		private RootPathResolver(Root<?> root, Set<String> elementCollections) {
+		private RootPathResolver(Root<?> root, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
 			this.root = root;
 			this.joins = getJoins(root);
 			this.paths = new HashMap<>();
 			this.elementCollections = elementCollections;
+			this.manyOrOneToOnes = manyOrOneToOnes;
 		}
 
 		@Override
@@ -1179,7 +1195,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					path = explicitJoin || !joins.containsKey(attribute) ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
 				}
 				else {
-					path = path.get(attribute);
+					try {
+						path = path.get(attribute);
+					}
+					catch (IllegalArgumentException e) {
+						if (depth == 1) {
+							path = guessTransientManyOrOneToOnePath(attribute);
+						}
+
+						if (depth != 1 || path == null) {
+							throw new IllegalArgumentException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
+						}
+					}
 				}
 			}
 
@@ -1187,6 +1214,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return path;
 		}
 
+		private Path<?> guessTransientManyOrOneToOnePath(String attribute) {
+			String property = "." + attribute;
+			String field = manyOrOneToOnes.stream().filter(manyOrOneToOne -> manyOrOneToOne.endsWith(property)).findAny().orElse(null);
+			return (field != null) ? (Path<?>) get(field) : null;
+		}
 	}
 
 	private static class Alias {
