@@ -27,7 +27,6 @@ import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
-import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
@@ -74,7 +73,10 @@ import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.Fetch;
+import javax.persistence.criteria.FetchParent;
 import javax.persistence.criteria.From;
+import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Order;
 import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Path;
@@ -1299,7 +1301,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 						path = path.get(attribute);
 					}
 					catch (IllegalArgumentException e) {
-						if (depth == 1) {
+						if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
 							path = guessTransientManyOrOneToOnePath(attribute);
 						}
 
@@ -1314,10 +1316,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return path;
 		}
 
+		private boolean isTransient(Class<?> type, String property) {
+			return true; // TODO implement?
+		}
+
 		private Path<?> guessTransientManyOrOneToOnePath(String attribute) {
-			String property = "." + attribute;
-			String field = manyOrOneToOnes.stream().filter(manyOrOneToOne -> manyOrOneToOne.endsWith(property)).findAny().orElse(null);
-			return (field != null) ? (Path<?>) get(field) : null;
+			for (String manyOrOneToOne : manyOrOneToOnes) {
+				try {
+					return (Path<?>) get(manyOrOneToOne + "." + attribute);
+				}
+				catch (IllegalArgumentException ignore) {
+					continue;
+				}
+			}
+
+			return null;
 		}
 	}
 
@@ -1445,14 +1458,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
-		Map<String, Path<?>> joins = new HashMap<>(from.getJoins().stream().collect(toMap(join -> join.getAttribute().getName())));
-		joins.putAll(from.getFetches().stream().filter(fetch -> fetch instanceof Path).collect(toMap(fetch -> fetch.getAttribute().getName(), fetch -> (Path<?>) fetch)));
+		Map<String, Path<?>> joins = new HashMap<>();
+		collectJoins(from, joins);
 
 		if (from instanceof EclipseLinkRoot) {
 			((EclipseLinkRoot<?>) from).getPostponedFetches().forEach(fetch -> joins.put(fetch, from.get(fetch)));
 		}
 
 		return joins;
+	}
+
+	private static void collectJoins(Path<?> path, Map<String, Path<?>> joins) {
+		if (path instanceof From) {
+			((From<?, ?>) path).getJoins().forEach(join -> collectJoins(join, joins));
+		}
+		if (path instanceof FetchParent) {
+			((FetchParent<?, ?>) path).getFetches().stream().filter(fetch -> fetch instanceof Path).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+		}
+		if (path instanceof Join) {
+			joins.put(((Join<?, ?>) path).getAttribute().getName(), path);
+		}
+		else if (path instanceof Fetch) {
+			joins.put(((Fetch<?, ?>) path).getAttribute().getName(), path);
+		}
 	}
 
 	private static <T> T noop() {
