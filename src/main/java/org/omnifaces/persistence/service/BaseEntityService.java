@@ -331,6 +331,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns the metamodel of given base entity.
+	 * @param <T> The generic type of the entity or a DTO subclass thereof.
+	 * @param entity Base entity to obtain metamodel for.
 	 * @return The metamodel of given base entity.
 	 */
 	@SuppressWarnings("unchecked")
@@ -1454,7 +1456,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private static boolean hasFetches(From<?, ?> from) {
 		return from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
-			|| (from instanceof EclipseLinkRoot && !((EclipseLinkRoot<?>) from).getPostponedFetches().isEmpty());
+			|| (from instanceof EclipseLinkRoot && ((EclipseLinkRoot<?>) from).hasPostponedFetches());
 	}
 
 	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
@@ -1462,7 +1464,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		collectJoins(from, joins);
 
 		if (from instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<?>) from).getPostponedFetches().forEach(fetch -> joins.put(fetch, from.get(fetch)));
+			((EclipseLinkRoot<?>) from).collectPostponedFetches(joins);
 		}
 
 		return joins;
