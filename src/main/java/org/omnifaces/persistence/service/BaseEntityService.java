@@ -760,11 +760,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
 			}
 
-			// NOTE: OpenJPA doesn't support 2nd level cache.
-
-			typedQuery
-				.setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
-				.setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
+			if (provider != OPENJPA) {
+				// OpenJPA doesn't support 2nd level cache.
+				typedQuery
+					.setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
+					.setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
+			}
 		};
 	}
 
@@ -1475,7 +1476,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			((From<?, ?>) path).getJoins().forEach(join -> collectJoins(join, joins));
 		}
 		if (path instanceof FetchParent) {
-			((FetchParent<?, ?>) path).getFetches().stream().filter(fetch -> fetch instanceof Path).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+			try {
+				((FetchParent<?, ?>) path).getFetches().stream().filter(fetch -> fetch instanceof Path).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+			}
+			catch (NullPointerException openJPAWillThrowThisOnEmptyFetches) {
+				// Ignore and continue.
+			}
 		}
 		if (path instanceof Join) {
 			joins.put(((Join<?, ?>) path).getAttribute().getName(), path);
