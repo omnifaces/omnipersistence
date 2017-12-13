@@ -12,7 +12,7 @@ import javax.persistence.metamodel.SingularAttribute;
 
 /**
  * This class adapts from {@link Join} to {@link Fetch}.
- * This is currently only used by OpenJPA as it doesn't internally consider a Join an instance of Fetch even though they share exactly the same methods.
+ * @see SubqueryRoot
  */
 class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {
 
@@ -44,34 +44,34 @@ class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {
 
 	@Override
 	public <Z> Fetch<Y, Z> fetch(SingularAttribute<? super Y, Z> attribute) {
-		return join.fetch(attribute);
+		return new JoinFetchAdapter<>(join.join(attribute));
 	}
 
 	@Override
 	public <Z> Fetch<Y, Z> fetch(SingularAttribute<? super Y, Z> attribute, JoinType jt) {
-		return join.fetch(attribute, jt);
+		return new JoinFetchAdapter<>(join.join(attribute, jt));
 	}
 
 	@Override
 	public <Z> Fetch<Y, Z> fetch(PluralAttribute<? super Y, ?, Z> attribute) {
-		return join.fetch(attribute);
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	public <Z> Fetch<Y, Z> fetch(PluralAttribute<? super Y, ?, Z> attribute, JoinType jt) {
-		return join.fetch(attribute, jt);
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return join.fetch(attributeName);
+		return new JoinFetchAdapter<>(join.join(attributeName));
 	}
 
 	@Override
 	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
-		return join.fetch(attributeName, jt);
+		return new JoinFetchAdapter<>(join.join(attributeName, jt));
 	}
 
 }

@@ -1,15 +1,19 @@
 package org.omnifaces.persistence.service;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
+import javax.persistence.Query;
 import javax.persistence.criteria.Fetch;
+import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Root;
 
 /**
  * EclipseLink stubbornly refuses to perform a join when a range (offset/limit) is fetched, resulting in cartesian products.
  * This root will postpone all issued fetches so BaseEntityService can ultimately set them as an EclipseLink-specific query hint.
  * The only disadvantage is that you cannot anymore sort on them when used in a lazy model. This is a technical limitation.
+ * @see PostponedFetch
  */
 class EclipseLinkRoot<X> extends RootWrapper<X> {
 
@@ -23,12 +27,27 @@ class EclipseLinkRoot<X> extends RootWrapper<X> {
 	@Override
 	@SuppressWarnings({ "unchecked", "hiding" })
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		postponedFetches.add(attributeName);
-		return null;
+		return new PostponedFetch<>(postponedFetches, attributeName);
 	}
 
-	public Set<String> getPostponedFetches() {
-		return postponedFetches;
+	public boolean hasPostponedFetches() {
+		return !postponedFetches.isEmpty();
+	}
+
+	public void runPostponedFetches(Query query) {
+		postponedFetches.forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
+	}
+
+	public void collectPostponedFetches(Map<String, Path<?>> paths) {
+		postponedFetches.forEach(fetch -> {
+			Path<?> path = null;
+
+			for (String attribute : fetch.split("\\.")) {
+				path = (path == null ? this : path).get(attribute);
+			}
+
+			paths.put(fetch, path);
+		});
 	}
 
 }

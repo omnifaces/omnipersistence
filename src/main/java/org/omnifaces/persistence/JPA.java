@@ -19,6 +19,11 @@ import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +37,7 @@ import javax.persistence.NoResultException;
 import javax.persistence.NonUniqueResultException;
 import javax.persistence.Query;
 import javax.persistence.TypedQuery;
+import javax.persistence.ValidationMode;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
@@ -55,15 +61,31 @@ public final class JPA {
 
 	// Public constants -------------------------------------------------------------------------------------------------------------------
 
-	public static final String LOAD_GRAPH_HINT_KEY = "javax.persistence.loadgraph";
-	public static final String FETCH_GRAPH_HINT_KEY = "javax.persistence.fetchgraph";
-	public static final String CACHE_RETRIEVE_MODE_HINT_KEY = "javax.persistence.cache.retrieveMode";
+	public static final String QUERY_HINT_LOAD_GRAPH = "javax.persistence.loadgraph";
+	public static final String QUERY_HINT_FETCH_GRAPH = "javax.persistence.fetchgraph";
+	public static final String QUERY_HINT_CACHE_STORE_MODE = "javax.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
+	public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "javax.persistence.cache.retrieveMode"; // USE | BYPASS
+	public static final String PROPERTY_VALIDATION_MODE = "javax.persistence.validation.mode"; // AUTO | CALLBACK | NONE
 
 
 	// Constructors -----------------------------------------------------------------------------------------------------------------------
 
 	private JPA() {
 		throw new AssertionError();
+	}
+
+
+	// Configuration utils ----------------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Returns the currently configured bean validation mode for given entity manager.
+	 * This consults the {@value #PROPERTY_VALIDATION_MODE} property in <code>persistence.xml</code>.
+	 * @param entityManager The involved entity manager.
+	 * @return The currently configured bean validation mode.
+	 */
+	public static ValidationMode getValidationMode(EntityManager entityManager) {
+		Object validationMode = entityManager.getEntityManagerFactory().getProperties().get(PROPERTY_VALIDATION_MODE);
+		return validationMode != null ? ValidationMode.valueOf(validationMode.toString().toUpperCase()) : ValidationMode.AUTO;
 	}
 
 
@@ -301,17 +323,42 @@ public final class JPA {
 	 */
 	@SuppressWarnings("unchecked")
 	public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
-		boolean numeric = Number.class.isAssignableFrom(expression.getJavaType());
-
-		if (!numeric || Provider.is(HIBERNATE)) { // EclipseLink and OpenJPA have a broken Path#as() implementation, need to delegate to DB specific function.
+		if (Provider.is(HIBERNATE)) {
 			return expression.as(String.class);
 		}
-		else if (Database.is(POSTGRESQL)) {
-			return builder.function("TO_CHAR", String.class, expression, builder.literal("FM999999999999999999"));
+
+		// EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
+
+		// PostgreSQL is quite strict in string casting, it has to be performed explicitly.
+		if (Database.is(POSTGRESQL)) {
+			String pattern = null;
+
+			if (Number.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
+			}
+			else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "YYYY-MM-DD";
+			}
+			else if (LocalTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "HH24:MI:SS";
+			}
+			else if (LocalDateTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "YYYY-MM-DD'T'HH24:MI:SS'Z'"; // NOTE: PostgreSQL uses ISO_INSTANT instead of ISO_LOCAL_DATE_TIME.
+			}
+			else if (OffsetTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "HH24:MI:SS-OF";
+			}
+			else if (OffsetDateTime.class.isAssignableFrom(expression.getJavaType())) {
+				pattern = "YYYY-MM-DD'T'HH24:MI:SS-OF";
+			}
+
+			if (pattern != null) {
+				return builder.function("TO_CHAR", String.class, expression, builder.literal(pattern));
+			}
 		}
-		else { // H2 and MySQL are more lenient in this, no function call necessary.
-			return (Expression<String>) expression;
-		}
+
+		// H2 and MySQL are more lenient in this, they can do implicit casting with sane defaults, so no custom function call necessary.
+		return (Expression<String>) expression;
 	}
 
 }
