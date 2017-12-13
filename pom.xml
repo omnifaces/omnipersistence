@@ -9,7 +9,7 @@
 
 	<groupId>org.omnifaces</groupId>
 	<artifactId>omnipersistence</artifactId>
-	<version>0.5</version>
+	<version>0.6-SNAPSHOT</version>
 
 	<name>OmniPersistence</name>
 	<description>Utilities for JPA, JDBC and DataSources</description>
