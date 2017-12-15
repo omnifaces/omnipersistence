@@ -80,11 +80,11 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	}
 
 	/**
-	 * The default format is <code>ClassName[id={id}]</code>.
+	 * The default format is <code>ClassName[{id}]</code> where <code>{id}</code> defaults to <code>@hashcode</code> when null.
 	 */
 	@Override
 	public String toString() {
-		return String.format("%s[id=%d]", getClass().getSimpleName(), getId());
+		return String.format("%s[%s]", getClass().getSimpleName(), (getId() != null) ? getId() : ("@" + hashCode()));
 	}
 
 }
