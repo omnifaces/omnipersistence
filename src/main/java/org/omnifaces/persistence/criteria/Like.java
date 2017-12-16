@@ -1,10 +1,16 @@
 package org.omnifaces.persistence.criteria;
 
+import static java.util.stream.Collectors.toSet;
 import static org.omnifaces.persistence.JPA.castAsString;
+import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
+
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 
 /**
@@ -53,10 +59,19 @@ public final class Like extends Criteria<String> {
 
 	@Override
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		boolean lowercaseable = !Number.class.isAssignableFrom(path.getJavaType());
-		String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
-		Expression<String> pathAsString = castAsString(criteriaBuilder, path);
-		return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+		Class<?> type = path.getJavaType();
+
+		if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
+			Object[] values = type.getEnumConstants();
+			Set<Integer> matchingOrdinals = IntStream.range(0, values.length).filter(i -> applies(values[i])).boxed().collect(toSet());
+			return path.in(matchingOrdinals);
+		}
+		else {
+			boolean lowercaseable = !Number.class.isAssignableFrom(type);
+			String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
+			Expression<String> pathAsString = castAsString(criteriaBuilder, path);
+			return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+		}
 	}
 
 	@Override

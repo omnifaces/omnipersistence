@@ -19,6 +19,8 @@ import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
+import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Member;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -33,6 +35,8 @@ import java.util.stream.Stream;
 
 import javax.enterprise.inject.Typed;
 import javax.persistence.EntityManager;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.NoResultException;
 import javax.persistence.NonUniqueResultException;
 import javax.persistence.Query;
@@ -42,8 +46,10 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Join;
+import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Root;
 import javax.persistence.metamodel.Attribute;
+import javax.persistence.metamodel.Bindable;
 import javax.persistence.metamodel.CollectionAttribute;
 import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.ListAttribute;
@@ -359,6 +365,29 @@ public final class JPA {
 
 		// H2 and MySQL are more lenient in this, they can do implicit casting with sane defaults, so no custom function call necessary.
 		return (Expression<String>) expression;
+	}
+
+	/**
+	 * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
+	 * @param path Path of interest.
+	 * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
+	 */
+	public static boolean isEnumeratedByOrdinal(Path<?> path) {
+		Bindable<?> model = path.getModel();
+
+		if (model instanceof Attribute) {
+			Member member = ((Attribute<?, ?>) model).getJavaMember();
+
+			if (member instanceof AnnotatedElement) {
+				Enumerated enumerated = ((AnnotatedElement) member).getAnnotation(Enumerated.class);
+
+				if (enumerated != null) {
+					return enumerated.value() == EnumType.ORDINAL;
+				}
+			}
+		}
+
+		return false;
 	}
 
 }
