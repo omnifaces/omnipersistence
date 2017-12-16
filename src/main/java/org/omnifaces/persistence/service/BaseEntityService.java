@@ -208,7 +208,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * The postconstruct initializes the element and one-to-many collections.
+	 * The postconstruct initializes the properties dependent on entity manager.
 	 */
 	@PostConstruct
 	private void initWithEntityManager() {
