@@ -40,10 +40,10 @@ class EclipseLinkRoot<X> extends RootWrapper<X> {
 
 	public void collectPostponedFetches(Map<String, Path<?>> paths) {
 		postponedFetches.forEach(fetch -> {
-			Path<?> path = null;
+			Path<?> path = this;
 
 			for (String attribute : fetch.split("\\.")) {
-				path = (path == null ? this : path).get(attribute);
+				path = path.get(attribute);
 			}
 
 			paths.put(fetch, path);
