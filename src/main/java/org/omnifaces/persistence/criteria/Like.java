@@ -6,6 +6,8 @@ import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.Objects;
+import java.util.Set;
+
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Path;
@@ -60,7 +62,8 @@ public final class Like extends Criteria<String> {
 		Class<?> type = path.getJavaType();
 
 		if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
-			return path.in(stream(type.getEnumConstants()).filter(this::applies).collect(toSet()));
+			Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
+			return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), 1) : path.in(matches);
 		}
 		else {
 			boolean lowercaseable = !Number.class.isAssignableFrom(type);
