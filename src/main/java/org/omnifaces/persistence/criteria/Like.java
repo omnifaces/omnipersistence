@@ -3,11 +3,9 @@ package org.omnifaces.persistence.criteria;
 import static java.util.stream.Collectors.toSet;
 import static org.omnifaces.persistence.JPA.castAsString;
 import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
+import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.IntStream;
-
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Path;
@@ -62,9 +60,7 @@ public final class Like extends Criteria<String> {
 		Class<?> type = path.getJavaType();
 
 		if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
-			Object[] values = type.getEnumConstants();
-			Set<Integer> matchingOrdinals = IntStream.range(0, values.length).filter(i -> applies(values[i])).boxed().collect(toSet());
-			return path.in(matchingOrdinals);
+			return path.in(stream(type.getEnumConstants()).filter(this::applies).collect(toSet()));
 		}
 		else {
 			boolean lowercaseable = !Number.class.isAssignableFrom(type);
