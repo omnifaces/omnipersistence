@@ -48,12 +48,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	}
 
 	/**
-	 * Hashes by default the classname and ID.
+	 * Hashes by default the ID.
 	 */
 	@Override
     public int hashCode() {
         return (getId() != null)
-        	? Objects.hash(getClass().getSimpleName(), getId())
+        	? Objects.hash(getId())
         	: super.hashCode();
     }
 
@@ -62,7 +62,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
 	@Override
     public boolean equals(Object other) {
-        return (other != null && getId() != null && other.getClass().isAssignableFrom(getClass()) && getClass().isAssignableFrom(other.getClass()))
+        return (getId() != null && getClass().isInstance(other) && other.getClass().isInstance(this))
             ? getId().equals(((BaseEntity<?>) other).getId())
             : (other == this);
     }
