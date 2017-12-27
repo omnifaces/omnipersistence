@@ -25,14 +25,12 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGI
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
+import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -175,10 +173,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
 		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
 
-	private static final Map<Class<?>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
+	@SuppressWarnings("rawtypes")
+	private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
@@ -216,88 +215,59 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		database = Database.of(getEntityManager());
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
 		manyOrOneToOnes = MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
-		oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping)
-			.stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
+		oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping).stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
 
 		if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
 			validator = CDI.current().select(Validator.class).get();
 		}
 	}
 
-	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<?> type) {
-		Type actualType = type.getGenericSuperclass();
-		Map<TypeVariable<?>, Type> typeMapping = new HashMap<>();
-
-		while (!(actualType instanceof ParameterizedType) || !BaseEntityService.class.equals(((ParameterizedType) actualType).getRawType())) {
-			if (actualType instanceof ParameterizedType) {
-				Class<?> rawType = (Class<?>) ((ParameterizedType) actualType).getRawType();
-				TypeVariable<?>[] typeParameters = rawType.getTypeParameters();
-
-				for (int i = 0; i < typeParameters.length; i++) {
-					Type typeArgument = ((ParameterizedType) actualType).getActualTypeArguments()[i];
-					typeMapping.put(typeParameters[i], typeArgument instanceof TypeVariable ? typeMapping.get(typeArgument) : typeArgument);
-				}
-
-				actualType = rawType;
-			}
-
-			actualType = ((Class<?>) actualType).getGenericSuperclass();
-		}
-
-		Class<?> identifierType = getActualTypeArgument(actualType, 0, typeMapping);
-		Class<?> entityType = getActualTypeArgument(actualType, 1, typeMapping);
-		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, type, identifierType, entityType));
+	@SuppressWarnings("rawtypes")
+	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<? extends BaseEntityService> subclass) {
+		List<Class<?>> actualTypeArguments = getActualTypeArguments(subclass, BaseEntityService.class);
+		Class<?> identifierType = actualTypeArguments.get(0);
+		Class<?> entityType = actualTypeArguments.get(1);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, subclass, identifierType, entityType));
 		return new SimpleEntry<>(identifierType, entityType);
 	}
 
-	private static Class<?> getActualTypeArgument(Type type, int index, Map<TypeVariable<?>, Type> typeMapping) {
-		Type actualTypeArgument = ((ParameterizedType) type).getActualTypeArguments()[index];
-
-		if (actualTypeArgument instanceof TypeVariable) {
-			actualTypeArgument = typeMapping.get(actualTypeArgument);
-		}
-
-		return (Class<?>) actualTypeArgument;
-	}
-
-	private Set<String> computeElementCollectionMapping(Class<?> type) {
-		Set<String> elementCollectionMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isElementCollection);
-		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, type, elementCollectionMapping));
+	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
+		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isElementCollection);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
 		return elementCollectionMapping;
 	}
 
-	private Set<String> computeManyOrOneToOneMapping(Class<?> type) {
-		Set<String> manyOrOneToOneMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isManyOrOneToOne);
-		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, type, manyOrOneToOneMapping));
+	private Set<String> computeManyOrOneToOneMapping(Class<? extends BaseEntity<?>> entityType) {
+		Set<String> manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isManyOrOneToOne);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, manyOrOneToOneMapping));
 		return manyOrOneToOneMapping;
 	}
 
-	private Set<String> computeOneToManyMapping(Class<?> type) {
-		Set<String> oneToManyMapping = computeCollectionMapping(type, "", new HashSet<>(), provider::isOneToMany);
-		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, type, oneToManyMapping));
+	private Set<String> computeOneToManyMapping(Class<? extends BaseEntity<?>> entityType) {
+		Set<String> oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isOneToMany);
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, entityType, oneToManyMapping));
 		return oneToManyMapping;
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private Set<String> computeCollectionMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
-		Set<String> collectionMapping = new HashSet<>(1);
+	private Set<String> computeEntityMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
+		Set<String> entityMapping = new HashSet<>(2);
 		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
 
 		for (Attribute<?, ?> attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
-				collectionMapping.add(basePath + attribute.getName());
+				entityMapping.add(basePath + attribute.getName());
 			}
 
 			if (attribute instanceof Bindable) {
 				Class<?> nestedType = ((Bindable<?>) attribute).getBindableJavaType();
 
 				if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
-					collectionMapping.addAll(computeCollectionMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
+					entityMapping.addAll(computeEntityMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
 				}
 			}
 		}
 
-		return unmodifiableSet(collectionMapping);
+		return unmodifiableSet(entityMapping);
 	}
 
 
@@ -1305,7 +1275,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 					}
 					catch (IllegalArgumentException e) {
 						if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
-							path = guessTransientManyOrOneToOnePath(attribute);
+							path = guessManyOrOneToOnePath(attribute);
 						}
 
 						if (depth != 1 || path == null) {
@@ -1323,7 +1293,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return true; // TODO implement?
 		}
 
-		private Path<?> guessTransientManyOrOneToOnePath(String attribute) {
+		private Path<?> guessManyOrOneToOnePath(String attribute) {
 			for (String manyOrOneToOne : manyOrOneToOnes) {
 				try {
 					return (Path<?>) get(manyOrOneToOne + "." + attribute);
