@@ -115,9 +115,7 @@ public abstract class Criteria<T> {
 
 	@Override
 	public boolean equals(Object object) {
-		return object != null
-			&& getClass().isAssignableFrom(object.getClass())
-			&& (object == this || (Objects.equals(value, ((Criteria<?>) object).value)));
+		return getClass().isInstance(object) && (object == this || (Objects.equals(value, ((Criteria<?>) object).value)));
 	}
 
 	@Override
