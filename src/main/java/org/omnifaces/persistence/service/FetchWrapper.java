@@ -25,56 +25,60 @@ public class FetchWrapper<Z, X> implements Fetch<Z, X> {
 		this.wrapped = wrapped;
 	}
 
+	public Fetch<Z, X> getWrapped() {
+		return wrapped;
+	}
+
 	@Override
 	public Attribute<? super Z, ?> getAttribute() {
-		return wrapped.getAttribute();
+		return getWrapped().getAttribute();
 	}
 
 	@Override
 	public Set<Fetch<X, ?>> getFetches() {
-		return wrapped.getFetches();
+		return getWrapped().getFetches();
 	}
 
 	@Override
 	public FetchParent<?, Z> getParent() {
-		return wrapped.getParent();
+		return getWrapped().getParent();
 	}
 
 	@Override
 	public JoinType getJoinType() {
-		return wrapped.getJoinType();
+		return getWrapped().getJoinType();
 	}
 
 	@Override
 	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
-		return wrapped.fetch(attribute);
+		return getWrapped().fetch(attribute);
 	}
 
 	@Override
 	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType jt) {
-		return wrapped.fetch(attribute, jt);
+		return getWrapped().fetch(attribute, jt);
 	}
 
 	@Override
 	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
-		return wrapped.fetch(attribute);
+		return getWrapped().fetch(attribute);
 	}
 
 	@Override
 	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType jt) {
-		return wrapped.fetch(attribute, jt);
+		return getWrapped().fetch(attribute, jt);
 	}
 
 	@Override
 	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return wrapped.fetch(attributeName);
+		return getWrapped().fetch(attributeName);
 	}
 
 	@Override
 	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
-		return wrapped.fetch(attributeName, jt);
+		return getWrapped().fetch(attributeName, jt);
 	}
 
 }
