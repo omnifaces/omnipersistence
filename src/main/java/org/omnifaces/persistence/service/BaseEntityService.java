@@ -1054,7 +1054,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (restriction != null) {
-			query.distinct(hasFetches((From<?, ?>) pathResolver.get(null))).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
+			boolean distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null));
+			query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
