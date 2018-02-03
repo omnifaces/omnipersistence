@@ -75,7 +75,7 @@ public final class Like extends Criteria<String> {
 
 		if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
 			Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
-			return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), 1) : path.in(matches);
+			return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1)) : path.in(parameterBuilder.create(matches));
 		}
 		else {
 			boolean lowercaseable = !Number.class.isAssignableFrom(type);
