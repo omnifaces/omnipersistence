@@ -20,7 +20,7 @@ import javax.persistence.Transient;
  * @author Bauke Scholtz
  */
 @MappedSuperclass
-public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> implements Timestamped {
+public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends BaseAutoIdEntity<I> implements Timestamped {
 
 	private static final long serialVersionUID = 1L;
 
