@@ -29,10 +29,11 @@ import javax.persistence.Transient;
  * On pre persist, the both columns will be set to current timestamp.
  * On pre update, the "lastModified" column will be set to current timestamp, unless {@link #skipAdjustLastModified()} is called beforehand.
  *
+ * @param <I> The generic ID type.
  * @author Bauke Scholtz
  */
 @MappedSuperclass
-public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> implements Timestamped {
+public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends GeneratedIdEntity<I> implements Timestamped {
 
 	private static final long serialVersionUID = 1L;
 

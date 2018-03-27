@@ -24,6 +24,7 @@ import javax.persistence.Version;
  * On pre persist, JPA will automatically set version to 0.
  * On pre update, JPA will automatically increment version with 1.
  *
+ * @param <I> The generic ID type.
  * @author Bauke Scholtz
  */
 @MappedSuperclass
