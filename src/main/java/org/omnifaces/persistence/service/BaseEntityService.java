@@ -37,6 +37,7 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGI
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
+import static org.omnifaces.utils.reflect.Reflections.findAnnotatedField;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.map;
@@ -71,6 +72,8 @@ import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
+import javax.persistence.GeneratedValue;
+import javax.persistence.Id;
 import javax.persistence.ManyToOne;
 import javax.persistence.NamedQuery;
 import javax.persistence.OneToMany;
@@ -115,6 +118,7 @@ import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.TimestampedEntity;
 import org.omnifaces.persistence.model.VersionedEntity;
@@ -131,6 +135,7 @@ import org.omnifaces.utils.reflect.Getter;
  * You only need to let your entities extend from one of the following mapped super classes:
  * <ul>
  * <li>{@link BaseEntity}
+ * <li>{@link GeneratedIdEntity}
  * <li>{@link TimestampedEntity}
  * <li>{@link VersionedEntity}
  * </ul>
@@ -187,12 +192,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@SuppressWarnings("rawtypes")
 	private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends BaseEntity<?>>, Boolean> GENERATED_ID_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
+	private final boolean generatedId;
 
 	private Provider provider;
 	private Database database;
@@ -216,6 +223,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Entry<Class<?>, Class<?>> typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
 		identifierType = (Class<I>) typeMapping.getKey();
 		entityType = (Class<E>) typeMapping.getValue();
+		generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
 	}
 
 	/**
@@ -241,6 +249,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Class<?> entityType = actualTypeArguments.get(1);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, subclass, identifierType, entityType));
 		return new SimpleEntry<>(identifierType, entityType);
+	}
+
+	private static boolean computeGeneratedIdMapping(Class<?> entityType) {
+		return GeneratedIdEntity.class.isAssignableFrom(entityType) || findAnnotatedField(entityType, Id.class, GeneratedValue.class).isPresent();
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
@@ -390,22 +402,41 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Check whether given entity exists.
+	 * @param entity Entity to check.
+	 * @return Whether entity with given entity exists.
+	 */
+	protected boolean exists(E entity) {
+		return entity.getId() != null && getEntityManager()
+			.createQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id", Long.class)
+			.setParameter("id", entity.getId())
+			.getSingleResult().intValue() > 0;
+	}
+
+	/**
 	 * Get all entities. The default ordering is by ID, descending.
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return getEntityManager().createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType).getResultList();
+		return getEntityManager()
+			.createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType)
+			.getResultList();
 	}
 
 	/**
 	 * Persist given entity. Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
 	 * @return Entity ID.
-	 * @throws IllegalEntityStateException When entity has an ID.
+	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
 	 */
 	public I persist(E entity) {
 		if (entity.getId() != null) {
-			throw new IllegalEntityStateException(entity, "Entity has an ID. Use update() instead.");
+			if (generatedId || exists(entity)) {
+				throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
+			}
+		}
+		else if (!generatedId) {
+			throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
 		}
 
 		try {
@@ -427,11 +458,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * beyond the scope of this method.
 	 * @param entity Entity to update.
 	 * @return Updated entity.
-	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
 	 */
 	public E update(E entity) {
 		if (entity.getId() == null) {
-			throw new IllegalEntityStateException(entity, "Entity has no ID. Use persist() instead.");
+			if (generatedId || !exists(entity)) {
+				throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
+			}
+			else {
+				throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
+			}
 		}
 
 		if (validator != null) {
@@ -470,8 +506,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
 	 * @param entity Entity to save.
 	 * @return Saved entity.
+	 * @throws IllegalEntityStateException When ID of entity is not generated.
 	 */
 	public E save(E entity) {
+		if (!generatedId) {
+			throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually invoke either persist() or update().");
+		}
+
 		if (entity.getId() == null) {
 			persist(entity);
 			return entity;

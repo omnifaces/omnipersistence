@@ -41,12 +41,6 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
 	private static final long serialVersionUID = 1L;
 
-	@Override
-	public abstract I getId();
-
-	@Override
-	public abstract void setId(I id);
-
 	/**
 	 * Hashes by default the ID.
 	 */
