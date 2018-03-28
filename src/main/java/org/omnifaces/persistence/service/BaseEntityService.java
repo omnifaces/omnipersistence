@@ -553,6 +553,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		getEntityManager().remove(manage(entity));
+		entity.setId(null);
 	}
 
 	/**
