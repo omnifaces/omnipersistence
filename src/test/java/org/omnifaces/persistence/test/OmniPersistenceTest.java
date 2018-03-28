@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test;
 
+import static java.lang.System.getProperty;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -23,7 +24,6 @@ import javax.ejb.EJB;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -48,9 +48,9 @@ public class OmniPersistenceTest {
 			.addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
 			.addAsWebInfResource("web.xml")
 			.addAsResource("META-INF/persistence.xml")
-			.addAsLibrary(ShrinkWrap.create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
+			.addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
 			.addAsLibraries(maven.loadPomFromFile("pom.xml").importRuntimeDependencies().resolve().withTransitivity().asFile())
-			.addAsLibraries(maven.resolve("com.h2database:h2:1.4.197").withTransitivity().asFile());
+			.addAsLibraries(maven.resolve("com.h2database:h2:" + getProperty("test.h2.version")).withTransitivity().asFile());
 	}
 
 	@EJB
