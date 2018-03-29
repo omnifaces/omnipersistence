@@ -14,7 +14,6 @@ package org.omnifaces.persistence.test.service;
 
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.concat;
-import static org.omnifaces.persistence.Provider.HIBERNATE;
 
 import java.util.LinkedHashMap;
 
@@ -60,13 +59,7 @@ public class PersonService extends BaseEntityService<Long, Person> {
 			LinkedHashMap<Getter<PersonCard>, Expression<?>> mapping = new LinkedHashMap<>();
 			mapping.put(PersonCard::getId, person.get("id"));
 			mapping.put(PersonCard::getEmail, person.get("email"));
-
-			if (getProvider() == HIBERNATE) {
-				mapping.put(PersonCard::getAddressString, personAddress.get("string")); // address.string uses Hibernate specific @Formula, so no need for manual concat().
-			}
-			else {
-				mapping.put(PersonCard::getAddressString, concat(builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ", personAddress.get("city"), ", ", personAddress.get("country")));
-			}
+			mapping.put(PersonCard::getAddressString, concat(builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ", personAddress.get("city"), ", ", personAddress.get("country")));
 
 			if (getDatabase() == POSTGRESQL) { // Doesn't hurt on other DBs but makes query unnecessarily bloated.
 				query.groupBy(personAddress);
