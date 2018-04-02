@@ -12,7 +12,6 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.concat;
 
 import java.util.LinkedHashMap;
@@ -34,21 +33,15 @@ import org.omnifaces.utils.reflect.Getter;
 public class PersonService extends BaseEntityService<Long, Person> {
 
 	public PartialResultList<Person> getPageWithAddress(Page page, boolean count) {
-		return getPage(page, count, (builder, query, person) -> {
-			person.fetch("address");
-		});
+		return getPage(page, count, "address");
 	}
 
 	public PartialResultList<Person> getPageWithPhones(Page page, boolean count) {
-		return getPage(page, count, (builder, query, person) -> {
-			person.fetch("phones");
-		});
+		return getPage(page, count, "phones");
 	}
 
 	public PartialResultList<Person> getPageWithGroups(Page page, boolean count) {
-		return getPage(page, count, (builder, query, person) -> {
-			person.fetch("groups");
-		});
+		return getPage(page, count, "groups");
 	}
 
 	public PartialResultList<PersonCard> getPageOfPersonCards(Page page, boolean count) {
@@ -60,13 +53,9 @@ public class PersonService extends BaseEntityService<Long, Person> {
 			mapping.put(PersonCard::getId, person.get("id"));
 			mapping.put(PersonCard::getEmail, person.get("email"));
 			mapping.put(PersonCard::getAddressString, concat(builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ", personAddress.get("city"), ", ", personAddress.get("country")));
-
-			if (getDatabase() == POSTGRESQL) { // Doesn't hurt on other DBs but makes query unnecessarily bloated.
-				query.groupBy(personAddress);
-			}
-
 			mapping.put(PersonCard::getTotalPhones, builder.count(personPhones));
 
+			query.groupBy(personAddress);
 			return mapping;
 		});
 	}

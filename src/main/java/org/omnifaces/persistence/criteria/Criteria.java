@@ -24,7 +24,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * This is used by {@link Page} and {@link BaseEntityService#getPage(Page, boolean)}. It defines a set of criteria
+ * This is used by {@link Page} and {@link BaseEntityService#getPage(Page, boolean, String...)}. It defines a set of criteria
  * which could be supplied as value of "required criteria" and "optional criteria" maps.
  * <p>
  * There are so far the following criteria:

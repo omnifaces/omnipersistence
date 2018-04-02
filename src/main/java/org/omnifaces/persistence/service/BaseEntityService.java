@@ -16,6 +16,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableSet;
+import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
 import static java.util.logging.Level.WARNING;
@@ -144,7 +145,7 @@ import org.omnifaces.utils.reflect.Getter;
  * <p>
  * {@link BaseEntityService} uses JULI {@link Logger} for logging.
  * <ul>
- * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
+ * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean, String...)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
  * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
  * internally used in order to be able to build proper queries to perform a search inside those fields.
@@ -155,7 +156,7 @@ import org.omnifaces.utils.reflect.Getter;
  * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
- * @param <I> The generic ID type, usually {@link Long}.
+ * @param <I> The generic ID type.
  * @param <E> The generic base entity type.
  * @see BaseEntity
  * @see Page
@@ -169,6 +170,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
 	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
+	private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
@@ -252,7 +254,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean computeGeneratedIdMapping(Class<?> entityType) {
-		return GeneratedIdEntity.class.isAssignableFrom(entityType) || findAnnotatedField(entityType, Id.class, GeneratedValue.class).isPresent();
+		boolean generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || findAnnotatedField(entityType, Id.class, GeneratedValue.class).isPresent();
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_GENERATED_ID_MAPPING, entityType, generatedId));
+		return generatedId;
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
@@ -298,8 +302,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Standard actions -----------------------------------------------------------------------------------------------
 
 	/**
-	 * Returns the JPA provider being used. Normally, you don't need to override this. This is automatically determined
-	 * based on {@link #getEntityManager()}.
+	 * Returns the JPA provider being used. This is immutable (you can't override the method to change the value).
 	 * @return The JPA provider being used.
 	 */
 	public Provider getProvider() {
@@ -307,12 +310,35 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the SQL database being used. Normally, you don't need to override this. This is automatically determined
-	 * based on {@link #getEntityManager()}.
+	 * Returns the SQL database being used. This is immutable (you can't override the method to change the value).
 	 * @return The SQL database being used.
 	 */
 	public Database getDatabase() {
 		return database;
+	}
+
+	/**
+	 * Returns the actual type of the generic ID type <code>I</code>. This is immutable (you can't override the method to change the value).
+	 * @return The actual type of the generic ID type <code>I</code>.
+	 */
+	protected Class<I> getIdentifierType() {
+		return identifierType;
+	}
+
+	/**
+	 * Returns the actual type of the generic base entity type <code>E</code>. This is immutable (you can't override the method to change the value).
+	 * @return The actual type of the generic base entity type <code>E</code>.
+	 */
+	protected Class<E> getEntityType() {
+		return entityType;
+	}
+
+	/**
+	 * Returns whether the ID is generated. This is immutable (you can't override the method to change the value).
+	 * @return Whether the ID is generated.
+	 */
+	protected boolean isGeneratedId() {
+		return generatedId;
 	}
 
 	/**
@@ -325,13 +351,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns the metamodel of given base entity.
-	 * @param <T> The generic type of the entity or a DTO subclass thereof.
+	 * @param <I> The generic ID type of the given base entity.
+	 * @param <E> The generic base entity type of the given base entity.
 	 * @param entity Base entity to obtain metamodel for.
 	 * @return The metamodel of given base entity.
 	 */
-	@SuppressWarnings("unchecked")
-	public <T extends Comparable<T> & Serializable> EntityType<BaseEntity<T>> getMetamodel(BaseEntity<T> entity) {
-		return getEntityManager().getMetamodel().entity((Class<BaseEntity<T>>) entity.getClass());
+	@SuppressWarnings({ "unchecked", "hiding" })
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> EntityType<E> getMetamodel(E entity) {
+		return getEntityManager().getMetamodel().entity((Class<E>) entity.getClass());
 	}
 
 	/**
@@ -384,6 +411,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Find entity by given query and parameters.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters To put the query parameters in.
+	 * @return Found entity matching given query and parameters, if any.
+	 * @throws IllegalArgumentException When more than one entity is found matching given query and parameters.
+	 */
+	protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
+		List<E> results = getList(jpql, parameters);
+
+		if (results.isEmpty()) {
+			return Optional.empty();
+		}
+		else if (results.size() == 1) {
+			return Optional.of(results.get(0));
+		}
+		else {
+			throw new IllegalArgumentException("More than one match found.");
+		}
+	}
+
+	/**
 	 * Find entity by given ID.
 	 * @param id Entity ID to find entity for.
 	 * @return Found entity, if any.
@@ -414,13 +462,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Get all entities matching the given query and query parameters.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters To put the query parameters in.
+	 * @return All entities matching the given query and query parameters.
+	 */
+	protected List<E> getList(String jpql, Consumer<Map<String, Object>> parameters) {
+		return createQuery(jpql, parameters).getResultList();
+	}
+
+	private TypedQuery<E> createQuery(String jpql, Consumer<Map<String, Object>> parameters) {
+		Map<String, Object> params = new HashMap<>();
+		parameters.accept(params);
+		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
+		params.entrySet().forEach(param -> query.setParameter(param.getKey(), param.getValue()));
+		return query;
+	}
+
+	/**
 	 * Get all entities. The default ordering is by ID, descending.
 	 * @return All entities.
 	 */
 	public List<E> getAll() {
-		return getEntityManager()
-			.createQuery("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", entityType)
-			.getResultList();
+		return getList("SELECT e FROM " + entityType.getSimpleName() + " e ORDER BY e.id DESC", p -> noop());
 	}
 
 	/**
@@ -480,6 +544,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return getEntityManager().merge(entity);
 	}
 
+	/**
+	 * Update given entity via {@link #update(BaseEntity)} and immediately perform a flush so that all changes in
+	 * managed entities so far in the current transaction are persisted. This is particularly useful when you intend
+	 * to process the given entity further in an asynchronous service method.
+	 * @param entity Entity to update.
+	 * @return Updated entity.
+	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
+	 */
+	protected E updateAndFlush(E entity) {
+		E updatedEntity = update(entity);
+		getEntityManager().flush();
+		return updatedEntity;
+	}
+
 	private void logConstraintViolations(Set<? extends ConstraintViolation<?>> constraintViolations) {
 		constraintViolations.forEach(violation -> {
 			String constraintName = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
@@ -502,7 +580,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Save given entity. This will automatically determine based on presence of entity ID whether to
+	 * Update or delete all entities matching the given query and query parameters.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters To put the query parameters in.
+	 * @return The number of entities updated or deleted.
+	 * @see Query#executeUpdate()
+	 */
+	protected int update(String jpql, Consumer<Map<String, Object>> parameters) {
+		return createQuery(jpql, parameters).executeUpdate();
+	}
+
+	/**
+	 * Save given entity. This will automatically determine based on presence of generated entity ID whether to
 	 * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
 	 * @param entity Entity to save.
 	 * @return Saved entity.
@@ -537,7 +626,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getMetamodel(entity).getAttributes().forEach(a -> map(a.getJavaMember(), managed, entity)); // Note: EntityManager#refresh() is insuitable as it requires a managed entity.
+		getMetamodel(entity).getAttributes().forEach(attribute -> map(attribute.getJavaMember(), managed, entity));
+		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before refreshing.
 	}
 
 	/**
@@ -620,6 +710,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Fetch lazy collections of given optional entity on given getters. If no getters are supplied, then it will fetch
+	 * every single {@link PluralAttribute} not of type {@link CollectionType#MAP}.
+	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * @param entity Optional entity instance to fetch lazy collections on.
+	 * @param getters Getters of those lazy collections.
+	 * @return The same optional entity, useful if you want to continue using it immediately.
+	 */
+	@SuppressWarnings("unchecked")
+	protected Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
+		return ofNullable(entity.isPresent() ? fetchLazyCollections(entity.get(), getters) : null);
+	}
+
+	/**
 	 * Fetch lazy maps of given entity on given getters. If no getters are supplied, then it will fetch every single
 	 * {@link PluralAttribute} of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
@@ -632,20 +735,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return fetchPluralAttributes(entity, type -> type == MAP, getters);
 	}
 
+	/**
+	 * Fetch lazy maps of given optional entity on given getters. If no getters are supplied, then it will fetch every
+	 * single {@link PluralAttribute} of type {@link CollectionType#MAP}.
+	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * @param entity Optional entity instance to fetch lazy maps on.
+	 * @param getters Getters of those lazy collections.
+	 * @return The same optional entity, useful if you want to continue using it immediately.
+	 */
 	@SuppressWarnings("unchecked")
-	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
-		if (isEmpty(getters)) {
-			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
-				if (ofType.test(a.getCollectionType())) {
-					invokeMethod(invokeMethod(entity, "get" + toTitleCase(a.getName())), "size");
-				}
-			}
-		}
-		else {
-			stream(getters).forEach(getter -> invokeMethod(getter.apply(entity), "size"));
-		}
-
-		return entity;
+	protected Optional<E> fetchLazyMaps(Optional<E> entity, Function<E, Map<?, ?>>... getters) {
+		return ofNullable(entity.isPresent() ? fetchLazyMaps(entity.get(), getters) : null);
 	}
 
 	/**
@@ -655,10 +755,40 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
 	protected E fetchLazyBlobs(E entity) {
-		E managed = update(entity);
+		return fetchSingularAttributes(entity, type -> type == byte[].class);
+	}
+
+	/**
+	 * Fetch all lazy blobs of given optional entity.
+	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * @param entity Optional entity instance to fetch all blobs on.
+	 * @return The same optional entity, useful if you want to continue using it immediately.
+	 */
+	protected Optional<E> fetchLazyBlobs(Optional<E> entity) {
+		return ofNullable(entity.isPresent() ? fetchLazyBlobs(entity.get()) : null);
+	}
+
+	@SuppressWarnings("unchecked")
+	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
+		if (isEmpty(getters)) {
+			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
+				if (ofType.test(a.getCollectionType())) {
+					ofNullable(invokeMethod(entity, "get" + toTitleCase(a.getName()))).ifPresent(c -> invokeMethod(c, "size"));
+				}
+			}
+		}
+		else {
+			stream(getters).forEach(getter -> ofNullable(getter.apply(entity)).ifPresent(c -> invokeMethod(c, "size")));
+		}
+
+		return entity;
+	}
+
+	private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
+		E managed = getById(entity.getId());
 
 		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
-			if (a.getJavaType() == byte[].class) {
+			if (ofType.test(a.getJavaType())) {
 				String name = toTitleCase(a.getName());
 				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));
 			}
@@ -671,7 +801,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Paging actions -------------------------------------------------------------------------------------------------
 
 	/**
-	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods.
+	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean, String...)} methods.
 	 * <p>
 	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
 	 * <pre>
@@ -681,12 +811,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *     public void getPageOfFooType(Page page, boolean count) {
 	 *         return getPage(page, count, (criteriaBuilder, query, root) -&gt; {
 	 *             query.where(criteriaBuilder.equals(root.get("type"), Type.FOO));
-	 *         });
-	 *     }
-	 *
-	 *     public void getPageWithLazyChildren(Page page, boolean count) {
-	 *         return getPage(page, count, (criteriaBuilder, query, root) -&gt; {
-	 *             root.fetch("lazyChildren");
 	 *         });
 	 *     }
 	 *
@@ -700,7 +824,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods taking
+	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean, String...)} methods taking
 	 * a specific result type, such as an entity subclass (DTO). You must return a {@link LinkedHashMap} with
 	 * {@link Getter} as key and {@link Expression} as value. The mapping must be in exactly the same order as
 	 * constructor arguments of your DTO.
@@ -751,9 +875,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked before any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean, String...)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
-	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
+	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean, String...)} methods is called.
 	 */
 	protected Consumer<EntityManager> beforePage() {
 		return entityManager -> noop();
@@ -761,14 +885,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
-	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
+	 * {@link #getPage(Page, boolean, String...)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
 	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
 	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
 	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
 	 * {@link Page#toString()}.
 	 * @param page The page on which this query is based.
 	 * @param cacheable Whether the results should be cacheable.
-	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about
+	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean, String...)} is about
 	 * to be executed.
 	 */
 	protected Consumer<TypedQuery<?>> onPage(Page page, boolean cacheable) {
@@ -795,9 +919,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked after any of
-	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean, String...)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
-	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
+	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean, String...)} methods is called.
 	 */
 	protected Consumer<EntityManager> afterPage() {
 		return entityManager -> noop();
@@ -808,10 +932,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
+	 * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field
+	 * can represent a JavaBean path, like as you would do in EL, such as <code>parent.child.subchild</code>.
+	 * You can use the
 	 * @return A partial result list based on given {@link Page}.
 	 */
-	public PartialResultList<E> getPage(Page page, boolean count) {
-		return getPage(page, count, true, entityType, (builder, query, root) -> noop());
+	public PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {
+		return getPage(page, count, true, fetchFields);
 	}
 
 	/**
@@ -820,10 +947,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param cacheable Whether the results should be cacheable.
+	 * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field
+	 * can represent a JavaBean path, like as you would do in EL, such as <code>parent.child.subchild</code>.
 	 * @return A partial result list based on given {@link Page}.
 	 */
-	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable) {
-		return getPage(page, count, cacheable, entityType, (builder, query, root) -> noop());
+	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, String... fetchFields) {
+		return getPage(page, count, cacheable, entityType, (builder, query, root) -> {
+			for (String fetchField : fetchFields) {
+				FetchParent<?, ?> fetchParent = root;
+
+				for (String attribute : fetchField.split("\\.")) {
+					fetchParent = fetchParent.fetch(attribute);
+				}
+			}
+
+			return noop();
+		});
 	}
 
 	/**
@@ -835,12 +974,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param queryBuilder This allows fine-graining the JPA criteria query.
 	 * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
 	 */
-	@SuppressWarnings("unchecked")
 	protected PartialResultList<E> getPage(Page page, boolean count, QueryBuilder<E> queryBuilder) {
-		return getPage(page, count, true, entityType, (builder, query, root) -> {
-			queryBuilder.build(builder, query, (Root<E>) root);
-			return noop();
-		});
+		return getPage(page, count, true, queryBuilder);
 	}
 
 	/**

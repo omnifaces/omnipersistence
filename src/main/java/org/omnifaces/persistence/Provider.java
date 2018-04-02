@@ -22,10 +22,12 @@ import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import javax.persistence.ElementCollection;
@@ -34,6 +36,7 @@ import javax.persistence.EntityManagerFactory;
 import javax.persistence.criteria.Expression;
 import javax.persistence.metamodel.Attribute;
 
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -60,25 +63,33 @@ public enum Provider {
 		}
 
 		@Override
-		public boolean isProxy(Object object) {
-			return HIBERNATE_PROXY.get().isInstance(object);
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxy(E entity) {
+			return HIBERNATE_PROXY.get().isInstance(entity);
 		}
 
 		@Override
-		public boolean isProxyInitialized(Object entity) {
-			return isProxy(entity) && !(boolean) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "isUninitialized");
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyInitialized(E entity) {
+			return invokeOnProxy(entity, "isUninitialized", super::isProxyInitialized);
 		}
 
 		@Override
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E dereferenceProxy(E entity) {
+			return invokeOnProxy(entity, "getImplementation", super::dereferenceProxy);
+		}
+
+		@Override
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
+			return invokeOnProxy(entity, "getPersistentClass", super::getEntityType);
+		}
+
+		@Override
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(E entity) {
+			return invokeOnProxy(entity, "getIdentifier", super::getIdentifier);
+		}
+
 		@SuppressWarnings("unchecked")
-		public <E> E dereferenceProxy(E entity) {
-			return isProxy(entity) ? (E) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getImplementation") : entity;
-		}
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public <E> Class<E> getEntityType(E entity) {
-			return isProxy(entity) ? (Class<E>) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), "getPersistentClass") : super.getEntityType(entity);
+		private <T, I extends Comparable<I> & Serializable, E extends BaseEntity<I>> T invokeOnProxy(E entity, String methodName, Function<E, T> fallback) {
+			return isProxy(entity) ? (T) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), methodName) : fallback.apply(entity);
 		}
 	},
 
@@ -180,21 +191,25 @@ public enum Provider {
 		return isOneOf(attribute.getPersistentAttributeType(), MANY_TO_ONE, ONE_TO_ONE);
 	}
 
-	public boolean isProxy(Object entity) {
-		throw new UnsupportedOperationException(String.valueOf(entity));
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxy(E entity) {
+		return false;
 	}
 
-	public boolean isProxyInitialized(Object entity) {
-		throw new UnsupportedOperationException(String.valueOf(entity));
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyInitialized(E entity) {
+		return false;
 	}
 
-	public <E> E dereferenceProxy(E entity) {
-		throw new UnsupportedOperationException(String.valueOf(entity));
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E dereferenceProxy(E entity) {
+		return entity;
 	}
 
 	@SuppressWarnings("unchecked")
-	public <E> Class<E> getEntityType(E entity) {
-		return (Class<E>) entity.getClass();
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
+		return entity == null ? null : (Class<E>) entity.getClass();
+	}
+
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(E entity) {
+		return entity == null ? null : entity.getId();
 	}
 
 }

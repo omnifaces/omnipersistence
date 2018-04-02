@@ -45,7 +45,7 @@ import javax.persistence.metamodel.SingularAttribute;
  * @author Bauke Scholtz
  * @param <X> Generic entity type referenced by root.
  */
-public class RootWrapper<X> implements Root<X> {
+public abstract class RootWrapper<X> implements Root<X> {
 
 	private Root<X> wrapped;
 

@@ -40,7 +40,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * See {@link Audit} for usage instructions.
  *
- * @param <I> The generic ID type, usually {@link Long}.
+ * @param <I> The generic ID type. This is used to associate auditable properties with a specific entity.
  * @author Bauke Scholtz
  * @see Audit
  */
@@ -70,13 +70,14 @@ public abstract class AuditListener<I extends Comparable<I> & Serializable> {
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Map<PropertyDescriptor, Map<I, Object>> getAuditableProperties(BaseEntity<I> entity) {
 		Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
-			Set<String> auditablePropertyNames = BaseEntityService.getCurrentInstance().getMetamodel(entity).getDeclaredAttributes().stream()
-				.filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).getAnnotation(Audit.class) != null)
+			BaseEntityService<?, ?> baseEntityService = BaseEntityService.getCurrentInstance();
+			Set<String> auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
+				.filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).isAnnotationPresent(Audit.class))
 				.map(Attribute::getName)
 				.collect(toSet());
 
 			try {
-				return stream(getBeanInfo(entity.getClass()).getPropertyDescriptors())
+				return stream(getBeanInfo(baseEntityService.getProvider().getEntityType(entity)).getPropertyDescriptors())
 					.filter(p -> auditablePropertyNames.contains(p.getName()))
 					.collect(toConcurrentMap(identity(), v -> new ConcurrentHashMap<>()));
 			}

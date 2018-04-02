@@ -37,7 +37,7 @@ class EclipseLinkRoot<X> extends RootWrapper<X> {
 	}
 
 	@Override
-	@SuppressWarnings({ "unchecked", "hiding" })
+	@SuppressWarnings("hiding")
 	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
 		return new PostponedFetch<>(postponedFetches, attributeName);
 	}

@@ -302,7 +302,6 @@ public final class JPA {
 	 * @return A SQL CONCAT(...) of given expressions or strings.
 	 * @throws IllegalArgumentException When there are less than 2 expressions or strings. There's no point of concat then.
 	 */
-	@SuppressWarnings("unchecked")
 	public static Expression<String> concat(CriteriaBuilder builder, Object... expressionsOrStrings) {
 		if (expressionsOrStrings.length < 2) {
 			throw new IllegalArgumentException("There must be at least 2 expressions or strings");

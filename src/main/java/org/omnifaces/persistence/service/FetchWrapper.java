@@ -29,7 +29,7 @@ import javax.persistence.metamodel.SingularAttribute;
  * @param <Z> Generic entity type of fetch source.
  * @param <X> Generic entity type of fetch target.
  */
-public class FetchWrapper<Z, X> implements Fetch<Z, X> {
+public abstract class FetchWrapper<Z, X> implements Fetch<Z, X> {
 
 	private Fetch<Z, X> wrapped;
 
