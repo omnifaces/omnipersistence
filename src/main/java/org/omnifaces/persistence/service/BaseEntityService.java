@@ -145,7 +145,7 @@ import org.omnifaces.utils.reflect.Getter;
  * <p>
  * {@link BaseEntityService} uses JULI {@link Logger} for logging.
  * <ul>
- * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean, String...)} arguments, the set parameter values and the full query result.
+ * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
  * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
  * internally used in order to be able to build proper queries to perform a search inside those fields.
@@ -801,7 +801,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Paging actions -------------------------------------------------------------------------------------------------
 
 	/**
-	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean, String...)} methods.
+	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods.
 	 * <p>
 	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
 	 * <pre>
@@ -824,7 +824,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean, String...)} methods taking
+	 * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods taking
 	 * a specific result type, such as an entity subclass (DTO). You must return a {@link LinkedHashMap} with
 	 * {@link Getter} as key and {@link Expression} as value. The mapping must be in exactly the same order as
 	 * constructor arguments of your DTO.
@@ -875,9 +875,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked before any of
-	 * {@link #getPage(Page, boolean, String...)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
-	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean, String...)} methods is called.
+	 * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
 	 */
 	protected Consumer<EntityManager> beforePage() {
 		return entityManager -> noop();
@@ -885,14 +885,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
-	 * {@link #getPage(Page, boolean, String...)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
+	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
 	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
 	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
 	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
 	 * {@link Page#toString()}.
 	 * @param page The page on which this query is based.
 	 * @param cacheable Whether the results should be cacheable.
-	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean, String...)} is about
+	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about
 	 * to be executed.
 	 */
 	protected Consumer<TypedQuery<?>> onPage(Page page, boolean cacheable) {
@@ -919,9 +919,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked after any of
-	 * {@link #getPage(Page, boolean, String...)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
+	 * {@link #getPage(Page, boolean)} methods is called. For example, to remove a vendor specific {@link EntityManager} hint.
 	 * The default implementation returns a no-op callback.
-	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean, String...)} methods is called.
+	 * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
 	 */
 	protected Consumer<EntityManager> afterPage() {
 		return entityManager -> noop();
@@ -932,9 +932,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
+	 * @return A partial result list based on given {@link Page}.
+	 */
+	public PartialResultList<E> getPage(Page page, boolean count) {
+		// Implementation notice: we can't remove this getPage() method and rely on the other getPage() method with varargs below,
+		// because the one with varargs is incompatible as method reference for getPage(Page, boolean) in some Java versions.
+		return getPage(page, count, true, entityType, (builder, query, root) -> noop());
+	}
+
+	/**
+	 * Returns a partial result list based on given {@link Page} and fetch fields. This will by default cache the results.
+	 * @param page The page to return a partial result list for.
+	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
+	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field
 	 * can represent a JavaBean path, like as you would do in EL, such as <code>parent.child.subchild</code>.
-	 * You can use the
 	 * @return A partial result list based on given {@link Page}.
 	 */
 	public PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {

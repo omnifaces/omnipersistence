@@ -30,7 +30,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
 /**
  * <p>
  * This class basically defines a paged view of a database based on a given offset, limit, ordering, required criteria
- * and optional criteria. This is used by {@link BaseEntityService#getPage(Page, boolean, String...)} methods.
+ * and optional criteria. This is used by {@link BaseEntityService#getPage(Page, boolean)} methods.
  *
  * @author Bauke Scholtz
  * @see BaseEntityService
@@ -155,7 +155,7 @@ public final class Page { // This class should NOT be mutable!
 
 	/**
 	 * Identity is important as this is used as value of <code>org.hibernate.cacheRegion</code> hint in
-	 * {@link BaseEntityService#getPage(Page, boolean, String...)}. Hence the criteria hashmaps are printed as treemaps.
+	 * {@link BaseEntityService#getPage(Page, boolean)}. Hence the criteria hashmaps are printed as treemaps.
 	 */
 	@Override
 	public String toString() {
