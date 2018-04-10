@@ -33,9 +33,16 @@ import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
+import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
+import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
+import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.service.CommentService;
+import org.omnifaces.persistence.test.service.LookupService;
 import org.omnifaces.persistence.test.service.PersonService;
+import org.omnifaces.persistence.test.service.TextService;
 
 @RunWith(Arquillian.class)
 public class OmniPersistenceTest {
@@ -56,7 +63,16 @@ public class OmniPersistenceTest {
 	@EJB
 	private PersonService personService;
 
-	@Test
+	@EJB
+	private TextService textService;
+
+	@EJB
+	private CommentService commentService;
+
+	@EJB
+	private LookupService lookupService;
+
+        @Test
 	public void testFindPerson() {
 		Optional<Person> existingPerson = personService.findById(1L);
 		assertTrue("Existing person",  existingPerson.isPresent());
@@ -148,5 +164,122 @@ public class OmniPersistenceTest {
 		person.setDateOfBirth(LocalDate.now());
 		return person;
 	}
+
+	@Test
+	public void testGetAllActive() {
+            textService.softUndelete(textService.getAll());
+            assertEquals("Total undeleted records for texts", textService.getAllActive().size(), textService.getAll().size());
+            commentService.softUndelete(commentService.getAll());
+            assertEquals("Total undeleted records for comments", commentService.getAllActive().size(), commentService.getAll().size());
+        }
+
+	@Test
+	public void testGetAllDeleted() {
+            textService.softDelete(textService.getAll());
+            assertEquals("Total deleted records for texts", textService.getAllDeleted().size(), textService.getAll().size());
+            commentService.softDelete(commentService.getAll());
+            assertEquals("Total deleted records for comments", commentService.getAllDeleted().size(), commentService.getAll().size());
+        }
+        
+	@Test
+	public void testSoftDelete() {
+            Text activeText = textService.getById(1L);
+            textService.softDelete(activeText);
+            Text activeTextAfterSoftDelete = textService.getById(1L);
+            assertTrue("Text entity was soft deleted", !activeTextAfterSoftDelete.getActive());
+            Comment activeComment = commentService.getById(1L);
+            commentService.softDelete(activeComment);
+            Comment activeCommentAfterSoftDelete = commentService.getById(1L);
+            assertTrue("Comment entity was soft deleted", activeCommentAfterSoftDelete.getDeleted());
+        }
+
+	@Test
+	public void testSoftUndelete() {
+            Text deletedText = textService.getById(1L);
+            textService.softUndelete(deletedText);
+            Text deletedTextAfterSoftUndelete = textService.getById(1L);
+            assertTrue("Text entity was soft undeleted", deletedTextAfterSoftUndelete.getActive());
+            Comment deletedComment = commentService.getById(1L);
+            commentService.softUndelete(deletedComment);
+            Comment deletedCommentAfterSoftUndelete = commentService.getById(1L);
+            assertTrue("Comment entity was soft undeleted", !deletedCommentAfterSoftUndelete.getDeleted());
+        }
+
+	@Test(expected = NonSoftDeletableEntityException.class)
+	public void testAllActiveForNonSoftDeletable() {
+            personService.getAllActive();
+        }
+        
+	@Test(expected = NonSoftDeletableEntityException.class)
+	public void testAllDeletedForNonSoftDeletable() {
+            personService.getAllDeleted();
+        }
+        
+	@Test(expected = NonSoftDeletableEntityException.class)
+	public void testSoftDeleteNonSoftDeletable() {
+            Person person = new Person();
+            personService.softDelete(person);
+        }
+
+	@Test(expected = NonSoftDeletableEntityException.class)
+	public void testSoftUndeleteNonSoftDeletable() {
+            Person person = new Person();
+            personService.softUndelete(person);
+        }
+        
+	@Test
+	public void testGetActiveById() {
+            lookupService.persist(new Lookup("aa"));
+            Lookup activeLookup = lookupService.getActiveById("aa");
+            assertTrue("Got active entity with getActiveById method", activeLookup != null);
+            lookupService.softDelete(activeLookup);
+            Lookup softDeletedLookup = lookupService.getActiveById("aa");
+            assertTrue("Not able to get deleted entity with getActiveById method", softDeletedLookup == null);
+            softDeletedLookup = lookupService.getById("aa");
+            assertTrue("Got deleted entity with getById method", softDeletedLookup != null);
+        }
+        
+	@Test
+	public void testFindActiveById() {
+            lookupService.persist(new Lookup("bb"));
+            Optional<Lookup> activeLookup = lookupService.findActiveById("bb");
+            assertTrue("Got active entity with findActiveById method", activeLookup.isPresent());
+            lookupService.softDelete(activeLookup.get());
+            Optional<Lookup> softDeletedLookup = lookupService.findActiveById("bb");
+            assertTrue("Not able to get deleted entity with findActiveById method", !softDeletedLookup.isPresent());
+            softDeletedLookup = lookupService.findById("bb");
+            assertTrue("Got deleted entity with findById method", softDeletedLookup.isPresent());
+        }
+
+	@Test
+	public void testSave() {
+            Lookup lookup = new Lookup("cc");
+            lookupService.save(lookup);
+            Lookup persistedLookup = lookupService.getById("cc");
+            assertTrue("New entity was persisted with save method", persistedLookup != null);
+            persistedLookup.setActive(false);
+            lookupService.save(persistedLookup);
+            persistedLookup = lookupService.getById("cc");
+            assertTrue("Entity was merged with save method", persistedLookup != null && !persistedLookup.getActive());
+            persistedLookup.setActive(true);
+            lookupService.update(persistedLookup);
+            persistedLookup = lookupService.getById("cc");
+            assertTrue("Entity was merged with update method", persistedLookup != null && persistedLookup.getActive());
+        }
+
+	@Test(expected = IllegalEntityStateException.class)
+	public void testPersistExistingLookup() {
+            Lookup lookup = new Lookup("dd");
+            lookupService.save(lookup);
+            Lookup persistedLookup = lookupService.getById("dd");
+            persistedLookup.setActive(false);
+            lookupService.persist(lookup);
+        }
+
+	@Test(expected = IllegalEntityStateException.class)
+	public void testUpdateNewLookup() {
+            Lookup lookup = new Lookup("ee");
+            lookupService.update(lookup);
+        }
 
 }

@@ -26,10 +26,12 @@ import javax.ejb.Startup;
 import javax.inject.Inject;
 
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Text;
 
 @Startup
 @Singleton
@@ -39,11 +41,18 @@ public class StartupService {
 	public static final int ROWS_PER_PAGE = 10;
 
 	@Inject
+	private TextService textService;
+
+	@Inject
+	private CommentService commentService;
+
+	@Inject
 	private PersonService personService;
 
 	@PostConstruct
 	public void init() {
 		createTestPersons();
+                createOtherTestData();
 	}
 
 	private void createTestPersons() {
@@ -81,5 +90,12 @@ public class StartupService {
 			personService.persist(person);
 		}
 	}
+
+        private void createOtherTestData() {
+            textService.persist(new Text());
+            textService.persist(new Text());
+            commentService.persist(new Comment());
+            commentService.persist(new Comment());
+        }
 
 }

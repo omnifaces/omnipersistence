@@ -35,6 +35,7 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN
 import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
+import static org.omnifaces.persistence.SoftDeleteType.ACTIVE;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
@@ -45,6 +46,7 @@ import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -118,14 +120,17 @@ import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
+import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
+import org.omnifaces.persistence.model.SoftDeletable;
 import org.omnifaces.persistence.model.TimestampedEntity;
 import org.omnifaces.persistence.model.VersionedEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
+import static org.omnifaces.utils.reflect.Reflections.accessField;
 
 /**
  * <p>
@@ -171,6 +176,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
+	private static final String LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING = "Computed soft delete mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
@@ -195,6 +201,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("rawtypes")
 	private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Boolean> GENERATED_ID_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends BaseEntity<?>>, SoftDeleteData> SOFT_DELETE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
@@ -202,6 +209,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
 	private final boolean generatedId;
+        private final SoftDeleteData softDeleteData;
 
 	private Provider provider;
 	private Database database;
@@ -226,6 +234,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		identifierType = (Class<I>) typeMapping.getKey();
 		entityType = (Class<E>) typeMapping.getValue();
 		generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
+                softDeleteData = SOFT_DELETE_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeSoftDeleteMapping);
 	}
 
 	/**
@@ -257,6 +266,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		boolean generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || findAnnotatedField(entityType, Id.class, GeneratedValue.class).isPresent();
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_GENERATED_ID_MAPPING, entityType, generatedId));
 		return generatedId;
+	}
+
+	private static SoftDeleteData computeSoftDeleteMapping(Class<?> entityType) {
+		Optional<Field> softDeleteField = findAnnotatedField(entityType, SoftDeletable.class);
+                boolean softDeletable = softDeleteField.isPresent();
+                SoftDeleteData softDeleteData = new SoftDeleteData(softDeletable);
+                if (softDeletable) {
+                    softDeleteData.setSoftDeleteFieldName(softDeleteField.get().getName());
+                    softDeleteData.setSoftDeleteTypeActive(softDeleteField.get().getAnnotation(SoftDeletable.class).type() == ACTIVE);
+                }
+		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING, entityType, softDeleteData));
+		return softDeleteData;
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
@@ -441,12 +462,40 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Find an active entity by given ID.
+	 * @param id Entity ID to find active entity for.
+	 * @return Found entity, if any.
+	 */
+	public Optional<E> findActiveById(I id) {
+		return Optional.ofNullable(getActiveById(id));
+	}
+
+	/**
 	 * Get entity by given ID.
 	 * @param id Entity ID to get entity by.
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
 	public E getById(I id) {
 		return getEntityManager().find(entityType, id);
+	}
+
+	/**
+	 * Get an active entity by given ID.
+	 * @param id Entity ID to get active entity by.
+	 * @return Found entity, or <code>null</code> if there is none.
+	 */
+	public E getActiveById(I id) {
+                if (!softDeleteData.softDeletable) {
+                        throw new NonSoftDeletableEntityException(null, "This entity cannot be active.");
+                }
+                E entity = getEntityManager().find(entityType, id);
+                if (entity == null) {
+                    return null;
+                } else {
+                    boolean value = accessField(entity, softDeleteData.softDeleteFieldName);
+                    value = softDeleteData.softDeleteTypeActive ? value : !value;
+                    return value ? entity : null;
+                }
 	}
 
 	/**
@@ -488,14 +537,50 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Get all entities that haven't been soft deleted. The default ordering is by ID, descending.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @return All active entities.
+	 */
+	public List<E> getAllActive() {
+                if (!softDeleteData.softDeletable) {
+                        throw new NonSoftDeletableEntityException(null, "Entities cannot be soft deleted. Use getAll() instead.");
+                }
+		return getList("SELECT e FROM " + entityType.getSimpleName() + " e WHERE " + softDeleteData.softDeleteFieldName + " = " + (softDeleteData.softDeleteTypeActive ? "true": "false") + " ORDER BY e.id DESC", p -> noop());
+	}
+
+	/**
+	 * Get all entities that have been soft deleted. The default ordering is by ID, descending.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @return All soft deleted entities.
+	 */
+	public List<E> getAllDeleted() {
+                if (!softDeleteData.softDeletable) {
+                        throw new NonSoftDeletableEntityException(null, "Entities cannot be soft deleted. Use getAll() instead.");
+                }
+		return getList("SELECT e FROM " + entityType.getSimpleName() + " e WHERE " + softDeleteData.softDeleteFieldName + " = " + (!softDeleteData.softDeleteTypeActive ? "true": "false") + " ORDER BY e.id DESC", p -> noop());
+	}
+
+	/**
 	 * Persist given entity. Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
 	 * @return Entity ID.
 	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
 	 */
 	public I persist(E entity) {
+		return persist(entity, true);
+	}
+
+	/**
+	 * Persist given entity with conditional check for existence in the data store for entities whose ids are set manually. 
+         * Any bean validation constraint violation will be logged separately.
+	 * @param entity Entity to persist.
+         * @param checkExists flag to indicate existence check.
+	 * @return Entity ID.
+	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
+	 */
+	protected I persist(E entity, boolean checkExists) {
 		if (entity.getId() != null) {
-			if (generatedId || exists(entity)) {
+			if (generatedId || (checkExists && exists(entity))) {
 				throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
 			}
 		}
@@ -514,7 +599,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return entity.getId();
 	}
 
-	/**
+        /**
 	 * Update given entity. If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
 	 * to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be
 	 * logged separately. Due to technical limitations, this effectively means that bean validation is invoked twice. First in this method
@@ -525,14 +610,34 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
 	 */
 	public E update(E entity) {
+		return update(entity, true);
+	}
+
+        /**
+	 * Update given entity with conditional check for existence in the data store for entities whose ids are set manually. 
+         * If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
+	 * to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be
+	 * logged separately. Due to technical limitations, this effectively means that bean validation is invoked twice. First in this method
+	 * in order to be able to obtain the constraint violations and then once more while JTA is committing the transaction, but is executed
+	 * beyond the scope of this method.
+	 * @param entity Entity to update.
+         * @param checkExists flag to indicate existence check.
+	 * @return Updated entity.
+	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
+	 */
+	protected E update(E entity, boolean checkExists) {
 		if (entity.getId() == null) {
-			if (generatedId || !exists(entity)) {
+			if (generatedId) {
 				throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
 			}
 			else {
 				throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
 			}
 		}
+                
+                if(checkExists && !exists(entity)) {
+                        throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
+                }
 
 		if (validator != null) {
 			// EntityManager#merge() doesn't directly throw ConstraintViolationException without performing flush, so we can't put it in a
@@ -591,23 +696,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Save given entity. This will automatically determine based on presence of generated entity ID whether to
-	 * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
+	 * Save given entity. This will automatically determine based on the presence of generated entity ID, 
+         * or existence of an entity in the data store whether to {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
 	 * @param entity Entity to save.
 	 * @return Saved entity.
-	 * @throws IllegalEntityStateException When ID of entity is not generated.
 	 */
 	public E save(E entity) {
-		if (!generatedId) {
-			throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually invoke either persist() or update().");
-		}
-
-		if (entity.getId() == null) {
-			persist(entity);
+		if ((generatedId && entity.getId() == null) || (!generatedId && !exists(entity))) {
+			persist(entity, false);
 			return entity;
 		}
 		else {
-			return update(entity);
+			return update(entity, false);
 		}
 	}
 
@@ -647,6 +747,36 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Soft delete given entity.
+	 * @param entity Entity to soft delete.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
+	 */
+	public void softDelete(E entity) {
+                if (!softDeleteData.softDeletable) {
+                        throw new NonSoftDeletableEntityException(entity, "Entity cannot be soft deleted.");
+                }
+                E managedEntity = manage(entity);
+                invokeMethod(managedEntity, "set" + Character.toUpperCase(softDeleteData.softDeleteFieldName.charAt(0)) + softDeleteData.softDeleteFieldName.substring(1), !softDeleteData.softDeleteTypeActive);
+	}
+
+	/**
+	 * Soft delete given entity.
+	 * @param entity Entity to soft delete.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
+	 */
+	public void softUndelete(E entity) {
+                if (!softDeleteData.softDeletable) {
+                        throw new NonSoftDeletableEntityException(entity, "Entity cannot be soft undeleted.");
+                }
+                E managedEntity = manage(entity);
+                invokeMethod(managedEntity, "set" + Character.toUpperCase(softDeleteData.softDeleteFieldName.charAt(0)) + softDeleteData.softDeleteFieldName.substring(1), softDeleteData.softDeleteTypeActive);
+	}
+
+	/**
 	 * Delete given entities.
 	 * @param entities Entities to delete.
 	 * @throws NonDeletableEntityException When at least one entity has {@link NonDeletable} annotation set.
@@ -655,6 +785,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	public void delete(Iterable<E> entities) {
 		entities.forEach(this::delete);
+	}
+
+	/**
+	 * Soft delete given entities.
+	 * @param entities Entities to soft delete.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @throws IllegalEntityStateException When at least one entity has no ID.
+	 * @throws EntityNotFoundException When at least one entity has in meanwhile been deleted.
+	 */
+	public void softDelete(Iterable<E> entities) {
+		entities.forEach(this::softDelete);
+	}
+
+	/**
+	 * Soft delete given entities.
+	 * @param entities Entities to soft delete.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @throws IllegalEntityStateException When at least one entity has no ID.
+	 * @throws EntityNotFoundException When at least one entity has in meanwhile been deleted.
+	 */
+	public void softUndelete(Iterable<E> entities) {
+		entities.forEach(this::softUndelete);
 	}
 
 	/**
@@ -1651,6 +1803,55 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
+	private static class SoftDeleteData {
+            
+            private boolean softDeletable;
+            private String softDeleteFieldName;
+            private boolean softDeleteTypeActive;
+
+            public SoftDeleteData() { }
+            
+            public SoftDeleteData(boolean softDeletable, String softDeleteFieldName, boolean softDeleteTypeActive) {
+                this.softDeletable = softDeletable;
+                this.softDeleteFieldName = softDeleteFieldName;
+                this.softDeleteTypeActive = softDeleteTypeActive;
+            }
+
+            public SoftDeleteData(boolean softDeletable) {
+                this.softDeletable = softDeletable;
+            }
+
+            public boolean isSoftDeletable() {
+                return softDeletable;
+            }
+
+            public void setSoftDeletable(boolean softDeletable) {
+                this.softDeletable = softDeletable;
+            }
+
+            public String getSoftDeleteFieldName() {
+                return softDeleteFieldName;
+            }
+
+            public void setSoftDeleteFieldName(String softDeleteFieldName) {
+                this.softDeleteFieldName = softDeleteFieldName;
+            }
+
+            public boolean isSoftDeleteTypeActive() {
+                return softDeleteTypeActive;
+            }
+
+            public void setSoftDeleteTypeActive(boolean softDeleteTypeActive) {
+                this.softDeleteTypeActive = softDeleteTypeActive;
+            }
+
+            @Override
+            public String toString() {
+                return "SoftDeleteData{" + "softDeletable=" + softDeletable + ", softDeleteFieldName=" + softDeleteFieldName + ", softDeleteTypeActive=" + softDeleteTypeActive + '}';
+            }
+
+        }
+        
 	private static <T> T noop() {
 		return null;
 	}
