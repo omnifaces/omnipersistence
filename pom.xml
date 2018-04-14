@@ -84,8 +84,7 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
 			<artifactId>omniutils</artifactId>
-			<version>0.7</version>
-			<scope>compile</scope>
+			<version>0.8-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
@@ -312,7 +311,7 @@
 						<artifactId>maven-surefire-plugin</artifactId>
 						<version>2.21.0</version>
 						<configuration>
-                                                    <trimStackTrace>false</trimStackTrace>
+							<trimStackTrace>false</trimStackTrace>
 							<systemPropertyVariables>
 								<jboss.home>${project.build.directory}/wildfly-${test.wildfly.version}</jboss.home>
 								<java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
