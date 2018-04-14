@@ -52,7 +52,8 @@ public class StartupService {
 	@PostConstruct
 	public void init() {
 		createTestPersons();
-                createOtherTestData();
+		createTestTexts();
+		createTestComments();
 	}
 
 	private void createTestPersons() {
@@ -91,11 +92,14 @@ public class StartupService {
 		}
 	}
 
-        private void createOtherTestData() {
-            textService.persist(new Text());
-            textService.persist(new Text());
-            commentService.persist(new Comment());
-            commentService.persist(new Comment());
-        }
+	private void createTestTexts() {
+		textService.persist(new Text());
+		textService.persist(new Text());
+	}
+
+	private void createTestComments() {
+		commentService.persist(new Comment());
+		commentService.persist(new Comment());
+	}
 
 }

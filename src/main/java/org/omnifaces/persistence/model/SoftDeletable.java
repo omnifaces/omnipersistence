@@ -14,27 +14,30 @@ package org.omnifaces.persistence.model;
 
 import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
-import java.lang.annotation.Retention;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
+
+import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
+
 import org.omnifaces.persistence.SoftDeleteType;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * When put on a field of {@link BaseEntity}, then the special methods of {@link BaseEntityService}
- * will allow to soft-delete the entity and later soft-undelete it. 
- * It will also allow to get all entities that are soft-deleted and/or active in the data store.
- * Calling those methods from a service for an entity that doesn't have such column
- * will throw will throw {@link NonSoftDeletableEntityException}.
- * 
+ * When put on a field of {@link BaseEntity}, then the special methods of
+ * {@link BaseEntityService} will allow to soft-delete the entity and later
+ * soft-undelete it. It will also allow to get all entities that are
+ * soft-deleted and/or active in the data store. Calling those methods from a
+ * service for an entity that doesn't have such column will throw will throw
+ * {@link NonSoftDeletableEntityException}.
+ *
  * @author Sergey Kuntsel
  */
-@Target(value = {METHOD, FIELD})
+@Target(value = { METHOD, FIELD })
 @Retention(RUNTIME)
 public @interface SoftDeletable {
-    
-    public SoftDeleteType type() default SoftDeleteType.ACTIVE;
-    
+
+	public SoftDeleteType type() default SoftDeleteType.DELETED;
+
 }

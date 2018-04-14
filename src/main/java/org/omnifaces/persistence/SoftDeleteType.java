@@ -23,18 +23,19 @@ import org.omnifaces.persistence.model.SoftDeletable;
  */
 public enum SoftDeleteType {
 
-    /**
-     * Indicates that the associated column is a column holding active state.
-     * All entities that haven't been soft deleted will thus have true 
-     * in the soft delete column, assuming it was mapped as <code>boolean</code>.
-     */
-    ACTIVE,
+	/**
+	 * Indicates that the associated column is a column holding deleted state.
+	 * All entities that haven't been soft deleted will thus have false
+	 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+	 * This is the default type.
+	 */
+	DELETED,
 
-    /**
-     * Indicates that the associated column is a column holding deleted state.
-     * All entities that haven't been soft deleted will thus have false 
-     * in the soft delete column, assuming it was mapped as <code>boolean</code>.
-     */
-    DELETED
+	/**
+	 * Indicates that the associated column is a column holding active state.
+	 * All entities that haven't been soft deleted will thus have true
+	 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+	 */
+	ACTIVE
 
 }

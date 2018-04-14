@@ -12,47 +12,51 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import static org.omnifaces.persistence.SoftDeleteType.ACTIVE;
+
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.Id;
-import static org.omnifaces.persistence.SoftDeleteType.ACTIVE;
+
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
 
 @Entity
 public class Lookup extends BaseEntity<String> {
-    
-    private static final long serialVersionUID = 1L;
 
-    @Id
-    @Column(length = 2, nullable = false, unique = true, name = "code")
-    private String id;
+	private static final long serialVersionUID = 1L;
 
-    @SoftDeletable(type = ACTIVE)
-    private boolean active = true;
+	@Id
+	@Column(length = 2, nullable = false, unique = true, name = "code")
+	private String id;
 
-    public Lookup() { }
-    
-    public Lookup(String id) {
-        this.id = id;
-    }
-    
-    @Override
-    public String getId() {
-        return id;
-    }
+	@SoftDeletable(type = ACTIVE)
+	private boolean active = true;
 
-    @Override
-    public void setId(String id) {
-        this.id = id;
-    }
-    
-    public boolean getActive() {
-        return active;
-    }
+	public Lookup() {
+		//
+	}
 
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-    
+	public Lookup(String id) {
+		this.id = id;
+	}
+
+	@Override
+	public String getId() {
+		return id;
+	}
+
+	@Override
+	public void setId(String id) {
+		this.id = id;
+	}
+
+	public boolean isActive() {
+		return active;
+	}
+
+	public void setActive(boolean active) {
+		this.active = active;
+	}
+
 }
