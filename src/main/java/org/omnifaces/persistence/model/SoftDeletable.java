@@ -19,7 +19,6 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
-import org.omnifaces.persistence.SoftDeleteType;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -38,6 +37,31 @@ import org.omnifaces.persistence.service.BaseEntityService;
 @Retention(RUNTIME)
 public @interface SoftDeletable {
 
-	public SoftDeleteType type() default SoftDeleteType.DELETED;
+	/**
+	 * Defines the types of the soft delete column.
+	 *
+	 * @see SoftDeletable
+	 *
+	 * @author Sergey Kuntsel
+	 */
+	public enum Type {
+
+		/**
+		 * Indicates that the associated column is a column holding deleted state.
+		 * All entities that haven't been soft deleted will thus have false
+		 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+		 * This is the default type.
+		 */
+		DELETED,
+
+		/**
+		 * Indicates that the associated column is a column holding active state.
+		 * All entities that haven't been soft deleted will thus have true
+		 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+		 */
+		ACTIVE
+	}
+
+	public Type type() default Type.DELETED;
 
 }

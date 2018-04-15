@@ -112,7 +112,6 @@ import javax.validation.Validator;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.SoftDeleteType;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
@@ -153,8 +152,9 @@ import org.omnifaces.utils.reflect.Getter;
  * <ul>
  * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
- * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
- * internally used in order to be able to build proper queries to perform a search inside those fields.
+ * whether the ID is generated, and whether the entity is soft deletable, and any discovered {@link ElementCollection}, {@link ManyToOne},
+ * {@link OneToOne} and {@link OneToMany} mappings of the entity. This is internally used in order to be able to build proper queries to
+ * perform a search inside those fields.
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
  * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
  * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
@@ -563,7 +563,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected List<E> getAll(boolean includeSoftDeleted) {
 		return getList("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ (softDeleteData.softDeletable ? (" WHERE " + softDeleteData.softDeleteFieldName + " = " + (softDeleteData.softDeleteTypeActive ? "false" : "true")) : "")
+			+ (softDeleteData.softDeletable ? (" WHERE " + softDeleteData.fieldName + " = " + (softDeleteData.typeActive ? "false" : "true")) : "")
 			+ " ORDER BY e.id DESC", p -> noop());
 	}
 
@@ -575,7 +575,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	public List<E> getAllSoftDeleted() {
 		softDeleteData.checkSoftDeletable();
 		return getList("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ " WHERE " + softDeleteData.softDeleteFieldName + " = " + (softDeleteData.softDeleteTypeActive ? "false": "true")
+			+ " WHERE " + softDeleteData.fieldName + " = " + (softDeleteData.typeActive ? "false": "true")
 			+ " ORDER BY e.id DESC", p -> noop());
 	}
 
@@ -1083,6 +1083,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	public PartialResultList<E> getPage(Page page, boolean count) {
 		// Implementation notice: we can't remove this getPage() method and rely on the other getPage() method with varargs below,
 		// because the one with varargs is incompatible as method reference for getPage(Page, boolean) in some Java versions.
+		// See https://github.com/omnifaces/omnipersistence/issues/11
 		return getPage(page, count, true, entityType, (builder, query, root) -> noop());
 	}
 
@@ -1813,22 +1814,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		private Class<?> entityType;
 		private final boolean softDeletable;
-		private final String softDeleteFieldName;
-		private final String softDeleteSetterName;
-		private final boolean softDeleteTypeActive;
+		private final String fieldName;
+		private final String setterName;
+		private final boolean typeActive;
 
 		public SoftDeleteData(Class<?> entityType) {
 			Optional<Field> softDeletableField = findAnnotatedField(entityType, SoftDeletable.class);
 			this.entityType = entityType;
 			this.softDeletable = softDeletableField.isPresent();
-			this.softDeleteFieldName = softDeletable ? softDeletableField.get().getName() : null;
-			this.softDeleteSetterName = softDeletable ? ("set" + toUpperCase(softDeleteFieldName.charAt(0)) + softDeleteFieldName.substring(1)) : null;
-			this.softDeleteTypeActive = softDeletable && softDeletableField.get().getAnnotation(SoftDeletable.class).type() == SoftDeleteType.ACTIVE;
+			this.fieldName = softDeletable ? softDeletableField.get().getName() : null;
+			this.setterName = softDeletable ? ("set" + toUpperCase(fieldName.charAt(0)) + fieldName.substring(1)) : null;
+			this.typeActive = softDeletable && softDeletableField.get().getAnnotation(SoftDeletable.class).type() == SoftDeletable.Type.ACTIVE;
 		}
 
 		public void checkSoftDeletable() {
 			if (!softDeletable) {
-				throw new NonSoftDeletableEntityException(null, String.format(ERROR_NOT_SOFT_DELETABLE, entityType));
+				throw new NonSoftDeletableEntityException(null, format(ERROR_NOT_SOFT_DELETABLE, entityType));
 			}
 		}
 
@@ -1837,12 +1838,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				return false;
 			}
 
-			boolean value = accessField(entity, softDeleteFieldName);
-			return softDeleteTypeActive ? !value : value;
+			boolean value = accessField(entity, fieldName);
+			return typeActive ? !value : value;
 		}
 
 		public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
-			invokeMethod(entity, softDeleteSetterName, softDeleteTypeActive ? !deleted : deleted);
+			invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
+		}
+
+		@Override
+		public String toString() {
+			return format("SoftDeleteData[softDeletable=%s, fieldName=%s, setterName=%s, typeActive=%s]", softDeletable, fieldName, setterName, typeActive);
 		}
 	}
 

@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import static org.omnifaces.persistence.SoftDeleteType.ACTIVE;
+import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
