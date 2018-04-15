@@ -39,10 +39,6 @@ public @interface SoftDeletable {
 
 	/**
 	 * Defines the types of the soft delete column.
-	 *
-	 * @see SoftDeletable
-	 *
-	 * @author Sergey Kuntsel
 	 */
 	public enum Type {
 
