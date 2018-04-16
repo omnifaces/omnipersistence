@@ -174,32 +174,41 @@ public class OmniPersistenceTest {
 
 	@Test
 	public void testSoftDelete() {
+		List<Text> allTexts = textService.getAll();
+		List<Comment> allComments = commentService.getAll();
+
 		Text activeText = textService.getById(1L);
 		textService.softDelete(activeText);
 		Text activeTextAfterSoftDelete = textService.getSoftDeletedById(1L);
 		assertTrue("Text entity was soft deleted", !activeTextAfterSoftDelete.isActive());
+		assertEquals("Total records for texts", textService.getAll().size(), allTexts.size() - 1);
+		assertEquals("Total deleted records for texts", textService.getAllSoftDeleted().size(), 1);
 
 		Comment activeComment = commentService.getById(1L);
 		commentService.softDelete(activeComment);
 		Comment activeCommentAfterSoftDelete = commentService.getSoftDeletedById(1L);
 		assertTrue("Comment entity was soft deleted", activeCommentAfterSoftDelete.isDeleted());
+		assertEquals("Total records for comments", commentService.getAll().size(), allComments.size() - 1);
+		assertEquals("Total deleted records for comments", commentService.getAllSoftDeleted().size(), 1);
 
 		Text deletedText = textService.getSoftDeletedById(1L);
 		textService.softUndelete(deletedText);
 		Text deletedTextAfterSoftUndelete = textService.getById(1L);
 		assertTrue("Text entity was soft undeleted", deletedTextAfterSoftUndelete.isActive());
+		assertEquals("Total records for texts", textService.getAll().size(), allTexts.size());
+		assertEquals("Total deleted records for texts", textService.getAllSoftDeleted().size(), 0);
 
 		Comment deletedComment = commentService.getSoftDeletedById(1L);
 		commentService.softUndelete(deletedComment);
 		Comment deletedCommentAfterSoftUndelete = commentService.getById(1L);
 		assertTrue("Comment entity was soft undeleted", !deletedCommentAfterSoftUndelete.isDeleted());
+		assertEquals("Total records for comments", commentService.getAll().size(), allComments.size());
+		assertEquals("Total deleted records for comments", commentService.getAllSoftDeleted().size(), 0);
 
-		List<Text> allTexts = textService.getAll();
 		textService.softDelete(allTexts);
 		assertEquals("Total records for texts", textService.getAll().size(), 0);
 		assertEquals("Total deleted records for texts", textService.getAllSoftDeleted().size(), allTexts.size());
 
-		List<Comment> allComments = commentService.getAll();
 		commentService.softDelete(allComments);
 		assertEquals("Total records for comments", commentService.getAll().size(), 0);
 		assertEquals("Total deleted records for comments", commentService.getAllSoftDeleted().size(), allComments.size());

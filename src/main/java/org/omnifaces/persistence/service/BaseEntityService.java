@@ -472,6 +472,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Find soft deleted entity by given ID.
 	 * @param id Entity ID to find soft deleted entity for.
 	 * @return Found soft deleted entity, if any.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
 	 */
 	public Optional<E> findSoftDeletedById(I id) {
 		return Optional.ofNullable(getSoftDeletedById(id));
@@ -506,6 +507,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Get soft deleted entity by given ID.
 	 * @param id Entity ID to get soft deleted entity by.
 	 * @return Found soft deleted entity, or <code>null</code> if there is none.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
 	 */
 	public E getSoftDeletedById(I id) {
 		softDeleteData.checkSoftDeletable();
@@ -559,11 +561,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Get all entities and set whether it may include soft deleted ones. The default ordering is by ID, descending.
 	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
-	 * @return All entities.
+	 * @return All entities, optionally including soft deleted ones.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
 	 */
 	protected List<E> getAll(boolean includeSoftDeleted) {
 		return getList("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ (softDeleteData.softDeletable ? (" WHERE " + softDeleteData.fieldName + " = " + (softDeleteData.typeActive ? "false" : "true")) : "")
+			+ (softDeleteData.softDeletable ? softDeleteData.getWhereClause(includeSoftDeleted) : "")
 			+ " ORDER BY e.id DESC", p -> noop());
 	}
 
@@ -575,7 +578,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	public List<E> getAllSoftDeleted() {
 		softDeleteData.checkSoftDeletable();
 		return getList("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ " WHERE " + softDeleteData.fieldName + " = " + (softDeleteData.typeActive ? "false": "true")
+			+ softDeleteData.getWhereClause(true)
 			+ " ORDER BY e.id DESC", p -> noop());
 	}
 
@@ -850,7 +853,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param getters Getters of those lazy collections.
 	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	protected E fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
 		return fetchPluralAttributes(entity, type -> type != MAP, getters);
 	}
@@ -863,7 +866,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param getters Getters of those lazy collections.
 	 * @return The same optional entity, useful if you want to continue using it immediately.
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	protected Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
 		return ofNullable(entity.isPresent() ? fetchLazyCollections(entity.get(), getters) : null);
 	}
@@ -876,7 +879,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param getters Getters of those lazy collections.
 	 * @return The same entity, useful if you want to continue using it immediately.
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	protected E fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
 		return fetchPluralAttributes(entity, type -> type == MAP, getters);
 	}
@@ -889,7 +892,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param getters Getters of those lazy collections.
 	 * @return The same optional entity, useful if you want to continue using it immediately.
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	protected Optional<E> fetchLazyMaps(Optional<E> entity, Function<E, Map<?, ?>>... getters) {
 		return ofNullable(entity.isPresent() ? fetchLazyMaps(entity.get(), getters) : null);
 	}
@@ -914,7 +917,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return ofNullable(entity.isPresent() ? fetchLazyBlobs(entity.get()) : null);
 	}
 
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
 		if (isEmpty(getters)) {
 			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
@@ -1844,6 +1847,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
 			invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
+		}
+
+		public String getWhereClause(boolean includeSoftDeleted) {
+			return (" WHERE " + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
 		}
 
 		@Override
