@@ -84,7 +84,7 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
 			<artifactId>omniutils</artifactId>
-			<version>0.8-SNAPSHOT</version>
+			<version>0.8</version>
 		</dependency>
 
 		<dependency>
