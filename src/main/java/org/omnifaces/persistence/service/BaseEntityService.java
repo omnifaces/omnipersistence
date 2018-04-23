@@ -47,7 +47,12 @@ import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -76,6 +81,7 @@ import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
+import javax.persistence.EnumType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.ManyToOne;
@@ -124,6 +130,7 @@ import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.JpaEnum;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
 import org.omnifaces.persistence.model.TimestampedEntity;
@@ -178,11 +185,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
 	private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING = "Computed soft delete mapping for %s: %s";
+	private static final String LOG_FINE_COMPUTED_JPA_ENUM_MODIFIED_BEHAVIOUR = "JPA enum behaviour for enum %s: was %smodified";
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
 	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "javax.validation.ConstraintViolation: @%s %s#%s %s on %s";
+	private static final String LOG_WARNING_WRONG_FIELD_TYPE_OF_ENUM = "Declared enum %s contain wrong type of field %s: expected %s, got %s";
+	private static final String LOG_WARNING_WRONG_FIELD_NAME_OF_ENUM = "Field name %s specified within the annotation was not found on enum %s";
+	private static final String LOG_WARNING_ENUM_VALUE_NOT_SET = "Field name %s could not be used to modify behaviour of enum %s";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -208,6 +219,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends Enum>, Boolean> DETECTED_JPA_ENUMS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
@@ -238,6 +250,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		entityType = (Class<E>) typeMapping.getValue();
 		generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
 		softDeleteData = SOFT_DELETE_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeSoftDeleteMapping);
+                applyModifiedJpaEnumBehaviour(entityType);
 	}
 
 	/**
@@ -276,6 +289,117 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING, entityType, softDeleteData));
 		return softDeleteData;
 	}
+
+	private static void applyModifiedJpaEnumBehaviour(Class<?> entityType) {
+            List<Class<? extends Enum>> enumsUsed = computeAnnotatedEnums(entityType, javax.persistence.Enumerated.class);
+            enumsUsed.stream().
+                    forEach(enumUsed -> DETECTED_JPA_ENUMS.computeIfAbsent(enumUsed, BaseEntityService::modifyJpaEnumBehaviour));
+	}
+        
+        private static boolean modifyJpaEnumBehaviour(Class<? extends Enum> enumClass) {
+            boolean modified = enumClass.isAnnotationPresent(JpaEnum.class) && updateEnumValues(enumClass);
+            logger.log(FINE, () -> format(LOG_FINE_COMPUTED_JPA_ENUM_MODIFIED_BEHAVIOUR, enumClass, modified ? "" : "not "));
+            return modified;
+        }
+        
+        private static boolean updateEnumValues(Class<? extends Enum> enumClass) {
+            JpaEnum jpaEnum = enumClass.getAnnotation(JpaEnum.class);
+            boolean ordinal = jpaEnum.type() == EnumType.ORDINAL;
+            String targetFieldName = ordinal ? "ordinal" : "name";
+            String fieldName = jpaEnum.fieldName();
+            
+            try {
+                Field field = enumClass.getDeclaredField(fieldName);
+                boolean rightFieldType = ordinal ? (Integer.class == field.getType() || int.class == field.getType()) : String.class == field.getType();
+                
+                if(rightFieldType) {
+                    field.setAccessible(true);
+                    Field targetField = enumClass.getSuperclass().getDeclaredField(targetFieldName);
+                    targetField.setAccessible(true);
+                    
+                    // Replace default mappings
+                    Enum[] constants = enumClass.getEnumConstants();
+                    int max = 0;
+                    for (Enum e : constants) {
+                        Object val = field.get(e);
+                        targetField.set(e, val);
+                        if(ordinal && (int)val > max) {
+                            max = (int)val;
+                        }
+                    }
+                    
+                    if(ordinal) { // If ordinal type is used we need to update internal Enum representation as well
+                        // Create array of new Enum mappings
+                        Object values = Array.newInstance(enumClass, max + 1);
+                        for (Enum e : constants) {
+                            Array.set(values, e.ordinal(), e);
+                        }
+
+                        // Replace internal Enum values representation
+                        Field valuesField = enumClass.getDeclaredField("$VALUES");
+                        Object oldValues = setFinalFieldValue(valuesField, null, values);
+                        
+                        // Rebuild internal cache that persistence providers are using under the covers
+                        Field enumConstants =  Class.class.getDeclaredField("enumConstants");
+                        setFinalFieldValue(enumConstants, enumClass, null);
+                        enumClass.getEnumConstants();
+                        
+                        // Return back the values array so that direct usage in code yields predictable behaviour
+                        setFinalFieldValue(valuesField, null, oldValues);
+                    }
+                    
+                } else {
+                    logger.log(WARNING, () -> format(LOG_WARNING_WRONG_FIELD_TYPE_OF_ENUM, enumClass, field.getName(), ordinal ? "Integer" : "String", field.getType()));
+                    return false;
+                }
+                
+            } catch (NoSuchFieldException|SecurityException ex) {
+                logger.log(WARNING, () -> format(LOG_WARNING_WRONG_FIELD_NAME_OF_ENUM, fieldName, enumClass));
+                return false;
+            } catch (IllegalArgumentException|IllegalAccessException ex) {
+                logger.log(WARNING, () -> format(LOG_WARNING_ENUM_VALUE_NOT_SET, fieldName, enumClass));
+                return false;
+            }
+            return true;
+        }
+        
+        // TODO refactor to OmniUtil Reflections class
+        private static List<Class<? extends Enum>> computeAnnotatedEnums(Class<?> entityType, Class<? extends Annotation> annotation) {
+            List<Class<? extends Enum>> enums = new ArrayList<>();
+            for (Class<?> cls = entityType; cls != null; cls = cls.getSuperclass()) {
+                for (Field field : cls.getDeclaredFields()) {
+                    if (field.isAnnotationPresent(annotation)) {
+                        Class<? extends Enum> enumClass = null;
+                        if(field.getType().isEnum()) {
+                            enumClass = (Class<? extends Enum>)field.getType();
+                        } else {
+                            ParameterizedType pType = (ParameterizedType)field.getGenericType();
+                            Type[] pTypes = pType.getActualTypeArguments();
+                            for(Type t : pTypes) {
+                                if(((Class<?>)t).isEnum()) {
+                                    enumClass = (Class<? extends Enum>)t;
+                                }
+                            }
+                        }
+                        if(enumClass != null) {
+                            enums.add(enumClass);
+                        }
+                    }
+                }
+            }
+            return enums;
+        }
+
+        // TODO refactor to OmniUtil Reflections class
+        private static Object setFinalFieldValue(Field field, Object target, Object value) throws IllegalArgumentException, IllegalAccessException, SecurityException, NoSuchFieldException {
+            field.setAccessible(true);
+            Field modifiersField = Field.class.getDeclaredField("modifiers");
+            modifiersField.setAccessible(true);
+            modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+            Object oldValue = field.get(target);
+            field.set(target, value);
+            return oldValue;
+        }
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
 		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isElementCollection);
