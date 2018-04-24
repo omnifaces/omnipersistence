@@ -31,7 +31,10 @@ import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Product;
+import org.omnifaces.persistence.test.model.ProductStatus;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.UserRole;
 
 @Startup
 @Singleton
@@ -49,11 +52,15 @@ public class StartupService {
 	@Inject
 	private PersonService personService;
 
+	@Inject
+	private ProductService productService;
+
 	@PostConstruct
 	public void init() {
 		createTestPersons();
 		createTestTexts();
 		createTestComments();
+                createTestProducts();
 	}
 
 	private void createTestPersons() {
@@ -101,5 +108,18 @@ public class StartupService {
 		commentService.persist(new Comment());
 		commentService.persist(new Comment());
 	}
+
+        private void createTestProducts() {
+                Product product = new Product();
+                product.setProductStatus(ProductStatus.IN_STOCK);
+                product.addUserRole(UserRole.USER);
+                productService.persist(product);
+                
+                product = new Product();
+                product.setProductStatus(ProductStatus.DISCONTINUED);
+                product.addUserRole(UserRole.EMPLOYEE);
+                product.addUserRole(UserRole.MANAGER);
+                productService.persist(product);
+        }
 
 }

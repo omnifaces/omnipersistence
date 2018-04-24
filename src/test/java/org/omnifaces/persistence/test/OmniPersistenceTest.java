@@ -18,6 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,10 +40,14 @@ import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
+import org.omnifaces.persistence.test.model.Product;
+import org.omnifaces.persistence.test.model.ProductStatus;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.UserRole;
 import org.omnifaces.persistence.test.service.CommentService;
 import org.omnifaces.persistence.test.service.LookupService;
 import org.omnifaces.persistence.test.service.PersonService;
+import org.omnifaces.persistence.test.service.ProductService;
 import org.omnifaces.persistence.test.service.TextService;
 
 @RunWith(Arquillian.class)
@@ -73,6 +78,8 @@ public class OmniPersistenceTest {
 	@EJB
 	private LookupService lookupService;
 
+	@EJB
+	private ProductService productService;
 
 	// Basic ----------------------------------------------------------------------------------------------------------
 
@@ -292,4 +299,21 @@ public class OmniPersistenceTest {
 		lookupService.update(lookup);
 	}
 
+        @Test
+        public void testPersistedEntitiesWithEnums() {
+                Product product = productService.getByIdWithUserRoles(1L);
+                assertTrue("Product status for product 1 was persisted", product.getProductStatus() == ProductStatus.IN_STOCK);
+                assertTrue("Product status id for product 1 was persisted", productService.getRawProductStatus(product.getId()) == ProductStatus.IN_STOCK.getId());
+                assertTrue("User roles for product 1 were persisted", product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER));
+                assertTrue("User roles code for product 1 were persisted", productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()));
+                
+                product = productService.getByIdWithUserRoles(2L);
+                assertTrue("Product status for product 2 was persisted", product.getProductStatus() == ProductStatus.DISCONTINUED);
+                assertTrue("User roles for product 2 were persisted", product.getUserRoles().size() == 2 && 
+                        product.getUserRoles().contains(UserRole.EMPLOYEE) && product.getUserRoles().contains(UserRole.MANAGER));
+                assertTrue("Product status id for product 2 was persisted", productService.getRawProductStatus(product.getId()) == ProductStatus.DISCONTINUED.getId());
+                assertTrue("User roles code for product 2 were persisted", productService.getRawUserRoles(product.getId()).containsAll(
+                        Arrays.asList(new String[] { UserRole.EMPLOYEE.getCode(), UserRole.MANAGER.getCode() })));
+        }
+        
 }
