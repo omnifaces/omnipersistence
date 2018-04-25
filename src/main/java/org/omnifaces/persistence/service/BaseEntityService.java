@@ -12,7 +12,6 @@
  */
 package org.omnifaces.persistence.service;
 
-import static java.lang.Character.toUpperCase;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
@@ -96,16 +95,12 @@ import javax.persistence.criteria.AbstractQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Fetch;
 import javax.persistence.criteria.FetchParent;
 import javax.persistence.criteria.From;
-import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Order;
-import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
-import javax.persistence.criteria.Selection;
 import javax.persistence.criteria.Subquery;
 import javax.persistence.metamodel.Attribute;
 import javax.persistence.metamodel.Bindable;
@@ -199,12 +194,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"You must return a getter-path mapping from MappedQueryBuilder";
 	private static final String ERROR_UNSUPPORTED_CRITERIA =
 		"Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
-	private static final String ERROR_UNKNOWN_FIELD =
-		"Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
-	private static final String ERROR_NOT_SOFT_DELETABLE =
-		"Entity %s cannot be soft deleted. You need to add a @SoftDeletable field first.";
-	private static final String ERROR_ILLEGAL_SOFT_DELETABLE =
-		"Entity %s cannot be soft deleted. There should be only one @SoftDeletable field.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK =
 		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA =
@@ -667,7 +656,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected List<E> getAll(boolean includeSoftDeleted) {
 		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ (softDeleteData.softDeletable ? softDeleteData.getWhereClause(includeSoftDeleted) : "")
+			+ softDeleteData.getWhereClause(includeSoftDeleted)
 			+ " ORDER BY e.id DESC", p -> noop());
 	}
 
@@ -1673,171 +1662,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	@FunctionalInterface
-	private static interface PathResolver {
-		Expression<?> get(String field);
-
-		default String join(String field) {
-			return '@' + field;
-		}
-	}
-
-	private static class RootPathResolver implements PathResolver {
-
-		private final Root<?> root;
-		private final Map<String, Path<?>> joins;
-		private final Map<String, Path<?>> paths;
-		private final Set<String> elementCollections;
-		private final Set<String> manyOrOneToOnes;
-
-		private RootPathResolver(Root<?> root, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
-			this.root = root;
-			this.joins = getJoins(root);
-			this.paths = new HashMap<>();
-			this.elementCollections = elementCollections;
-			this.manyOrOneToOnes = manyOrOneToOnes;
-		}
-
-		@Override
-		public Expression<?> get(String field) {
-			if (field == null) {
-				return root;
-			}
-
-			Path<?> path = paths.get(field);
-
-			if (path != null) {
-				return path;
-			}
-
-			path = root;
-			boolean explicitJoin = field.charAt(0) == '@';
-			String originalField = explicitJoin ? field.substring(1) : field;
-			String[] attributes = originalField.split("\\.");
-			int depth = attributes.length;
-
-			for (int i = 0; i < depth; i++) {
-				String attribute = attributes[i];
-
-				if (i + 1 < depth || elementCollections.contains(originalField)) {
-					path = explicitJoin || !joins.containsKey(attribute) ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
-				}
-				else {
-					try {
-						path = path.get(attribute);
-					}
-					catch (IllegalArgumentException e) {
-						if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
-							path = guessManyOrOneToOnePath(attribute);
-						}
-
-						if (depth != 1 || path == null) {
-							throw new IllegalArgumentException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
-						}
-					}
-				}
-			}
-
-			paths.put(field, path);
-			return path;
-		}
-
-		private boolean isTransient(Class<?> type, String property) {
-			return true; // TODO implement?
-		}
-
-		private Path<?> guessManyOrOneToOnePath(String attribute) {
-			for (String manyOrOneToOne : manyOrOneToOnes) {
-				try {
-					return (Path<?>) get(manyOrOneToOne + "." + attribute);
-				}
-				catch (IllegalArgumentException ignore) {
-					continue;
-				}
-			}
-
-			return null;
-		}
-	}
-
-	private static class Alias {
-
-		private static final String AS = "as_";
-		private static final String WHERE = "where_";
-		private static final String HAVING = "having_";
-		private static final String IN = "_in";
-
-		private String value;
-
-		private Alias(String alias) {
-			this.value = alias;
-		}
-
-		public static Selection<?> as(Entry<String, Expression<?>> mappingEntry) {
-			Selection<?> selection = mappingEntry.getValue();
-			return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace('.', '$'));
-		}
-
-		public static Alias create(Provider provider, Expression<?> expression, String field) {
-			return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace('.', '$'));
-		}
-
-		public void in(int count) {
-			value += "_" + count + IN;
-		}
-
-		public void set(Predicate predicate) {
-			predicate.alias(value);
-		}
-
-		public static boolean isWhere(Predicate predicate) {
-			return predicate.getAlias().startsWith(WHERE);
-		}
-
-		public static boolean isIn(Predicate predicate) {
-			return predicate.getAlias().endsWith(IN);
-		}
-
-		public static boolean isHaving(Predicate predicate) {
-			return predicate.getAlias().startsWith(HAVING);
-		}
-
-		public static Entry<String, Long> getFieldAndCount(Predicate inPredicate) {
-			String alias = inPredicate.getAlias();
-			String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
-			String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_')).replace('$', '.');
-			long count = Long.valueOf(fieldAndCount.substring(field.length() + 1));
-			return new SimpleEntry<>(field, count);
-		}
-
-		public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
-			countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf('_') + 1));
-		}
-
-	}
-
-	private static class UncheckedParameterBuilder implements ParameterBuilder {
-
-		private final String field;
-		private final CriteriaBuilder criteriaBuilder;
-		private final Map<String, Object> parameterValues;
-
-		private UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
-			this.field = field.replace('.', '$') + "_";
-			this.criteriaBuilder = criteriaBuilder;
-			this.parameterValues = parameterValues;
-		}
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public <T> ParameterExpression<T> create(Object value) {
-			String name = field + parameterValues.size();
-			parameterValues.put(name, value);
-			return (ParameterExpression<T>) criteriaBuilder.parameter(value.getClass(), name);
-		}
-
-	}
-
 	private static Predicate[] toArray(List<Predicate> predicates) {
 		return predicates.toArray(new Predicate[predicates.size()]);
 	}
@@ -1881,96 +1705,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static boolean hasFetches(From<?, ?> from) {
 		return from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
 			|| (from instanceof EclipseLinkRoot && ((EclipseLinkRoot<?>) from).hasPostponedFetches());
-	}
-
-	private static Map<String, Path<?>> getJoins(From<?, ?> from) {
-		Map<String, Path<?>> joins = new HashMap<>();
-		collectJoins(from, joins);
-
-		if (from instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<?>) from).collectPostponedFetches(joins);
-		}
-
-		return joins;
-	}
-
-	private static void collectJoins(Path<?> path, Map<String, Path<?>> joins) {
-		if (path instanceof From) {
-			((From<?, ?>) path).getJoins().forEach(join -> collectJoins(join, joins));
-		}
-		if (path instanceof FetchParent) {
-			try {
-				((FetchParent<?, ?>) path).getFetches().stream().filter(fetch -> fetch instanceof Path).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
-			}
-			catch (NullPointerException openJPAWillThrowThisOnEmptyFetches) {
-				// Ignore and continue.
-			}
-		}
-		if (path instanceof Join) {
-			joins.put(((Join<?, ?>) path).getAttribute().getName(), path);
-		}
-		else if (path instanceof Fetch) {
-			joins.put(((Fetch<?, ?>) path).getAttribute().getName(), path);
-		}
-	}
-
-	private static class SoftDeleteData {
-
-		private Class<?> entityType;
-		private final boolean softDeletable;
-		private final String fieldName;
-		private final String setterName;
-		private final boolean typeActive;
-
-		public SoftDeleteData(Class<?> entityType) {
-			this.entityType = entityType;
-			List<Field> softDeletableFields = listAnnotatedFields(entityType, SoftDeletable.class);
-
-			if (softDeletableFields.isEmpty()) {
-				this.softDeletable = false;
-				this.fieldName = null;
-				this.setterName = null;
-				this.typeActive = false;
-			}
-			else if (softDeletableFields.size() == 1) {
-				Field softDeletableField = softDeletableFields.get(0);
-				this.softDeletable = true;
-				this.fieldName = softDeletableField.getName();
-				this.setterName = ("set" + toUpperCase(fieldName.charAt(0)) + fieldName.substring(1));
-				this.typeActive = softDeletableField.getAnnotation(SoftDeletable.class).type() == SoftDeletable.Type.ACTIVE;
-			}
-			else {
-				throw new IllegalStateException(format(ERROR_ILLEGAL_SOFT_DELETABLE, entityType));
-			}
-		}
-
-		public void checkSoftDeletable() {
-			if (!softDeletable) {
-				throw new NonSoftDeletableEntityException(null, format(ERROR_NOT_SOFT_DELETABLE, entityType));
-			}
-		}
-
-		public boolean isSoftDeleted(BaseEntity<?> entity) {
-			if (!softDeletable) {
-				return false;
-			}
-
-			boolean value = accessField(entity, fieldName);
-			return typeActive ? !value : value;
-		}
-
-		public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
-			invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
-		}
-
-		public String getWhereClause(boolean includeSoftDeleted) {
-			return (" WHERE " + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
-		}
-
-		@Override
-		public String toString() {
-			return format("SoftDeleteData[softDeletable=%s, fieldName=%s, setterName=%s, typeActive=%s]", softDeletable, fieldName, setterName, typeActive);
-		}
 	}
 
 	private static <T> T noop() {
