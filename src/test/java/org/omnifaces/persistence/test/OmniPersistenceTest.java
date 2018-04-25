@@ -304,13 +304,13 @@ public class OmniPersistenceTest {
 
 	@Test
 	public void testPersistedEntitiesWithEnums() {
-		Product product = productService.findByIdWithUserRoles(1L).get();
+		Product product = productService.getByIdWithUserRoles(1L);
 		assertEquals("Product status for product 1 was persisted", ProductStatus.IN_STOCK, product.getProductStatus());
 		assertEquals("Product status id for product 1 was persisted", ProductStatus.IN_STOCK.getId(), productService.getRawProductStatus(product.getId()));
 		assertTrue("User roles for product 1 were persisted", product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER));
 		assertTrue("User roles code for product 1 were persisted", productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()));
 
-		product = productService.findByIdWithUserRoles(2L).get();
+		product = productService.getByIdWithUserRoles(2L);
 		assertEquals("Product status for product 2 was persisted", ProductStatus.DISCONTINUED, product.getProductStatus());
 		assertEquals("Product status id for product 2 was persisted", ProductStatus.DISCONTINUED.getId(), productService.getRawProductStatus(product.getId()));
 		assertTrue("User roles for product 2 were persisted", product.getUserRoles().size() == 2 && product.getUserRoles().containsAll(asList(UserRole.EMPLOYEE, UserRole.MANAGER)));

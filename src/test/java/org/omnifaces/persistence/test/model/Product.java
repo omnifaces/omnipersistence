@@ -12,19 +12,22 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import static javax.persistence.EnumType.STRING;
+
 import java.util.HashSet;
 import java.util.Set;
+
 import javax.persistence.ElementCollection;
 import javax.persistence.Entity;
-import static javax.persistence.EnumType.STRING;
 import javax.persistence.Enumerated;
+
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 @Entity
 public class Product extends GeneratedIdEntity<Long> {
 
     private static final long serialVersionUID = 1L;
-    
+
     @Enumerated
     private ProductStatus productStatus;
 
@@ -44,12 +47,12 @@ public class Product extends GeneratedIdEntity<Long> {
         return userRoles;
     }
 
-    public void setUserRoles(Set<UserRole> userRoles) {
-        this.userRoles = userRoles;
+    public boolean addUserRole(UserRole userRole) {
+        return userRoles.add(userRole);
     }
-    
-    public void addUserRole(UserRole userRole) {
-        userRoles.add(userRole);
+
+    public boolean removeUserRole(UserRole userRole) {
+    	return userRoles.remove(userRole);
     }
 
 }

@@ -13,7 +13,6 @@
 package org.omnifaces.persistence.test.service;
 
 import java.util.List;
-import java.util.Optional;
 
 import javax.ejb.Stateless;
 
@@ -23,27 +22,31 @@ import org.omnifaces.persistence.test.model.Product;
 @Stateless
 public class ProductService extends BaseEntityService<Long, Product> {
 
-    public Optional<Product> findByIdWithUserRoles(Long id) {
-    	return find("SELECT p FROM Product p JOIN FETCH p.userRoles WHERE p.id = :id", p -> p.put("id", id));
-    }
+	public Product getByIdWithUserRoles(Long id) {
+		return getEntityManager()
+			.createQuery("SELECT p FROM Product p JOIN FETCH p.userRoles WHERE p.id = :id", Product.class)
+			.setParameter("id", id)
+			.getSingleResult();
+	}
 
-    public List<Product> getAllWithUserRoles() {
-        return list("SELECT p FROM Product p JOIN FETCH p.userRoles");
-    }
+	public List<Product> getAllWithUserRoles() {
+		return getEntityManager()
+			.createQuery("SELECT p FROM Product p JOIN FETCH p.userRoles", Product.class)
+			.getResultList();
+	}
 
-    public int getRawProductStatus(Long id) {
-        int statusCode = (int) getEntityManager().createNativeQuery("SELECT p.productStatus FROM product p WHERE p.id = :id")
-                .setParameter("id", id)
-                .getSingleResult();
-        return statusCode;
-    }
+	public int getRawProductStatus(Long id) {
+		return (int) getEntityManager()
+			.createNativeQuery("SELECT p.productStatus FROM product p WHERE p.id = :id").setParameter("id", id)
+			.getSingleResult();
+	}
 
-    public List<String> getRawUserRoles(Long id) {
-        List<String> userRoles = getEntityManager()
-                .createNativeQuery("SELECT pu.userRoles FROM product p INNER JOIN product_userRoles pu on pu.product_id = p.id WHERE p.id = :id")
-                .setParameter("id", id)
-                .getResultList();
-        return userRoles;
-    }
+	@SuppressWarnings("unchecked")
+	public List<String> getRawUserRoles(Long id) {
+		return getEntityManager()
+			.createNativeQuery("SELECT pu.userRoles FROM product p INNER JOIN product_userRoles pu on pu.product_id = p.id WHERE p.id = :id")
+			.setParameter("id", id)
+			.getResultList();
+	}
 
 }
