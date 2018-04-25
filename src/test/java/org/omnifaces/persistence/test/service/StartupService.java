@@ -60,7 +60,7 @@ public class StartupService {
 		createTestPersons();
 		createTestTexts();
 		createTestComments();
-                createTestProducts();
+		createTestProducts();
 	}
 
 	private void createTestPersons() {
@@ -109,17 +109,17 @@ public class StartupService {
 		commentService.persist(new Comment());
 	}
 
-        private void createTestProducts() {
-                Product product = new Product();
-                product.setProductStatus(ProductStatus.IN_STOCK);
-                product.addUserRole(UserRole.USER);
-                productService.persist(product);
-                
-                product = new Product();
-                product.setProductStatus(ProductStatus.DISCONTINUED);
-                product.addUserRole(UserRole.EMPLOYEE);
-                product.addUserRole(UserRole.MANAGER);
-                productService.persist(product);
-        }
+	private void createTestProducts() {
+		Product product = new Product();
+		product.setProductStatus(ProductStatus.IN_STOCK);
+		product.addUserRole(UserRole.USER);
+		productService.persist(product);
+
+		product = new Product();
+		product.setProductStatus(ProductStatus.DISCONTINUED);
+		product.addUserRole(UserRole.EMPLOYEE);
+		product.addUserRole(UserRole.MANAGER);
+		productService.persist(product);
+	}
 
 }

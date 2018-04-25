@@ -13,26 +13,33 @@
 package org.omnifaces.persistence.model;
 
 import static java.lang.annotation.ElementType.TYPE;
-import java.lang.annotation.Retention;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
+
+import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
-import javax.persistence.EnumType;
 
 /**
- * TODO implement additional annotation to fine-tune correspondence between JPA enum and database table.
+ * TODO implement additional annotation to fine-tune correspondence between JPA
+ * enum and database table.
  *
  * @author Sergey Kuntsel
  */
-@Target(value = { TYPE })
+@Target(TYPE)
 @Retention(RUNTIME)
-public @interface JpaEnumSpecifics {
-    
-    public String tableName() default "";
-    public String ordinalColumnName() default "";
-    public String stringColumnName() default "";
-    public String ordinalFieldName() default "";
-    public String stringFieldName() default "";
-    public boolean updateTableAtStartup() default false;
-    public boolean tablePriority() default false;
-    
+public @interface EnumMappingSpecifics {
+
+	public String tableName() default "";
+
+	public String ordinalColumnName() default "";
+
+	public String stringColumnName() default "";
+
+	public String ordinalFieldName() default "";
+
+	public String stringFieldName() default "";
+
+	public boolean updateTableAtStartup() default false;
+
+	public boolean tablePriority() default false;
+
 }

@@ -39,6 +39,7 @@ public @interface SoftDeletable {
 
 	/**
 	 * Defines the types of the soft delete column.
+	 * @author Sergey Kuntsel
 	 */
 	public enum Type {
 
@@ -58,6 +59,10 @@ public @interface SoftDeletable {
 		ACTIVE
 	}
 
+	/**
+	 * Returns The soft deletable type. Defaults to {@link Type#DELETED}.
+	 * @return The soft deletable type.
+	 */
 	public Type type() default Type.DELETED;
 
 }

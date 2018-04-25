@@ -13,21 +13,22 @@
 package org.omnifaces.persistence.test.model;
 
 import javax.persistence.EnumType;
-import org.omnifaces.persistence.model.JpaEnum;
 
-@JpaEnum(type = EnumType.STRING, fieldName = "code")
+import org.omnifaces.persistence.model.EnumMapping;
+
+@EnumMapping(type = EnumType.STRING, fieldName = "code")
 public enum UserRole {
-    
-    USER("USR"), EMPLOYEE("EMP"), MANAGER("MGR");
-    
-    private String code;
 
-    private UserRole(String code) {
-        this.code = code;
-    }
+	USER("USR"), EMPLOYEE("EMP"), MANAGER("MGR");
 
-    public String getCode() {
-        return code;
-    }
-    
+	private String code;
+
+	private UserRole(String code) {
+		this.code = code;
+	}
+
+	public String getCode() {
+		return code;
+	}
+
 }

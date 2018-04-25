@@ -12,21 +12,21 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import org.omnifaces.persistence.model.JpaEnum;
+import org.omnifaces.persistence.model.EnumMapping;
 
-@JpaEnum(fieldName = "id")
+@EnumMapping(fieldName = "id")
 public enum ProductStatus {
-    
-    IN_STOCK(1), OUT_OF_STOCK(10), DISCONTINUED(20);
-    
-    private int id;
 
-    private ProductStatus(int id) {
-        this.id = id;
-    }
+	IN_STOCK(1), OUT_OF_STOCK(10), DISCONTINUED(20);
 
-    public int getId() {
-        return id;
-    }
+	private int id;
+
+	private ProductStatus(int id) {
+		this.id = id;
+	}
+
+	public int getId() {
+		return id;
+	}
 
 }

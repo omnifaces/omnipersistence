@@ -13,12 +13,12 @@
 package org.omnifaces.persistence.test;
 
 import static java.lang.System.getProperty;
+import static java.util.Arrays.asList;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -299,21 +299,22 @@ public class OmniPersistenceTest {
 		lookupService.update(lookup);
 	}
 
-        @Test
-        public void testPersistedEntitiesWithEnums() {
-                Product product = productService.getByIdWithUserRoles(1L);
-                assertTrue("Product status for product 1 was persisted", product.getProductStatus() == ProductStatus.IN_STOCK);
-                assertTrue("Product status id for product 1 was persisted", productService.getRawProductStatus(product.getId()) == ProductStatus.IN_STOCK.getId());
-                assertTrue("User roles for product 1 were persisted", product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER));
-                assertTrue("User roles code for product 1 were persisted", productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()));
-                
-                product = productService.getByIdWithUserRoles(2L);
-                assertTrue("Product status for product 2 was persisted", product.getProductStatus() == ProductStatus.DISCONTINUED);
-                assertTrue("User roles for product 2 were persisted", product.getUserRoles().size() == 2 && 
-                        product.getUserRoles().contains(UserRole.EMPLOYEE) && product.getUserRoles().contains(UserRole.MANAGER));
-                assertTrue("Product status id for product 2 was persisted", productService.getRawProductStatus(product.getId()) == ProductStatus.DISCONTINUED.getId());
-                assertTrue("User roles code for product 2 were persisted", productService.getRawUserRoles(product.getId()).containsAll(
-                        Arrays.asList(new String[] { UserRole.EMPLOYEE.getCode(), UserRole.MANAGER.getCode() })));
-        }
-        
+
+	// @EnumMapping ---------------------------------------------------------------------------------------------------
+
+	@Test
+	public void testPersistedEntitiesWithEnums() {
+		Product product = productService.findByIdWithUserRoles(1L).get();
+		assertEquals("Product status for product 1 was persisted", ProductStatus.IN_STOCK, product.getProductStatus());
+		assertEquals("Product status id for product 1 was persisted", ProductStatus.IN_STOCK.getId(), productService.getRawProductStatus(product.getId()));
+		assertTrue("User roles for product 1 were persisted", product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER));
+		assertTrue("User roles code for product 1 were persisted", productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()));
+
+		product = productService.findByIdWithUserRoles(2L).get();
+		assertEquals("Product status for product 2 was persisted", ProductStatus.DISCONTINUED, product.getProductStatus());
+		assertEquals("Product status id for product 2 was persisted", ProductStatus.DISCONTINUED.getId(), productService.getRawProductStatus(product.getId()));
+		assertTrue("User roles for product 2 were persisted", product.getUserRoles().size() == 2 && product.getUserRoles().containsAll(asList(UserRole.EMPLOYEE, UserRole.MANAGER)));
+		assertTrue("User roles code for product 2 were persisted", productService.getRawUserRoles(product.getId()).containsAll(asList(UserRole.EMPLOYEE.getCode(), UserRole.MANAGER.getCode())));
+	}
+
 }
