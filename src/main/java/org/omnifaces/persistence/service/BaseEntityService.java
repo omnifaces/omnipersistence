@@ -18,6 +18,7 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
+import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
 import static java.util.logging.Level.WARNING;
@@ -37,6 +38,9 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN
 import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
+import static org.omnifaces.persistence.model.EnumMapping.CODE_FIELD_NAME;
+import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
+import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_ACTION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
@@ -74,6 +78,8 @@ import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
 import javax.ejb.SessionContext;
 import javax.ejb.Stateless;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.CDI;
 import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
@@ -157,6 +163,7 @@ import org.omnifaces.utils.reflect.Getter;
  * whether the ID is generated, and whether the entity is {@link SoftDeletable}, and whether any {@link EnumMapping} is modified, and
  * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
  * internally used in order to be able to build proper queries to perform a search inside those fields.
+ * <li>{@link Level#INFO} will log both successful and unsuccessful attempts to modify enum representations basing on {@link EnumMapping}.
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
  * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
  * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
@@ -183,7 +190,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
-	private static final String LOG_FINE_COMPUTED_MODIFIED_ENUM_MAPPING = "Enum mapping for enum %s: was %smodified";
+	private static final String LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING = "Enum mapping for enum %s: was %smodified";
+	private static final String LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE = "Enum mapping table for enum %s: was %smodified";
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
 	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "javax.validation.ConstraintViolation: @%s %s#%s %s on %s";
 	private static final String LOG_WARNING_INVALID_ENUM_FIELD_TYPE = "Declared enum %s contains wrong type of field %s: expected %s, got %s";
@@ -212,6 +220,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends BaseEntity<?>>, Boolean> CHECKED_ENUM_MAPPINGS = new ConcurrentHashMap<>();
 	private static final Map<Class<? extends Enum<?>>, Boolean> MODIFIED_ENUM_MAPPINGS = new ConcurrentHashMap<>();
+	private static final Map<Class<? extends Enum<?>>, Boolean> MODIFIED_ENUM_TABLE_MAPPINGS = new ConcurrentHashMap<>();
 
 	private final Class<I> identifierType;
 	private final Class<E> entityType;
@@ -283,18 +292,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean computeModifiedEnumMapping(Class<?> entityType) {
-		listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
+                List<Class<? extends Enum<?>>> enumsToUpdate = listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
 			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
-			.forEach(enumeratedType -> {
+			.map(enumeratedType -> {
 				boolean modified = modifyEnumMapping(enumeratedType, enumeratedType.getAnnotation(EnumMapping.class));
-				logger.log(Level.INFO, () -> format(LOG_FINE_COMPUTED_MODIFIED_ENUM_MAPPING, enumeratedType, modified ? "" : "not "));
+				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING, enumeratedType, modified ? "" : "not "));
 				MODIFIED_ENUM_MAPPINGS.put(enumeratedType, modified);
-			});
+                                return enumeratedType;
+			}).collect(toList())
+                        .stream()
+                        .filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && 
+                                enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
+                        .collect(toList());
+                
+                if (!enumsToUpdate.isEmpty()) {
+                        BeanManager beanManager = CDI.current().getBeanManager();
+                        Bean<?> bean = beanManager.getBeans(EnumMappingTableService.class).iterator().next();
+                        EnumMappingTableService emts = (EnumMappingTableService)beanManager.getReference(bean, 
+                                EnumMappingTableService.class, beanManager.createCreationalContext(bean));
+
+                        emts.computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
+                                logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE, enumeratedType, modified ? "" : "not "));
+                                MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
+                        });
+                }
+                
 		return true;
 	}
 
 	private static boolean modifyEnumMapping(Class<? extends Enum<?>> enumeratedType, EnumMapping enumMapping) {
-		String fieldName = enumMapping.fieldName();
+		boolean mappedByOrdinal = (enumMapping.type() == ORDINAL);
+		String fieldName = "".equals(enumMapping.fieldName()) ? (mappedByOrdinal ? ID_FIELD_NAME : CODE_FIELD_NAME) : enumMapping.fieldName();
 		Optional<Field> optionalField = findField(enumeratedType, fieldName);
 
 		if (!optionalField.isPresent()) {
@@ -303,7 +331,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		Field field = optionalField.get();
-		boolean mappedByOrdinal = (enumMapping.type() == ORDINAL);
 		boolean validFieldType = (mappedByOrdinal ? (field.getType() == Integer.class || field.getType() == int.class) : field.getType() == String.class);
 
 		if (!validFieldType) {
@@ -334,7 +361,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				// Rebuild internal cache that persistence providers are using under the covers.
 				Field enumConstants = findField(Class.class, "enumConstants").get();
 				modifyField(enumeratedType, enumConstants, null);
-				enumeratedType.getEnumConstants();
+                                Enum<?>[] enumeratedConstants = enumeratedType.getEnumConstants();
+                                
+                                Field enumConstantDirectory = findField(Class.class, "enumConstantDirectory").get();
+                                modifyField(enumeratedType, enumConstantDirectory, asList(enumeratedConstants).stream().filter(Objects::nonNull).collect(toMap(Enum::name, Function.identity())));
 
 				// Return back the values array so that direct usage in code yields predictable behaviour.
 				modifyField(null, enumValues, oldValues);

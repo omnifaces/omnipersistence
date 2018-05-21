@@ -24,6 +24,11 @@
 
 		<properties>
 			<property name="javax.persistence.schema-generation.database.action" value="drop-and-create" />
+			<property name="javax.persistence.schema-generation.create-source" value="metadata-then-script" />
+			<property name="javax.persistence.schema-generation.create-script-source" value="META-INF/sql/create-test.sql" />
+			<property name="javax.persistence.schema-generation.drop-source" value="metadata-then-script" />
+			<property name="javax.persistence.schema-generation.drop-script-source" value="META-INF/sql/drop-test.sql" />
+			<property name="javax.persistence.sql-load-script-source" value="META-INF/sql/load-test.sql" />
 			<property name="hibernate.show_sql" value="true" />
 			<property name="hibernate.cache.use_second_level_cache" value="false" />
 			<property name="hibernate.cache.use_query_cache" value="false" />
