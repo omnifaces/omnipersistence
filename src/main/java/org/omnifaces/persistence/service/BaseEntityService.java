@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.service;
 
+import static java.lang.Boolean.TRUE;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
@@ -173,6 +174,8 @@ import org.omnifaces.utils.reflect.Getter;
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
+
+	private static final String BUILD_COUNT_SUBQUERY = "BaseEntityService.buildCountSubquery";
 
 	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
@@ -1213,7 +1216,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				}
 			}
 
-			return noop();
+			return null;
 		});
 	}
 
@@ -1243,7 +1246,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, QueryBuilder<E> queryBuilder) {
 		return getPage(page, count, cacheable, entityType, (builder, query, root) -> {
 			queryBuilder.build(builder, query, (Root<E>) root);
-			return noop();
+			return new LinkedHashMap<>(0);
 		});
 	}
 
@@ -1284,11 +1287,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
 			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
-			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, !entityQuery.getParameters().isEmpty(), criteriaBuilder, queryBuilder) : null;
+			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder) : null;
 			return executeQuery(page, entityQuery, countQuery);
 		}
 		finally {
 			afterPage().accept(getEntityManager());
+			getEntityManager().getProperties().clear();
 		}
 	}
 
@@ -1304,11 +1308,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return buildTypedQuery(page, cacheable, entityQuery, entityQueryRoot, parameterValues);
 	}
 
-	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, boolean cacheable, Class<T> resultType, boolean buildCountSubquery, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
+	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, boolean cacheable, Class<T> resultType, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
 		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
 		Root<E> countQueryRoot = countQuery.from(entityType);
 		countQuery.select(criteriaBuilder.count(countQueryRoot));
-		Map<String, Object> parameterValues = buildCountSubquery ? buildCountSubquery(page, resultType, countQuery, countQueryRoot, criteriaBuilder, queryBuilder) : emptyMap();
+		Map<String, Object> parameterValues = shouldBuildCountSubquery() ? buildCountSubquery(page, resultType, countQuery, countQueryRoot, criteriaBuilder, queryBuilder) : emptyMap();
 		return buildTypedQuery(page, cacheable, countQuery, null, parameterValues);
 	}
 
@@ -1343,6 +1347,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(page, typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
+		shouldBuildCountSubquery(!typedQuery.getParameters().isEmpty());
 		onPage(page, cacheable).accept(typedQuery);
 		return typedQuery;
 	}
@@ -1357,6 +1362,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
 		logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, entities, estimatedTotalNumberOfResults));
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
+	}
+
+	private void shouldBuildCountSubquery(boolean yes) {
+		getEntityManager().setProperty(BUILD_COUNT_SUBQUERY, shouldBuildCountSubquery() || yes);
+	}
+
+	private boolean shouldBuildCountSubquery() {
+		return getEntityManager().getProperties().get(BUILD_COUNT_SUBQUERY) == TRUE;
 	}
 
 
@@ -1385,9 +1398,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				groupByIfNecessary(query, root);
 			}
 
+			shouldBuildCountSubquery(true);
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (resultType == entityType) {
+			shouldBuildCountSubquery(mapping != null);
 			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else {
