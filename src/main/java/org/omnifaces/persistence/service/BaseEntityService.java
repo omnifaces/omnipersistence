@@ -1292,7 +1292,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 		finally {
 			afterPage().accept(getEntityManager());
-			getEntityManager().getProperties().clear();
+			shouldBuildCountSubquery(null);
 		}
 	}
 
@@ -1364,8 +1364,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
 	}
 
-	private void shouldBuildCountSubquery(boolean yes) {
-		getEntityManager().setProperty(BUILD_COUNT_SUBQUERY, shouldBuildCountSubquery() || yes);
+	private void shouldBuildCountSubquery(Boolean yes) {
+		getEntityManager().setProperty(BUILD_COUNT_SUBQUERY, yes != null && (shouldBuildCountSubquery() || yes));
 	}
 
 	private boolean shouldBuildCountSubquery() {
