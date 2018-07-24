@@ -13,10 +13,15 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.String.format;
+import static java.util.Arrays.asList;
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 import static javax.ejb.TransactionManagementType.BEAN;
+import static javax.persistence.EnumType.ORDINAL;
+import static org.omnifaces.persistence.model.EnumMapping.CODE_FIELD_NAME;
+import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_HISTORY_TABLE_POSTFIX;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_TABLE_POSTFIX;
 import static org.omnifaces.utils.reflect.Reflections.accessField;
@@ -72,7 +77,7 @@ import org.omnifaces.persistence.model.EnumMappingTable;
  * the application will have one-to-one correspondence between java enum and
  * database table representations right from the start.
  * </ul>
- * 
+ *
  * @see EnumMapping
  * @see EnumMappingTable
  * @author Sergey Kuntsel
@@ -802,7 +807,7 @@ public class EnumMappingTableService {
                                         Field enumConstants = findField(Class.class, "enumConstants").get();
                                         modifyField(enumeratedType, enumConstants, null);
                                         Enum<?>[] constants = enumeratedType.getEnumConstants();
-                                        
+
                                         Field enumConstantDirectory = findField(Class.class, "enumConstantDirectory").get();
                                         modifyField(enumeratedType, enumConstantDirectory, Arrays.asList(constants).stream().filter(Objects::nonNull).collect(Collectors.toMap(Enum::name, Function.identity())));
 
@@ -829,6 +834,65 @@ public class EnumMappingTableService {
 
                 return true;
         }
+
+    	static boolean modifyEnumMapping(Class<? extends Enum<?>> enumeratedType) {
+    		EnumMapping enumMapping = enumeratedType.getAnnotation(EnumMapping.class);
+    		boolean mappedByOrdinal = (enumMapping.type() == ORDINAL);
+    		String fieldName = "".equals(enumMapping.fieldName()) ? (mappedByOrdinal ? ID_FIELD_NAME : CODE_FIELD_NAME) : enumMapping.fieldName();
+    		Optional<Field> optionalField = findField(enumeratedType, fieldName);
+
+    		if (!optionalField.isPresent()) {
+    			logger.log(WARNING, () -> format(LOG_WARNING_INVALID_ENUM_FIELD_NAME, enumeratedType, fieldName));
+    			return false;
+    		}
+
+    		Field field = optionalField.get();
+    		boolean validFieldType = (mappedByOrdinal ? (field.getType() == Integer.class || field.getType() == int.class) : field.getType() == String.class);
+
+    		if (!validFieldType) {
+    			logger.log(WARNING, () -> format(LOG_WARNING_INVALID_ENUM_FIELD_TYPE, enumeratedType, field.getName(), mappedByOrdinal ? "Integer" : "String", field.getType()));
+    			return false;
+    		}
+
+    		Field targetField = findField(enumeratedType.getSuperclass(), mappedByOrdinal ? "ordinal" : "name").get();
+    		List<Enum<?>> constants = asList(enumeratedType.getEnumConstants());
+
+    		// Replace default enum mappings.
+    		int maxOrdinal = constants.stream().map(constant -> {
+    			Object value = accessField(constant, field);
+    			modifyField(constant, targetField, value);
+    			return mappedByOrdinal ? (int) value : 0;
+    		}).mapToInt(Integer::intValue).max().orElse(0);
+
+    		if (mappedByOrdinal) { // If ordinal type is used we need to update internal Enum representation as well.
+    			try {
+    				// Create array of new Enum mappings.
+    				Object values = Array.newInstance(enumeratedType, maxOrdinal + 1);
+    				constants.forEach(constant -> Array.set(values, constant.ordinal(), constant));
+
+    				// Replace internal Enum values representation.
+    				Field enumValues = findField(enumeratedType, "$VALUES").get();
+    				Object oldValues = modifyField(null, enumValues, values);
+
+    				// Rebuild internal cache that persistence providers are using under the covers.
+    				Field enumConstants = findField(Class.class, "enumConstants").get();
+    				modifyField(enumeratedType, enumConstants, null);
+                                    Enum<?>[] enumeratedConstants = enumeratedType.getEnumConstants();
+
+                                    Field enumConstantDirectory = findField(Class.class, "enumConstantDirectory").get();
+                                    modifyField(enumeratedType, enumConstantDirectory, asList(enumeratedConstants).stream().filter(Objects::nonNull).collect(toMap(Enum::name, Function.identity())));
+
+    				// Return back the values array so that direct usage in code yields predictable behaviour.
+    				modifyField(null, enumValues, oldValues);
+    			}
+    			catch (Exception e) {
+    				logger.log(WARNING, e, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, enumeratedType, fieldName));
+    				return false;
+    			}
+    		}
+
+    		return true;
+    	}
 
         // TODO refactor to Omniutils.
         private static String toSnakeCase(String camelCase) {
