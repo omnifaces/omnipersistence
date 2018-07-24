@@ -25,8 +25,10 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * Let all your entities extend from this. Then you can make use of {@link BaseEntityService}.
  * <p>
- * There are three more mapped superclasses which may also be of interest.
+ * There are five more mapped superclasses which may also be of interest.
  * <ul>
+ * <li>{@link TimestampedBaseEntity} - extends {@link BaseEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care of them.
+ * <li>{@link VersionedBaseEntity} - extends {@link TimestampedBaseEntity} with a <code>@Version</code> column and automatically takes care of it.
  * <li>{@link GeneratedIdEntity} - extends {@link BaseEntity} with <code>id</code> column and automatically takes care of it.
  * <li>{@link TimestampedEntity} - extends {@link GeneratedIdEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care of them.
  * <li>{@link VersionedEntity} - extends {@link TimestampedEntity} with a <code>@Version</code> column and automatically takes care of it.
