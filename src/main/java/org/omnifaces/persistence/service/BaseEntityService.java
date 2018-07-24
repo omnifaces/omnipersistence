@@ -19,12 +19,13 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
-import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
+import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.IntStream.range;
 import static javax.persistence.EnumType.ORDINAL;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
@@ -86,6 +87,7 @@ import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
+import javax.persistence.Entity;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
 import javax.persistence.GeneratedValue;
@@ -304,14 +306,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                 return enumeratedType;
 			}).collect(toList())
                         .stream()
-                        .filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && 
+                        .filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) &&
                                 enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
                         .collect(toList());
-                
+
                 if (!enumsToUpdate.isEmpty()) {
                         BeanManager beanManager = CDI.current().getBeanManager();
                         Bean<?> bean = beanManager.getBeans(EnumMappingTableService.class).iterator().next();
-                        EnumMappingTableService emts = (EnumMappingTableService)beanManager.getReference(bean, 
+                        EnumMappingTableService emts = (EnumMappingTableService)beanManager.getReference(bean,
                                 EnumMappingTableService.class, beanManager.createCreationalContext(bean));
 
                         emts.computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
@@ -319,7 +321,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                 MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
                         });
                 }
-                
+
 		return true;
 	}
 
@@ -365,7 +367,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				Field enumConstants = findField(Class.class, "enumConstants").get();
 				modifyField(enumeratedType, enumConstants, null);
                                 Enum<?>[] enumeratedConstants = enumeratedType.getEnumConstants();
-                                
+
                                 Field enumConstantDirectory = findField(Class.class, "enumConstantDirectory").get();
                                 modifyField(enumeratedType, enumConstantDirectory, asList(enumeratedConstants).stream().filter(Objects::nonNull).collect(toMap(Enum::name, Function.identity())));
 
@@ -533,25 +535,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find entity by given query.
+	 * Find entity by given query and positioned parameters, if any.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @return Found entity matching given query, if any.
-	 * @throws IllegalArgumentException When more than one entity is found matching given query.
+	 * @param parameters The positioned query parameters, if any.
+	 * @return Found entity matching given query and positioned parameters, if any.
+	 * @throws IllegalArgumentException When more than one entity is found matching given query and positioned parameters.
 	 */
-	protected Optional<E> find(String jpql) {
-		return find(jpql, p -> noop());
+	protected Optional<E> find(String jpql, Object... parameters) {
+		return getOptionalSingleResult(list(jpql, parameters));
 	}
 
 	/**
-	 * Find entity by given query and parameters.
+	 * Find entity by given query and mapped parameters, if any.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters To put the query parameters in.
-	 * @return Found entity matching given query and parameters, if any.
-	 * @throws IllegalArgumentException When more than one entity is found matching given query and parameters.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return Found entity matching given query and mapped parameters, if any.
+	 * @throws IllegalArgumentException When more than one entity is found matching given query and mapped parameters.
 	 */
 	protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
-		List<E> results = list(jpql, parameters);
+		return getOptionalSingleResult(list(jpql, parameters));
+	}
 
+	private Optional<E> getOptionalSingleResult(List<E> results) {
 		if (results.isEmpty()) {
 			return Optional.empty();
 		}
@@ -636,33 +641,42 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Check whether given entity exists.
+	 * This method supports proxied entities.
 	 * @param entity Entity to check.
 	 * @return Whether entity with given entity exists.
 	 */
 	protected boolean exists(E entity) {
-		return entity.getId() != null && getEntityManager()
+		I id = provider.getIdentifier(entity);
+		return id != null && getEntityManager()
 			.createQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id", Long.class)
-			.setParameter("id", entity.getId())
+			.setParameter("id", id)
 			.getSingleResult().intValue() > 0;
 	}
 
 	/**
-	 * List entities matching the given query.
+	 * List entities matching the given query and positioned parameters, if any.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @return List of entities matching the given query.
+	 * @param parameters The positioned query parameters, if any.
+	 * @return List of entities matching the given query and positioned parameters, if any.
 	 */
-	protected List<E> list(String jpql) {
-		return list(jpql, p -> noop());
+	protected List<E> list(String jpql, Object... parameters) {
+		return createQuery(jpql, parameters).getResultList();
 	}
 
 	/**
-	 * List entities matching the given query and query parameters.
+	 * List entities matching the given query and mapped parameters, if any.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters To put the query parameters in.
-	 * @return List of entities matching the given query and query parameters.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return List of entities matching the given query and mapped parameters, if any.
 	 */
 	protected List<E> list(String jpql, Consumer<Map<String, Object>> parameters) {
 		return createQuery(jpql, parameters).getResultList();
+	}
+
+	private TypedQuery<E> createQuery(String jpql, Object... parameters) {
+		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
+		range(0, parameters.length).forEach(i -> query.setParameter(i, parameters[i]));
+		return query;
 	}
 
 	private TypedQuery<E> createQuery(String jpql, Consumer<Map<String, Object>> parameters) {
@@ -734,6 +748,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return entity.getId();
+	}
+
+	/**
+	 * Persist given entity via {@link #persist(BaseEntity)} and immediately perform a flush so that all changes in
+	 * managed entities so far in the current transaction are persisted. This is particularly useful when you intend
+	 * to process the given entity further in an asynchronous service method.
+	 * @param entity Entity to persist.
+	 * @return Entity ID.
+	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
+	 */
+	protected I persistAndFlush(E entity) {
+		I id = persist(entity);
+		getEntityManager().flush();
+		return id;
 	}
 
 	/**
@@ -810,9 +838,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Update or delete all entities matching the given query and query parameters.
+	 * Update or delete all entities matching the given query and positioned parameters, if any.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters To put the query parameters in.
+	 * @param parameters The positioned query parameters, if any.
+	 * @return The number of entities updated or deleted.
+	 * @see Query#executeUpdate()
+	 */
+	protected int update(String jpql, Object... parameters) {
+		return createQuery(jpql, parameters).executeUpdate();
+	}
+
+	/**
+	 * Update or delete all entities matching the given query and mapped parameters, if any.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters To put the mapped query parameters in, if any.
 	 * @return The number of entities updated or deleted.
 	 * @see Query#executeUpdate()
 	 */
@@ -838,12 +877,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Save given entity via {@link #save(BaseEntity)} and immediately perform a flush so that all changes in
+	 * managed entities so far in the current transaction are persisted. This is particularly useful when you intend
+	 * to process the given entity further in an asynchronous service method.
+	 * @param entity Entity to save.
+	 * @return Saved entity.
+	 */
+	protected E saveAndFlush(E entity) {
+		E savedEntity = save(entity);
+		getEntityManager().flush();
+		return savedEntity;
+	}
+
+	/**
 	 * Reset given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
 	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
 	 * which might have been edited in the client, without changing the reference. This is generally useful when the
 	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
 	 * @param entity Entity to reset.
-	 * @throws IllegalEntityStateException When entity has no ID.
+	 * @throws IllegalEntityStateException When entity is already managed, or has no ID.
 	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	public void reset(E entity) {
@@ -932,27 +984,47 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Make given entity managed. NOTE: This will discard any changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
+	 * This method supports proxied entities.
 	 * @param entity Entity to manage.
 	 * @return The managed entity.
+	 * @throws NullPointerException When given entity is <code>null</code>.
 	 * @throws IllegalEntityStateException When entity has no ID.
 	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	protected E manage(E entity) {
-		if (entity.getId() == null) {
+		if (provider.getIdentifier(entity) == null) {
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
 		}
 
-		if (getEntityManager().contains(entity)) {
-			return entity;
-		}
-
-		E managed = getById(entity.getId(), true);
+		E managed = manageIfNecessary(entity);
 
 		if (managed == null) {
 			throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
 		}
 
 		return managed;
+	}
+
+	/**
+	 * Make given entity managed if necessary. NOTE: This will discard any changes in the given entity!
+	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
+	 * This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code> when
+	 * entity has been deleted in the meanwhile.
+	 * @param entity Entity to manage, may be <code>null</code>.
+	 * @return The managed entity.
+	 */
+	protected E manageIfNecessary(E entity) {
+		if (entity == null) {
+			return null;
+		}
+
+		I id = provider.getIdentifier(entity);
+
+		if (id == null || (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity))) {
+			return entity;
+		}
+
+		return getEntityManager().find(provider.getEntityType(entity), id);
 	}
 
 	/**
