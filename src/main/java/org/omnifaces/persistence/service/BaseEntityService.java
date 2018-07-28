@@ -76,7 +76,6 @@ import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
-import javax.persistence.Entity;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
 import javax.persistence.GeneratedValue;
@@ -283,6 +282,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return softDeleteData;
 	}
 
+	private static boolean computeModifiedEnumMapping(Class<?> entityType) {
+		List<Class<? extends Enum<?>>> enumsToUpdate = listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
+			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
+			.peek(enumeratedType -> {
+				boolean modified = EnumMappingTableService.modifyEnumMapping(enumeratedType);
+				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING, enumeratedType, modified ? "" : "not "));
+				MODIFIED_ENUM_MAPPINGS.put(enumeratedType, modified);
+			})
+			.filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
+			.collect(toList());
+
+		if (!enumsToUpdate.isEmpty()) {
+			EnumMappingTableService emts = CDI.current().select(EnumMappingTableService.class).get();
+			emts.computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
+				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE, enumeratedType, modified ? "" : "not "));
+				MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
+			});
+		}
+
+		return true;
+	}
+
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
 		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isElementCollection);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
@@ -322,27 +343,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return unmodifiableSet(entityMapping);
 	}
 
-	private static boolean computeModifiedEnumMapping(Class<?> entityType) {
-		List<Class<? extends Enum<?>>> enumsToUpdate = listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
-			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
-			.peek(enumeratedType -> {
-				boolean modified = EnumMappingTableService.modifyEnumMapping(enumeratedType);
-				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING, enumeratedType, modified ? "" : "not "));
-				MODIFIED_ENUM_MAPPINGS.put(enumeratedType, modified);
-			})
-			.filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
-			.collect(toList());
-
-		if (!enumsToUpdate.isEmpty()) {
-			EnumMappingTableService emts = CDI.current().select(EnumMappingTableService.class).get();
-			emts.computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
-				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE, enumeratedType, modified ? "" : "not "));
-				MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
-			});
-		}
-
-		return true;
-	}
 
 	// Standard actions -----------------------------------------------------------------------------------------------
 
@@ -456,11 +456,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find entity by given query and positioned parameters, if any.
+	 * Find entity by given query and positional parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters The positioned query parameters, if any.
-	 * @return Found entity matching given query and positioned parameters, if any.
-	 * @throws IllegalArgumentException When more than one entity is found matching given query and positioned parameters.
+	 * @param parameters The positional query parameters, if any.
+	 * @return Found entity matching given query and positional parameters, if any.
+	 * @throws IllegalArgumentException When more than one entity is found matching given query and positional parameters.
 	 */
 	protected Optional<E> find(String jpql, Object... parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
@@ -468,6 +473,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Find entity by given query and mapped parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return Found entity matching given query and mapped parameters, if any.
@@ -575,10 +588,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * List entities matching the given query and positioned parameters, if any.
+	 * List entities matching the given query and positional parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters The positioned query parameters, if any.
-	 * @return List of entities matching the given query and positioned parameters, if any.
+	 * @param parameters The positional query parameters, if any.
+	 * @return List of entities matching the given query and positional parameters, if any.
 	 */
 	protected List<E> list(String jpql, Object... parameters) {
 		return createQuery(jpql, parameters).getResultList();
@@ -586,6 +604,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * List entities matching the given query and mapped parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return List of entities matching the given query and mapped parameters, if any.
@@ -759,9 +785,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Update or delete all entities matching the given query and positioned parameters, if any.
+	 * Update or delete all entities matching the given query and positional parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * int affectedRows = update("UPDATE Foo f SET f.bar = ?1 WHERE f.baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @param parameters The positioned query parameters, if any.
+	 * @param parameters The positional query parameters, if any.
 	 * @return The number of entities updated or deleted.
 	 * @see Query#executeUpdate()
 	 */
@@ -771,6 +802,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Update or delete all entities matching the given query and mapped parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * int affectedRows = update("UPDATE Foo f SET f.bar = :bar WHERE f.baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in, if any.
 	 * @return The number of entities updated or deleted.
@@ -815,12 +854,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
 	 * which might have been edited in the client, without changing the reference. This is generally useful when the
 	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
+	 * This method supports proxied entities.
 	 * @param entity Entity to reset.
 	 * @throws IllegalEntityStateException When entity is already managed, or has no ID.
 	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	public void reset(E entity) {
-		if (getEntityManager().contains(entity)) {
+		if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
 			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
 		}
 
@@ -932,7 +972,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code> when
 	 * entity has been deleted in the meanwhile.
 	 * @param entity Entity to manage, may be <code>null</code>.
-	 * @return The managed entity.
+	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied or entity has been deleted
+	 * in the meanwhile.
 	 */
 	protected E manageIfNecessary(E entity) {
 		if (entity == null) {
@@ -941,7 +982,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		I id = provider.getIdentifier(entity);
 
-		if (id == null || (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity))) {
+		if (id == null || (!provider.isProxy(entity) && getEntityManager().contains(entity))) {
 			return entity;
 		}
 
@@ -965,6 +1006,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Fetch lazy collections of given entity on given getters. If no getters are supplied, then it will fetch every
 	 * single {@link PluralAttribute} not of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Foo fooWithBarsAndBazs = fetchLazyCollections(getById(fooId), Foo::getBars, Foo::getBazs);
+	 * </pre>
 	 * @param entity Entity instance to fetch lazy collections on.
 	 * @param getters Getters of those lazy collections.
 	 * @return The same entity, useful if you want to continue using it immediately.
@@ -978,6 +1024,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Fetch lazy collections of given optional entity on given getters. If no getters are supplied, then it will fetch
 	 * every single {@link PluralAttribute} not of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyCollections(findById(fooId), Foo::getBars, Foo::getBazs);
+	 * </pre>
 	 * @param entity Optional entity instance to fetch lazy collections on.
 	 * @param getters Getters of those lazy collections.
 	 * @return The same optional entity, useful if you want to continue using it immediately.
@@ -991,6 +1042,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Fetch lazy maps of given entity on given getters. If no getters are supplied, then it will fetch every single
 	 * {@link PluralAttribute} of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Foo fooWithBarsAndBazs = fetchLazyCollections(getById(fooId), Foo::getBars, Foo::getBazs);
+	 * </pre>
 	 * @param entity Entity instance to fetch lazy maps on.
 	 * @param getters Getters of those lazy collections.
 	 * @return The same entity, useful if you want to continue using it immediately.
@@ -1004,6 +1060,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Fetch lazy maps of given optional entity on given getters. If no getters are supplied, then it will fetch every
 	 * single {@link PluralAttribute} of type {@link CollectionType#MAP}.
 	 * Note that the implementation does for simplicitly not check if those are actually lazy or eager.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyCollections(findById(fooId), Foo::getBars, Foo::getBazs);
+	 * </pre>
 	 * @param entity Optional entity instance to fetch lazy maps on.
 	 * @param getters Getters of those lazy collections.
 	 * @return The same optional entity, useful if you want to continue using it immediately.
@@ -1194,10 +1255,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns a partial result list based on given {@link Page}. This will by default cache the results.
+	 * <p>
+	 * Usage examples:
+	 * <pre>
+	 * Page first10Records = Page.of(0, 10);
+	 * PartialResultList&lt;Foo&gt; foos = getPage(first10Records, true);
+	 * </pre>
+	 * <pre>
+	 * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
+	 * criteria.put("bar", bar); // Exact match.
+	 * criteria.put("baz", IgnoreCase.value(baz)); // Case insensitive match.
+	 * criteria.put("faz", Like.contains(faz)); // Case insensitive LIKE match.
+	 * criteria.put("kaz", Order.greaterThan(kaz)); // Greater than match.
+	 * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
+	 * PartialResultList&lt;Foo&gt; foos = getPage(first10RecordsMatchingCriteriaOrderedByBar, true);
+	 * </pre>
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @return A partial result list based on given {@link Page}.
+	 * @see Page
+	 * @see Criteria
 	 */
 	public PartialResultList<E> getPage(Page page, boolean count) {
 		// Implementation notice: we can't remove this getPage() method and rely on the other getPage() method with varargs below,
@@ -1208,12 +1286,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns a partial result list based on given {@link Page} and fetch fields. This will by default cache the results.
+	 * <p>
+	 * Usage examples:
+	 * <pre>
+	 * Page first10Records = Page.of(0, 10);
+	 * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10Records, true, "bar");
+	 * </pre>
+	 * <pre>
+	 * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
+	 * criteria.put("bar", bar);
+	 * criteria.put("baz", baz);
+	 * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
+	 * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10RecordsMatchingCriteriaOrderedByBar, true, "bar");
+	 * </pre>
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field
 	 * can represent a JavaBean path, like as you would do in EL, such as <code>parent.child.subchild</code>.
 	 * @return A partial result list based on given {@link Page}.
+	 * @see Page
+	 * @see Criteria
 	 */
 	public PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {
 		return getPage(page, count, true, fetchFields);
@@ -1228,6 +1321,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field
 	 * can represent a JavaBean path, like as you would do in EL, such as <code>parent.child.subchild</code>.
 	 * @return A partial result list based on given {@link Page}.
+	 * @see Page
+	 * @see Criteria
 	 */
 	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, String... fetchFields) {
 		return getPage(page, count, cacheable, entityType, (builder, query, root) -> {
@@ -1246,11 +1341,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Returns a partial result list based on given {@link Page} and {@link QueryBuilder}. This will by default cache
 	 * the results.
+	 * <p>
+	 * Usage example: see {@link QueryBuilder}.
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param queryBuilder This allows fine-graining the JPA criteria query.
 	 * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
+	 * @see Page
+	 * @see Criteria
 	 */
 	protected PartialResultList<E> getPage(Page page, boolean count, QueryBuilder<E> queryBuilder) {
 		return getPage(page, count, true, queryBuilder);
@@ -1258,12 +1357,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder}.
+	 * <p>
+	 * Usage example: see {@link QueryBuilder}.
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
 	 * @param cacheable Whether the results should be cacheable.
 	 * @param queryBuilder This allows fine-graining the JPA criteria query.
 	 * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
+	 * @see Page
+	 * @see Criteria
 	 */
 	@SuppressWarnings("unchecked")
 	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, QueryBuilder<E> queryBuilder) {
@@ -1276,6 +1379,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Returns a partial result list based on given {@link Page}, result type and {@link MappedQueryBuilder}. This will
 	 * by default cache the results.
+	 * <p>
+	 * Usage example: see {@link MappedQueryBuilder}.
 	 * @param <T> The generic type of the entity or a DTO subclass thereof.
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
@@ -1285,6 +1390,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * getters-paths.
 	 * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+	 * @see Page
+	 * @see Criteria
 	 */
 	protected <T extends E> PartialResultList<T> getPage(Page page, boolean count, Class<T> resultType, MappedQueryBuilder<T> mappedQueryBuilder) {
 		return getPage(page, count, true, resultType, mappedQueryBuilder);
@@ -1292,6 +1399,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder}.
+	 * <p>
+	 * Usage example: see {@link MappedQueryBuilder}.
 	 * @param <T> The generic type of the entity or a DTO subclass thereof.
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
@@ -1302,6 +1411,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * getters-paths when result type does not equal entity type.
 	 * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
 	 * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+	 * @see Page
+	 * @see Criteria
 	 */
 	protected <T extends E> PartialResultList<T> getPage(Page page, boolean count, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
 		beforePage().accept(getEntityManager());
