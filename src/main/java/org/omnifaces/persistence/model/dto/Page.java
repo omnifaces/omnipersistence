@@ -19,12 +19,14 @@ import static java.util.Collections.unmodifiableMap;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 
+import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
 import org.omnifaces.persistence.criteria.Criteria;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -48,6 +50,7 @@ public final class Page { // This class should NOT be mutable!
 
 	private final int offset;
 	private final int limit;
+	private final Serializable lastId;
 	private final Map<String, Boolean> ordering;
 	private final Map<String, Object> requiredCriteria;
 	private final Map<String, Object> optionalCriteria;
@@ -64,8 +67,22 @@ public final class Page { // This class should NOT be mutable!
 	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
 	public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
+		this(offset, limit, null, ordering, requiredCriteria, optionalCriteria);
+	}
+
+	/**
+	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
+	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging.
+	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
+	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+	 */
+	public Page(Integer offset, Integer limit, Identifiable<?> last, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
 		this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
+		this.lastId = (last != null) ? last.getId() : null;
 		this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
 		this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
 		this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
@@ -77,7 +94,7 @@ public final class Page { // This class should NOT be mutable!
 		}
 
 		if (argumentValue < minValue) {
-			throw new IllegalArgumentException("Argument " + argumentName + " may not be less than " + minValue);
+			throw new IllegalArgumentException("Argument '" + argumentName + "' may not be less than " + minValue);
 		}
 
 		return argumentValue;
@@ -100,6 +117,16 @@ public final class Page { // This class should NOT be mutable!
 	 */
 	public int getLimit() {
 		return limit;
+	}
+
+	/**
+	 * Returns the ID of the last entity of the previous page, if any.
+	 * If present, then value-based paging instead of offset-based paging will be performed by {@link BaseEntityService}.
+	 * @return The ID of the last entity of the previous page, if any.
+	 */
+	@SuppressWarnings("unchecked")
+	public <I extends Comparable<I> & Serializable> I getLastId() {
+		return (I) lastId;
 	}
 
 	/**
@@ -143,6 +170,7 @@ public final class Page { // This class should NOT be mutable!
 
 		return Objects.equals(offset, other.offset)
 			&& Objects.equals(limit, other.limit)
+			&& Objects.equals(lastId, other.lastId)
 			&& Objects.equals(ordering, other.ordering)
 			&& Objects.equals(requiredCriteria, other.requiredCriteria)
 			&& Objects.equals(optionalCriteria, other.optionalCriteria);
@@ -150,7 +178,7 @@ public final class Page { // This class should NOT be mutable!
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(Page.class, offset, limit, ordering, requiredCriteria, optionalCriteria);
+		return Objects.hash(Page.class, offset, limit, lastId, ordering, requiredCriteria, optionalCriteria);
 	}
 
 	/**
@@ -162,6 +190,7 @@ public final class Page { // This class should NOT be mutable!
 		return new StringBuilder("Page[")
 			.append(offset).append(",")
 			.append(limit).append(",")
+			.append(lastId).append(",")
 			.append(ordering).append(",")
 			.append(new TreeMap<>(requiredCriteria)).append(",")
 			.append(new TreeMap<>(optionalCriteria)).append("]").toString();

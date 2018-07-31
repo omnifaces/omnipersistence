@@ -12,7 +12,6 @@
  */
 package org.omnifaces.persistence.service;
 
-import static java.lang.Boolean.TRUE;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyMap;
@@ -173,8 +172,6 @@ import org.omnifaces.utils.reflect.Getter;
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
 	private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
-
-	private static final String BUILD_COUNT_SUBQUERY = "BaseEntityService.buildCountSubquery";
 
 	private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
 	private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
@@ -1427,42 +1424,42 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
+			PageBuilder<T> pageBuilder = new PageBuilder<>(page, cacheable, resultType, queryBuilder);
 			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
-			TypedQuery<T> entityQuery = buildEntityQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder);
-			TypedQuery<Long> countQuery = count ? buildCountQuery(page, cacheable, resultType, criteriaBuilder, queryBuilder) : null;
+			TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
+			TypedQuery<Long> countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
 			return executeQuery(page, entityQuery, countQuery);
 		}
 		finally {
 			afterPage().accept(getEntityManager());
-			shouldBuildCountSubquery(null);
 		}
 	}
 
 
 	// Query actions --------------------------------------------------------------------------------------------------
 
-	private <T extends E> TypedQuery<T> buildEntityQuery(Page page, boolean cacheable, Class<T> resultType, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
-		CriteriaQuery<T> entityQuery = criteriaBuilder.createQuery(resultType);
+	private <T extends E> TypedQuery<T> buildEntityQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
+		CriteriaQuery<T> entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
 		Root<E> entityQueryRoot = buildRoot(entityQuery);
-		PathResolver pathResolver = buildSelection(resultType, entityQuery, entityQueryRoot, criteriaBuilder, queryBuilder);
-		buildOrderBy(page, entityQuery, criteriaBuilder, pathResolver);
-		Map<String, Object> parameterValues = buildRestrictions(page, entityQuery, criteriaBuilder, pathResolver);
-		return buildTypedQuery(page, cacheable, entityQuery, entityQueryRoot, parameterValues);
+		PathResolver pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
+		buildOrderBy(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
+		Map<String, Object> parameterValues = buildRestrictions(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
+		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameterValues);
 	}
 
-	private <T extends E> TypedQuery<Long> buildCountQuery(Page page, boolean cacheable, Class<T> resultType, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
+	private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
 		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
 		Root<E> countQueryRoot = countQuery.from(entityType);
 		countQuery.select(criteriaBuilder.count(countQueryRoot));
-		Map<String, Object> parameterValues = shouldBuildCountSubquery() ? buildCountSubquery(page, resultType, countQuery, countQueryRoot, criteriaBuilder, queryBuilder) : emptyMap();
-		return buildTypedQuery(page, cacheable, countQuery, null, parameterValues);
+		Map<String, Object> parameterValues = pageBuilder.shouldBuildCountSubquery() ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder) : emptyMap();
+		return buildTypedQuery(pageBuilder, countQuery, null, parameterValues);
 	}
 
-	private <T extends E> Map<String, Object> buildCountSubquery(Page page, Class<T> resultType, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
-		Subquery<T> countSubquery = countQuery.subquery(resultType);
+	private <T extends E> Map<String, Object> buildCountSubquery(PageBuilder<T> pageBuilder, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder) {
+		Subquery<T> countSubquery = countQuery.subquery(pageBuilder.getResultType());
 		Root<E> countSubqueryRoot = buildRoot(countSubquery);
-		PathResolver subqueryPathResolver = buildSelection(resultType, countSubquery, countSubqueryRoot, criteriaBuilder, queryBuilder);
-		Map<String, Object> parameterValues = buildRestrictions(page, countSubquery, criteriaBuilder, subqueryPathResolver);
+		PathResolver subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
+		Map<String, Object> parameterValues = buildRestrictions(pageBuilder.getPage(), countSubquery, criteriaBuilder, subqueryPathResolver);
 
 		if (provider == HIBERNATE) {
 			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
@@ -1485,12 +1482,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return parameterValues;
 	}
 
-	private <T> TypedQuery<T> buildTypedQuery(Page page, boolean cacheable, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
+	private <T> TypedQuery<T> buildTypedQuery(PageBuilder<?> pageBuilder, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
 		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
-		buildRange(page, typedQuery, root);
+		buildRange(pageBuilder.getPage(), typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
-		shouldBuildCountSubquery(!typedQuery.getParameters().isEmpty());
-		onPage(page, cacheable).accept(typedQuery);
+		pageBuilder.shouldBuildCountSubquery(!typedQuery.getParameters().isEmpty());
+		onPage(pageBuilder.getPage(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}
 
@@ -1506,14 +1503,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
 	}
 
-	private void shouldBuildCountSubquery(Boolean yes) {
-		getEntityManager().setProperty(BUILD_COUNT_SUBQUERY, yes != null && (shouldBuildCountSubquery() || yes));
-	}
-
-	private boolean shouldBuildCountSubquery() {
-		return getEntityManager().getProperties().get(BUILD_COUNT_SUBQUERY) == TRUE;
-	}
-
 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
@@ -1522,8 +1511,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
 	}
 
-	private <T extends E> PathResolver buildSelection(Class<T> resultType, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder, MappedQueryBuilder<T> queryBuilder) {
-		LinkedHashMap<Getter<T>, Expression<?>> mapping = queryBuilder.build(criteriaBuilder, query, root);
+	private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
+		LinkedHashMap<Getter<T>, Expression<?>> mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
 		if (query instanceof Subquery) {
 			((Subquery<?>) query).select(root.get(ID));
@@ -1540,11 +1529,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				groupByIfNecessary(query, root);
 			}
 
-			shouldBuildCountSubquery(true);
+			pageBuilder.shouldBuildCountSubquery(true);
 			return field -> (field == null) ? root : paths.get(field);
 		}
-		else if (resultType == entityType) {
-			shouldBuildCountSubquery(mapping != null);
+		else if (pageBuilder.getResultType() == entityType) {
+			pageBuilder.shouldBuildCountSubquery(mapping != null);
 			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else {
