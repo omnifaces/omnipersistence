@@ -82,6 +82,7 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.ManyToOne;
 import javax.persistence.NamedQuery;
+import javax.persistence.NonUniqueResultException;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
 import javax.persistence.PersistenceContext;
@@ -484,7 +485,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return Found entity matching given query and mapped parameters, if any.
-	 * @throws IllegalArgumentException When more than one entity is found matching given query and mapped parameters.
+	 * @throws NonUniqueResultException When there is no unique result.
 	 */
 	protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
@@ -498,7 +499,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return Optional.of(results.get(0));
 		}
 		else {
-			throw new IllegalArgumentException("More than one match found.");
+			throw new NonUniqueResultException();
 		}
 	}
 
@@ -967,7 +968,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Make given entity managed if necessary. NOTE: This will discard any changes in the given entity!
+	 * Make any {@link BaseEntity} managed if necessary. NOTE: This will discard any changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
 	 * This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code> when
 	 * entity has been deleted in the meanwhile.
@@ -975,7 +976,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied or entity has been deleted
 	 * in the meanwhile.
 	 */
-	protected E manageIfNecessary(E entity) {
+	@SuppressWarnings({ "hiding" })
+	protected <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E manageIfNecessary(E entity) {
 		if (entity == null) {
 			return null;
 		}
@@ -1294,8 +1296,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * <pre>
 	 * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
-	 * criteria.put("bar", bar);
-	 * criteria.put("baz", baz);
+	 * criteria.put("bar", bar); // Exact match.
+	 * criteria.put("baz", IgnoreCase.value(baz)); // Case insensitive match.
+	 * criteria.put("faz", Like.contains(faz)); // Case insensitive LIKE match.
+	 * criteria.put("kaz", Order.greaterThan(kaz)); // Greater than match.
 	 * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
 	 * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10RecordsMatchingCriteriaOrderedByBar, true, "bar");
 	 * </pre>
@@ -1313,7 +1317,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns a partial result list based on given {@link Page}.
+	 * Returns a partial result list based on given {@link Page} with the option whether to cache the results or not.
+	 * <p>
+	 * Usage example: see {@link #getPage(Page, boolean)} and {@link #getPage(Page, boolean, String...)}.
 	 * @param page The page to return a partial result list for.
 	 * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
 	 * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1356,7 +1362,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder}.
+	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option
+	 * whether to cache the results or not.
 	 * <p>
 	 * Usage example: see {@link QueryBuilder}.
 	 * @param page The page to return a partial result list for.
@@ -1398,7 +1405,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder}.
+	 * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option
+	 * whether to cache the results or not.
 	 * <p>
 	 * Usage example: see {@link MappedQueryBuilder}.
 	 * @param <T> The generic type of the entity or a DTO subclass thereof.
