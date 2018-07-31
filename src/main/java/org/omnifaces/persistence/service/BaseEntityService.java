@@ -41,6 +41,7 @@ import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_AC
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.Lang.toTitleCase;
+import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedEnumFields;
@@ -95,6 +96,7 @@ import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.FetchParent;
 import javax.persistence.criteria.From;
 import javax.persistence.criteria.Order;
+import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
@@ -1548,7 +1550,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		boolean hasJoins = hasJoins(root);
 
-		if (hasJoins || page.getOffset() != 0) {
+		if (hasJoins || page.getOffset() > 0 && page.getLastId() == null) {
 			query.setFirstResult(page.getOffset());
 		}
 
@@ -1628,12 +1630,43 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 		}
 
+		if (!(query instanceof Subquery) && page.getOffset() > 0 && page.getLastId() != null) {
+			restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameterValues));
+		}
+
 		if (restriction != null) {
 			boolean distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null));
 			query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
 		return parameterValues;
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T extends E> Predicate buildValueBasedPagingPredicate(Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+		// Value based paging https://blog.novatec-gmbh.de/art-pagination-offset-vs-value-based-paging/ is much faster than offset based pasing.
+		// (orderByField1 > ?1) OR (orderByField1 = ?1 AND orderByField2 > ?2) OR (orderByField1 = ?1 AND orderByField2 = ?2 AND orderByField3 > ?3) [...]
+
+		List<Predicate> predicates = new ArrayList<>(page.getOrdering().size());
+		Map<Expression<T>, ParameterExpression<T>> orderByFields = new HashMap<>();
+		E last = getById(page.getLastId());
+
+		for (Entry<String, Boolean> ordering : page.getOrdering().entrySet()) {
+			String field = ordering.getKey();
+			Object value = invokeMethod(last, findMethod(last, "get" + toTitleCase(field)).orElseGet(() -> findMethod(last, "is" + toTitleCase(field)).get()));
+			Expression<T> path = (Expression<T>) pathResolver.get(field);
+			ParameterExpression<T> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
+			Predicate predicate = ordering.getValue() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
+
+			for (Entry<Expression<T>, ParameterExpression<T>> previousOrderByField : orderByFields.entrySet()) {
+				predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(previousOrderByField.getKey(), previousOrderByField.getValue()));
+			}
+
+			orderByFields.put(path, parameter);
+			predicates.add(predicate);
+		}
+
+		return criteriaBuilder.or(toArray(predicates));
 	}
 
 	private <T extends E> List<Predicate> buildPredicates(Map<String, Object> criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
