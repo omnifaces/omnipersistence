@@ -971,6 +971,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
 	 * This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code> when
 	 * entity has been deleted in the meanwhile.
+	 * @param <I> The generic ID type of the given base entity.
+	 * @param <E> The generic base entity type of the given base entity.
 	 * @param entity Entity to manage, may be <code>null</code>.
 	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied or entity has been deleted
 	 * in the meanwhile.
@@ -1488,7 +1490,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(pageBuilder.getPage(), typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
-		pageBuilder.shouldBuildCountSubquery(!typedQuery.getParameters().isEmpty());
+		pageBuilder.shouldBuildCountSubquery(!parameterValues.isEmpty());
 		onPage(pageBuilder.getPage(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}

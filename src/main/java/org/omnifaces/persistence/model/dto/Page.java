@@ -122,6 +122,7 @@ public final class Page { // This class should NOT be mutable!
 	/**
 	 * Returns the ID of the last entity of the previous page, if any.
 	 * If present, then value-based paging instead of offset-based paging will be performed by {@link BaseEntityService}.
+	 * @param <I> The generic ID type.
 	 * @return The ID of the last entity of the previous page, if any.
 	 */
 	@SuppressWarnings("unchecked")
