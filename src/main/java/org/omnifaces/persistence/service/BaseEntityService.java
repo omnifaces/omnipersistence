@@ -39,8 +39,8 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
 import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_ACTION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
+import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.isEmpty;
-import static org.omnifaces.utils.Lang.toTitleCase;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
@@ -1102,7 +1102,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		if (isEmpty(getters)) {
 			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
 				if (ofType.test(a.getCollectionType())) {
-					ofNullable(invokeMethod(entity, "get" + toTitleCase(a.getName()))).ifPresent(c -> invokeMethod(c, "size"));
+					ofNullable(invokeMethod(entity, "get" + capitalize(a.getName()))).ifPresent(c -> invokeMethod(c, "size"));
 				}
 			}
 		}
@@ -1118,7 +1118,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
 			if (ofType.test(a.getJavaType())) {
-				String name = toTitleCase(a.getName());
+				String name = capitalize(a.getName());
 				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));
 			}
 		}
@@ -1655,7 +1655,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		for (Entry<String, Boolean> ordering : page.getOrdering().entrySet()) {
 			String field = ordering.getKey();
-			Object value = invokeMethod(last, findMethod(last, "get" + toTitleCase(field)).orElseGet(() -> findMethod(last, "is" + toTitleCase(field)).get()));
+			Object value = invokeMethod(last, findMethod(last, "get" + capitalize(field)).orElseGet(() -> findMethod(last, "is" + capitalize(field)).get()));
 			Expression<T> path = (Expression<T>) pathResolver.get(field);
 			ParameterExpression<T> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
 			Predicate predicate = ordering.getValue() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
