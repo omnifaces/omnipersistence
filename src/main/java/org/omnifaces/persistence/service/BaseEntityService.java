@@ -15,6 +15,7 @@ package org.omnifaces.persistence.service;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.reverse;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
@@ -53,6 +54,7 @@ import java.io.Serializable;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1447,7 +1449,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Root<E> entityQueryRoot = buildRoot(entityQuery);
 		PathResolver pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
 		buildOrderBy(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
-		Map<String, Object> parameterValues = buildRestrictions(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
+		Map<String, Object> parameterValues = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
 		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameterValues);
 	}
 
@@ -1463,7 +1465,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Subquery<T> countSubquery = countQuery.subquery(pageBuilder.getResultType());
 		Root<E> countSubqueryRoot = buildRoot(countSubquery);
 		PathResolver subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
-		Map<String, Object> parameterValues = buildRestrictions(pageBuilder.getPage(), countSubquery, criteriaBuilder, subqueryPathResolver);
+		Map<String, Object> parameterValues = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
 
 		if (provider == HIBERNATE) {
 			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
@@ -1490,7 +1492,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(pageBuilder.getPage(), typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
-		pageBuilder.shouldBuildCountSubquery(!parameterValues.isEmpty());
 		onPage(pageBuilder.getPage(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}
@@ -1502,6 +1503,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> PartialResultList<T> executeQuery(Page page, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
 		List<T> entities = entityQuery.getResultList();
+
+		if (page.isReversed()) {
+			reverse(entities);
+		}
+
 		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
 		logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, entities, estimatedTotalNumberOfResults));
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
@@ -1552,7 +1558,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		boolean hasJoins = hasJoins(root);
 
-		if (hasJoins || page.getOffset() > 0 && page.getLastId() == null) {
+		if (hasJoins || (page.getOffset() > 0 && page.getLastId() == null)) {
 			query.setFirstResult(page.getOffset());
 		}
 
@@ -1575,10 +1581,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return;
 		}
 
-		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver)).collect(toList()));
+		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver, page.isReversed())).collect(toList()));
 	}
 
-	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
 		String field = order.getKey();
 
 		if (oneToManys.test(field) || elementCollections.contains(field)) {
@@ -1591,23 +1597,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		Expression<?> path = pathResolver.get(field);
-		return order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
+		return (order.getValue() ^ reversed) ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 	}
 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
-	private <T extends E> Map<String, Object> buildRestrictions(Page page, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private <T extends E> Map<String, Object> buildRestrictions(PageBuilder<T> pageBuilder, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+		Page page = pageBuilder.getPage();
 		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
 		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
 		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
+			pageBuilder.shouldBuildCountSubquery(true);
 			restriction = criteriaBuilder.or(toArray(optionalPredicates));
 		}
 
 		if (!requiredPredicates.isEmpty()) {
+			pageBuilder.shouldBuildCountSubquery(true);
 			List<Predicate> wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).collect(toList());
 
 			if (!wherePredicates.isEmpty()) {
@@ -1632,7 +1641,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 		}
 
-		if (!(query instanceof Subquery) && page.getOffset() > 0 && page.getLastId() != null) {
+		if (!(query instanceof Subquery) && (page.getOffset() > 0 ? page.getLastId() != null : page.isReversed())) {
 			restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameterValues));
 		}
 
@@ -1653,12 +1662,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Map<Expression<T>, ParameterExpression<T>> orderByFields = new HashMap<>();
 		E last = getById(page.getLastId());
 
-		for (Entry<String, Boolean> ordering : page.getOrdering().entrySet()) {
-			String field = ordering.getKey();
+		for (Entry<String, Boolean> order : page.getOrdering().entrySet()) {
+			String field = order.getKey();
 			Object value = invokeMethod(last, findMethod(last, "get" + capitalize(field)).orElseGet(() -> findMethod(last, "is" + capitalize(field)).get()));
 			Expression<T> path = (Expression<T>) pathResolver.get(field);
 			ParameterExpression<T> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
-			Predicate predicate = ordering.getValue() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
+			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
 
 			for (Entry<Expression<T>, ParameterExpression<T>> previousOrderByField : orderByFields.entrySet()) {
 				predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(previousOrderByField.getKey(), previousOrderByField.getValue()));

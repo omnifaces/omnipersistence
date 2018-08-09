@@ -51,6 +51,7 @@ public final class Page { // This class should NOT be mutable!
 	private final int offset;
 	private final int limit;
 	private final Serializable lastId;
+	private final boolean reversed;
 	private final Map<String, Boolean> ordering;
 	private final Map<String, Object> requiredCriteria;
 	private final Map<String, Object> optionalCriteria;
@@ -67,22 +68,24 @@ public final class Page { // This class should NOT be mutable!
 	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
 	public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
-		this(offset, limit, null, ordering, requiredCriteria, optionalCriteria);
+		this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
 	}
 
 	/**
 	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging.
+	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging. This is ignored when <code>before</code> is specified.
+	 * @param reversed Whether pagination is reversed. This is ignored when last entity is not specified. Defaults to <code>false</code>.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
 	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
 	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
-	public Page(Integer offset, Integer limit, Identifiable<?> last, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
+	public Page(Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
 		this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
 		this.lastId = (last != null) ? last.getId() : null;
+		this.reversed = (last != null) && (reversed == Boolean.TRUE);
 		this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
 		this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
 		this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
@@ -131,6 +134,15 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
+	 * Returns whether the pagination is reversed.
+	 * This is only used when {@link #getLastId()} is present and thus value-based paging is performed by {@link BaseEntityService}.
+	 * @return Whether the pagination is reversed.
+	 */
+	public boolean isReversed() {
+		return reversed;
+	}
+
+	/**
 	 * Returns the ordering. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
 	 * @return The ordering.
 	 */
@@ -172,6 +184,7 @@ public final class Page { // This class should NOT be mutable!
 		return Objects.equals(offset, other.offset)
 			&& Objects.equals(limit, other.limit)
 			&& Objects.equals(lastId, other.lastId)
+			&& Objects.equals(reversed, other.reversed)
 			&& Objects.equals(ordering, other.ordering)
 			&& Objects.equals(requiredCriteria, other.requiredCriteria)
 			&& Objects.equals(optionalCriteria, other.optionalCriteria);
@@ -192,6 +205,7 @@ public final class Page { // This class should NOT be mutable!
 			.append(offset).append(",")
 			.append(limit).append(",")
 			.append(lastId).append(",")
+			.append(reversed).append(",")
 			.append(ordering).append(",")
 			.append(new TreeMap<>(requiredCriteria)).append(",")
 			.append(new TreeMap<>(optionalCriteria)).append("]").toString();
