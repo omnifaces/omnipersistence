@@ -215,7 +215,15 @@ public final class Page { // This class should NOT be mutable!
 	// Builder --------------------------------------------------------------------------------------------------------
 
 	/**
-	 * Use this if you want to build a page.
+	 * Returns a clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
+	 * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
+	 */
+	public Page all() {
+		return new Page(null, null, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
+	}
+
+	/**
+	 * Use this if you want to build a new page.
 	 * @return A new page builder.
 	 */
 	public static Builder with() {
