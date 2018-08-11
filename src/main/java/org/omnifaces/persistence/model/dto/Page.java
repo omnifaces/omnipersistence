@@ -75,7 +75,7 @@ public final class Page { // This class should NOT be mutable!
 	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging. This is ignored when <code>before</code> is specified.
+	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging when applicable.
 	 * @param reversed Whether pagination is reversed. This is ignored when last entity is not specified. Defaults to <code>false</code>.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
 	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.

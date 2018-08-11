@@ -54,7 +54,6 @@ import java.io.Serializable;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -129,7 +128,9 @@ import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
+import org.omnifaces.persistence.model.TimestampedBaseEntity;
 import org.omnifaces.persistence.model.TimestampedEntity;
+import org.omnifaces.persistence.model.VersionedBaseEntity;
 import org.omnifaces.persistence.model.VersionedEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.utils.collection.PartialResultList;
@@ -144,6 +145,8 @@ import org.omnifaces.utils.reflect.Getter;
  * You only need to let your entities extend from one of the following mapped super classes:
  * <ul>
  * <li>{@link BaseEntity}
+ * <li>{@link TimestampedBaseEntity}
+ * <li>{@link VersionedBaseEntity}
  * <li>{@link GeneratedIdEntity}
  * <li>{@link TimestampedEntity}
  * <li>{@link VersionedEntity}
@@ -196,13 +199,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String ERROR_UNSUPPORTED_CRITERIA =
 		"Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK =
-		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
+		"Sorry, EclipseLink does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO or a DB view instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA =
-		"Sorry, OpenJPA does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO instead.";
+		"Sorry, OpenJPA does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO or a DB view instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK =
-		"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
+		"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO or a DB view instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
-		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO instead.";
+		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO or a DB view instead.";
 
 	@SuppressWarnings("rawtypes")
 	private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
@@ -467,7 +470,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
 	 * @return Found entity matching given query and positional parameters, if any.
-	 * @throws IllegalArgumentException When more than one entity is found matching given query and positional parameters.
+	 * @throws NonUniqueResultException When more than one entity is found matching given query and positional parameters.
 	 */
 	protected Optional<E> find(String jpql, Object... parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
@@ -486,7 +489,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return Found entity matching given query and mapped parameters, if any.
-	 * @throws NonUniqueResultException When there is no unique result.
+	 * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
 	 */
 	protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
@@ -653,7 +656,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected List<E> getAll(boolean includeSoftDeleted) {
 		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
 			+ softDeleteData.getWhereClause(includeSoftDeleted)
-			+ " ORDER BY e.id DESC", p -> noop());
+			+ " ORDER BY e.id DESC");
 	}
 
 	/**
@@ -665,7 +668,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		softDeleteData.checkSoftDeletable();
 		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
 			+ softDeleteData.getWhereClause(true)
-			+ " ORDER BY e.id DESC", p -> noop());
+			+ " ORDER BY e.id DESC");
+	}
+
+	/**
+	 * Get entities by given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
+	 * @param ids Entity IDs to get entities by.
+	 * @return Found entities, or an empty set if there is none.
+	 */
+	public List<E> getByIds(Iterable<I> ids) {
+		return getByIds(ids, false);
+	}
+
+	/**
+	 * Get entities by given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+	 * @param ids Entity IDs to get entities by.
+	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
+	 * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 */
+	protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
+		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
+		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (?1)"
+			+ " ORDER BY e.id DESC", ids);
 	}
 
 	/**
@@ -868,7 +894,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		E managed = manage(entity);
 		getMetamodel(entity).getAttributes().forEach(attribute -> map(attribute.getJavaMember(), managed, entity));
-		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before refreshing.
+		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
 	}
 
 	/**

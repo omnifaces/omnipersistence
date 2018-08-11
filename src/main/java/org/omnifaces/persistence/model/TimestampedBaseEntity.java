@@ -18,6 +18,7 @@ import java.io.Serializable;
 import java.time.Instant;
 
 import javax.persistence.Column;
+import javax.persistence.Id;
 import javax.persistence.MappedSuperclass;
 import javax.persistence.PrePersist;
 import javax.persistence.PreUpdate;
@@ -25,7 +26,10 @@ import javax.persistence.Transient;
 
 /**
  * <p>
- * Mapped superclass for timestamped entity. It specifies two timestamp columns, named "created" and "lastModified".
+ * Mapped superclass for timestamped entity.
+ * It extends from {@link BaseEntity}.
+ * It specifies two timestamp columns, named "created" and "lastModified".
+ * The {@link Id} column needs to be manually taken care of.
  * On pre persist, the both columns will be set to current timestamp.
  * On pre update, the "lastModified" column will be set to current timestamp, unless {@link #skipAdjustLastModified()} is called beforehand.
  *

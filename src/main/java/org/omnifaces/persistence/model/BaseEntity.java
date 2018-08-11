@@ -23,7 +23,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * Let all your entities extend from this. Then you can make use of {@link BaseEntityService}.
+ * Let all your entities extend from this.
+ * Then you can make use of {@link BaseEntityService}.
  * <p>
  * There are five more mapped superclasses which may also be of interest.
  * <ul>

@@ -156,6 +156,7 @@ public final class JPA {
 
 	/**
 	 * Returns first result of given typed query as {@link Optional}.
+	 * The difference with {@link #getOptionalSingleResult(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * @param <T> The generic result type.
 	 * @param typedQuery The involved typed query.
 	 * @return First result of given typed query as {@link Optional}.
@@ -167,6 +168,7 @@ public final class JPA {
 
 	/**
 	 * Returns first result of given query as {@link Optional}.
+	 * The difference with {@link #getOptionalSingleResult(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * @param <T> The expected result type.
 	 * @param query The involved query.
 	 * @return First result of given query as {@link Optional}.
@@ -180,6 +182,7 @@ public final class JPA {
 
 	/**
 	 * Returns first result of given typed query, or <code>null</code> if there is none.
+	 * The difference with {@link #getSingleResultOrNull(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * @param <T> The generic result type.
 	 * @param typedQuery The involved typed query.
 	 * @return First result of given typed query, or <code>null</code> if there is none.
@@ -190,6 +193,7 @@ public final class JPA {
 
 	/**
 	 * Returns first result of given query, or <code>null</code> if there is none.
+	 * The difference with {@link #getSingleResultOrNull(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * @param <T> The expected result type.
 	 * @param query The involved query.
 	 * @return First result of given query, or <code>null</code> if there is none.

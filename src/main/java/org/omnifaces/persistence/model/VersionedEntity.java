@@ -20,7 +20,9 @@ import javax.persistence.Version;
 
 /**
  * <p>
- * Mapped superclass for versioned entity. It specifies a {@link Version} column, named "version".
+ * Mapped superclass for versioned entity.
+ * It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}.
+ * In addition to the "id", "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
  * On pre persist, JPA will automatically set version to 0.
  * On pre update, JPA will automatically increment version with 1.
  *

@@ -15,12 +15,16 @@ package org.omnifaces.persistence.model;
 import java.io.Serializable;
 
 import javax.persistence.Column;
+import javax.persistence.Id;
 import javax.persistence.MappedSuperclass;
 import javax.persistence.Version;
 
 /**
  * <p>
- * Mapped superclass for versioned entity. It specifies a {@link Version} column, named "version".
+ * Mapped superclass for versioned entity.
+ * It extends from {@link TimestampedBaseEntity}.
+ * In addition to the "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
+ * The {@link Id} column needs to be manually taken care of.
  * On pre persist, JPA will automatically set version to 0.
  * On pre update, JPA will automatically increment version with 1.
  *

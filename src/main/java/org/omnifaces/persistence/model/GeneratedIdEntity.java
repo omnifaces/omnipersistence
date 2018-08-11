@@ -22,7 +22,9 @@ import javax.persistence.MappedSuperclass;
 
 /**
  * <p>
- * Mapped superclass for entity with generated ID. It specifies a {@link Id} column, named "id".
+ * Mapped superclass for entity with generated ID.
+ * It extends from {@link BaseEntity}.
+ * It specifies a {@link Id} column, named "id".
  * JPA will automatically take care of the ID.
  *
  * @param <I> The generic ID type.
