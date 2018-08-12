@@ -192,7 +192,7 @@ public final class Page { // This class should NOT be mutable!
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(Page.class, offset, limit, lastId, ordering, requiredCriteria, optionalCriteria);
+		return Objects.hash(Page.class, offset, limit, lastId, reversed, ordering, requiredCriteria, optionalCriteria);
 	}
 
 	/**
@@ -204,8 +204,6 @@ public final class Page { // This class should NOT be mutable!
 		return new StringBuilder("Page[")
 			.append(offset).append(",")
 			.append(limit).append(",")
-			.append(lastId).append(",")
-			.append(reversed).append(",")
 			.append(ordering).append(",")
 			.append(new TreeMap<>(requiredCriteria)).append(",")
 			.append(new TreeMap<>(optionalCriteria)).append("]").toString();
