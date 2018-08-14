@@ -27,10 +27,7 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.IntStream.range;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
-import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
-import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
-import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
-import static org.omnifaces.persistence.JPA.getValidationMode;
+import static org.omnifaces.persistence.JPA.*;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -528,6 +525,64 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		else {
 			throw new NonUniqueResultException();
 		}
+	}
+
+	/**
+	 * Find first entity by given query and positional parameters, if any.
+	 * The difference with {@link #find(String, Object...)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
+	 * </pre>
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters The positional query parameters, if any.
+	 * @return Found entity matching given query and positional parameters, if any.
+	 */
+	protected Optional<E> findFirst(String jpql, Object... parameters) {
+		return getOptionalFirstResult(createQuery(jpql, parameters));
+	}
+
+	/**
+	 * Find first entity by given query and mapped parameters, if any.
+	 * The difference with {@link #find(String, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return Found entity matching given query and mapped parameters, if any.
+	 */
+	protected Optional<E> findFirst(String jpql, Consumer<Map<String, Object>> parameters) {
+		return getOptionalFirstResult(createQuery(jpql, parameters));
+	}
+
+	/**
+	 * Find first entity by {@link QueryBuilder} and mapped parameters, if any.
+	 * The difference with {@link #find(QueryBuilder, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = findFirst(
+	 * 		(criteriaBuilder, query, root) -&gt; {
+	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 		},
+	 * 		params -&gt; {
+	 *     		params.put("foo", Type.FOO);
+	 * 		}
+	 * );
+	 * </pre>
+	 * @param queryBuilder This creates the JPA criteria query.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return Found entity matching {@link QueryBuilder} and mapped parameters, if any.
+	 */
+	protected Optional<E> findFirst(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+		return getOptionalFirstResult(createQuery(queryBuilder, parameters));
 	}
 
 	/**
