@@ -495,6 +495,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return getOptionalSingleResult(list(jpql, parameters));
 	}
 
+	/**
+	 * Find entity by {@link QueryBuilder} and mapped parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = find(
+	 * 		(criteriaBuilder, query, root) -&gt; {
+	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 		},
+	 * 		params -&gt; {
+	 *     		params.put("foo", Type.FOO);
+	 * 		}
+	 * );
+	 * </pre>
+	 * @param queryBuilder This creates the JPA criteria query.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return Found entity matching {@link QueryBuilder} and mapped parameters, if any.
+	 * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
+	 */
+	protected Optional<E> find(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+		return getOptionalSingleResult(list(queryBuilder, parameters));
+	}
+
 	private Optional<E> getOptionalSingleResult(List<E> results) {
 		if (results.isEmpty()) {
 			return Optional.empty();
@@ -625,6 +648,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return createQuery(jpql, parameters).getResultList();
 	}
 
+	/**
+	 * List entities matching the {@link QueryBuilder} and mapped parameters, if any.
+	 * <p>
+	 * Usage example:
+	 * <pre>
+	 * List&lt;Foo&gt; foo = list(
+	 * 		(criteriaBuilder, query, root) -&gt; {
+	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 		},
+	 * 		params -&gt; {
+	 *     		params.put("foo", Type.FOO);
+	 * 		}
+	 * );
+	 * </pre>
+	 * @param queryBuilder This creates the JPA criteria query.
+	 * @param parameters To put the mapped query parameters in.
+	 * @return List of entities matching the {@link QueryBuilder} and mapped parameters, if any.
+	 */
+	protected List<E> list(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+		return createQuery(queryBuilder, parameters).getResultList();
+	}
+
 	private TypedQuery<E> createQuery(String jpql, Object... parameters) {
 		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
 		range(0, parameters.length).forEach(i -> query.setParameter(i, parameters[i]));
@@ -635,7 +680,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Map<String, Object> params = new HashMap<>();
 		parameters.accept(params);
 		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
-		params.entrySet().forEach(param -> query.setParameter(param.getKey(), param.getValue()));
+		setParameterValues(query, params);
+		return query;
+	}
+
+	private TypedQuery<E> createQuery(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+		CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+		CriteriaQuery<E> criteriaQuery = criteriaBuilder.createQuery(entityType);
+		Root<E> root = buildRoot(criteriaQuery);
+
+		queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+
+		Map<String, Object> params = new HashMap<>();
+		parameters.accept(params);
+		TypedQuery<E> query = getEntityManager().createQuery(criteriaQuery);
+		setParameterValues(query, params);
 		return query;
 	}
 
