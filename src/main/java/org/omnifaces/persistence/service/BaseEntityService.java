@@ -25,12 +25,10 @@ import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.IntStream.range;
+import static javax.persistence.CacheRetrieveMode.BYPASS;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
-import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
-import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
-import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
-import static org.omnifaces.persistence.JPA.getValidationMode;
+import static org.omnifaces.persistence.JPA.*;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -559,6 +557,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return entity;
+	}
+
+	public E getByIdWithLoadGraph(I id, String entityGraphName) {
+		EntityGraph<?> entityGraph = entityManager.getEntityGraph(entityGraphName);
+
+		Map<String, Object> properties = new HashMap<>();
+		properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
+		properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
+
+		return getEntityManager().find(entityType, id, properties);
 	}
 
 	/**
