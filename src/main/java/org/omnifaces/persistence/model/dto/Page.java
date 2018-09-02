@@ -132,7 +132,7 @@ public final class Page { // This class should NOT be mutable!
 
 	/**
 	 * Returns whether the pagination is reversed.
-	 * This is only used when {@link #getLastId()} is present and thus value-based paging is performed by {@link BaseEntityService}.
+	 * This is only used when {@link #getLast()} is present and thus value-based paging is performed by {@link BaseEntityService}.
 	 * @return Whether the pagination is reversed.
 	 */
 	public boolean isReversed() {
