@@ -26,12 +26,14 @@ class PageBuilder<T> {
 	private final MappedQueryBuilder<T> queryBuilder;
 
 	private boolean shouldBuildCountSubquery;
+	private boolean canBuildValueBasedPagingPredicate;
 
 	public PageBuilder(Page page, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
 		this.page = page;
 		this.cacheable = cacheable;
 		this.resultType = resultType;
 		this.queryBuilder = queryBuilder;
+		this.canBuildValueBasedPagingPredicate = page.getLast() != null && page.getOffset() > 0;
 	}
 
 	public void shouldBuildCountSubquery(boolean yes) {
@@ -40,6 +42,14 @@ class PageBuilder<T> {
 
 	public boolean shouldBuildCountSubquery() {
 		return shouldBuildCountSubquery;
+	}
+
+	public void canBuildValueBasedPagingPredicate(boolean yes) {
+		canBuildValueBasedPagingPredicate &= yes;
+	}
+
+	public boolean canBuildValueBasedPagingPredicate() {
+		return canBuildValueBasedPagingPredicate;
 	}
 
 	public Page getPage() {

@@ -19,7 +19,6 @@ import static java.util.Collections.unmodifiableMap;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 
-import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -50,7 +49,7 @@ public final class Page { // This class should NOT be mutable!
 
 	private final int offset;
 	private final int limit;
-	private final Serializable lastId;
+	private final Identifiable<?> last;
 	private final boolean reversed;
 	private final Map<String, Boolean> ordering;
 	private final Map<String, Object> requiredCriteria;
@@ -84,7 +83,7 @@ public final class Page { // This class should NOT be mutable!
 	public Page(Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
 		this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
-		this.lastId = (last != null) ? last.getId() : null;
+		this.last = last;
 		this.reversed = (last != null) && (reversed == Boolean.TRUE);
 		this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
 		this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
@@ -123,14 +122,12 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
-	 * Returns the ID of the last entity of the previous page, if any.
+	 * Returns the last entity of the previous page, if any.
 	 * If present, then value-based paging instead of offset-based paging will be performed by {@link BaseEntityService}.
-	 * @param <I> The generic ID type.
-	 * @return The ID of the last entity of the previous page, if any.
+	 * @return The last entity of the previous page, if any.
 	 */
-	@SuppressWarnings("unchecked")
-	public <I extends Comparable<I> & Serializable> I getLastId() {
-		return (I) lastId;
+	public Identifiable<?> getLast() {
+		return last;
 	}
 
 	/**
@@ -183,7 +180,7 @@ public final class Page { // This class should NOT be mutable!
 
 		return Objects.equals(offset, other.offset)
 			&& Objects.equals(limit, other.limit)
-			&& Objects.equals(lastId, other.lastId)
+			&& Objects.equals(last, other.last)
 			&& Objects.equals(reversed, other.reversed)
 			&& Objects.equals(ordering, other.ordering)
 			&& Objects.equals(requiredCriteria, other.requiredCriteria)
@@ -192,7 +189,7 @@ public final class Page { // This class should NOT be mutable!
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(Page.class, offset, limit, lastId, reversed, ordering, requiredCriteria, optionalCriteria);
+		return Objects.hash(Page.class, offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
 	}
 
 	/**

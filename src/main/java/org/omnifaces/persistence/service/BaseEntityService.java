@@ -24,6 +24,7 @@ import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
@@ -42,9 +43,10 @@ import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_AC
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.isEmpty;
-import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
+import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
+import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedEnumFields;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import static org.omnifaces.utils.reflect.Reflections.map;
@@ -126,6 +128,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
 import org.omnifaces.persistence.model.TimestampedBaseEntity;
@@ -1130,7 +1133,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		if (isEmpty(getters)) {
 			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
 				if (ofType.test(a.getCollectionType())) {
-					ofNullable(invokeMethod(entity, "get" + capitalize(a.getName()))).ifPresent(c -> invokeMethod(c, "size"));
+					ofNullable(invokeGetter(entity, a.getName())).ifPresent(c -> invokeMethod(c, "size"));
 				}
 			}
 		}
@@ -1147,7 +1150,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
 			if (ofType.test(a.getJavaType())) {
 				String name = capitalize(a.getName());
-				invokeMethod(entity, "set" + name, invokeMethod(managed, "get" + name));
+				invokeSetter(entity, name, invokeGetter(managed, name));
 			}
 		}
 
@@ -1516,7 +1519,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T> TypedQuery<T> buildTypedQuery(PageBuilder<?> pageBuilder, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
 		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
-		buildRange(pageBuilder.getPage(), typedQuery, root);
+		buildRange(pageBuilder, typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
 		onPage(pageBuilder.getPage(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
@@ -1548,7 +1551,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
-		LinkedHashMap<Getter<T>, Expression<?>> mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
+		Map<Getter<T>, Expression<?>> mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
 		if (query instanceof Subquery) {
 			((Subquery<?>) query).select(root.get(ID));
@@ -1561,15 +1564,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				((CriteriaQuery<?>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
 			}
 
-			if (paths.values().stream().anyMatch(provider::isAggregation)) {
+			Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> provider.isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
+
+			if (!aggregatedFields.isEmpty()) {
 				groupByIfNecessary(query, root);
 			}
 
 			pageBuilder.shouldBuildCountSubquery(true);
+			pageBuilder.canBuildValueBasedPagingPredicate(!aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet()));
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (pageBuilder.getResultType() == entityType) {
 			pageBuilder.shouldBuildCountSubquery(mapping != null);
+			pageBuilder.canBuildValueBasedPagingPredicate(mapping == null);
 			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else {
@@ -1577,14 +1584,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private void buildRange(Page page, Query query, Root<E> root) {
+	private void buildRange(PageBuilder<?> pageBuilder, Query query, Root<E> root) {
 		if (root == null) {
 			return;
 		}
 
 		boolean hasJoins = hasJoins(root);
+		Page page = pageBuilder.getPage();
 
-		if (hasJoins || (page.getOffset() > 0 && page.getLastId() == null)) {
+		if ((hasJoins || page.getOffset() > 0) && !pageBuilder.canBuildValueBasedPagingPredicate()) {
 			query.setFirstResult(page.getOffset());
 		}
 
@@ -1667,7 +1675,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 		}
 
-		if (!(query instanceof Subquery) && (page.getOffset() > 0 ? page.getLastId() != null : page.isReversed())) {
+		if (!(query instanceof Subquery) && pageBuilder.canBuildValueBasedPagingPredicate()) {
 			restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameterValues));
 		}
 
@@ -1686,11 +1694,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		List<Predicate> predicates = new ArrayList<>(page.getOrdering().size());
 		Map<Expression<T>, ParameterExpression<T>> orderByFields = new HashMap<>();
-		E last = getById(page.getLastId());
+		Identifiable<?> last = page.getLast();
 
 		for (Entry<String, Boolean> order : page.getOrdering().entrySet()) {
 			String field = order.getKey();
-			Object value = invokeMethod(last, findMethod(last, "get" + capitalize(field)).orElseGet(() -> findMethod(last, "is" + capitalize(field)).get()));
+			Object value = invokeGetter(last, field);
 			Expression<T> path = (Expression<T>) pathResolver.get(field);
 			ParameterExpression<T> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
 			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
