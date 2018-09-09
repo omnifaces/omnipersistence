@@ -26,6 +26,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
+import static javax.persistence.CacheRetrieveMode.BYPASS;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.*;
@@ -76,6 +77,7 @@ import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
+import javax.persistence.EntityGraph;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
 import javax.persistence.GeneratedValue;
@@ -639,6 +641,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		return entity;
+	}
+
+	public E getByIdWithLoadGraph(I id, String entityGraphName) {
+		EntityGraph<?> entityGraph = entityManager.getEntityGraph(entityGraphName);
+
+		Map<String, Object> properties = new HashMap<>();
+		properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
+		properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
+
+		return getEntityManager().find(entityType, id, properties);
 	}
 
 	/**
