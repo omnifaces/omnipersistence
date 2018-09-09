@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.model.dto;
 
+import static java.lang.Boolean.TRUE;
 import static java.lang.Integer.MAX_VALUE;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
@@ -37,7 +38,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see BaseEntityService
  * @see Criteria
  */
-public final class Page { // This class should NOT be mutable!
+public final class Page { // This class MAY NOT be mutable!
 
 	// Constants ------------------------------------------------------------------------------------------------------
 
@@ -59,7 +60,7 @@ public final class Page { // This class should NOT be mutable!
 	// Constructors ---------------------------------------------------------------------------------------------------
 
 	/**
-	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
+	 * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
@@ -71,11 +72,12 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
-	 * Creates a new Page. You can for convenience also use the {@link Page#with()} builder.
+	 * Creates a new Page whereby value based paging will be performed instead of offset based paging when applicable.
+	 * Value based paging is not applicable when the result type is a DTO, or when the ordering contains an aggregated field.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param last Last entity of the previous page. When specified, then value based paging can be used instead of offset based paging when applicable.
-	 * @param reversed Whether pagination is reversed. This is ignored when last entity is not specified. Defaults to <code>false</code>.
+	 * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
+	 * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code>.
 	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
 	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
 	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
@@ -84,7 +86,7 @@ public final class Page { // This class should NOT be mutable!
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
 		this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
 		this.last = last;
-		this.reversed = (last != null) && (reversed == Boolean.TRUE);
+		this.reversed = (last != null) && (reversed == TRUE);
 		this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
 		this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
 		this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
@@ -123,7 +125,7 @@ public final class Page { // This class should NOT be mutable!
 
 	/**
 	 * Returns the last entity of the previous page, if any.
-	 * If present, then value-based paging instead of offset-based paging will be performed by {@link BaseEntityService}.
+	 * If not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
 	 * @return The last entity of the previous page, if any.
 	 */
 	public Identifiable<?> getLast() {
@@ -131,9 +133,9 @@ public final class Page { // This class should NOT be mutable!
 	}
 
 	/**
-	 * Returns whether the pagination is reversed.
-	 * This is only used when {@link #getLast()} is present and thus value-based paging is performed by {@link BaseEntityService}.
-	 * @return Whether the pagination is reversed.
+	 * Returns whether the value based paging is reversed.
+	 * This is only used when {@link #getLast()} is not <code>null</code>.
+	 * @return Whether the value based paging is reversed.
 	 */
 	public boolean isReversed() {
 		return reversed;
@@ -192,15 +194,13 @@ public final class Page { // This class should NOT be mutable!
 		return Objects.hash(Page.class, offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
 	}
 
-	/**
-	 * Identity is important as this is used as value of <code>org.hibernate.cacheRegion</code> hint in
-	 * {@link BaseEntityService#getPage(Page, boolean)}. Hence the criteria hashmaps are printed as treemaps.
-	 */
 	@Override
 	public String toString() {
 		return new StringBuilder("Page[")
 			.append(offset).append(",")
 			.append(limit).append(",")
+			.append(last).append(",")
+			.append(reversed).append(",")
 			.append(ordering).append(",")
 			.append(new TreeMap<>(requiredCriteria)).append(",")
 			.append(new TreeMap<>(optionalCriteria)).append("]").toString();

@@ -128,7 +128,6 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
-import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
 import org.omnifaces.persistence.model.TimestampedBaseEntity;
@@ -974,7 +973,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Make given entity managed. NOTE: This will discard any changes in the given entity!
+	 * Make given entity managed. NOTE: This will discard any unmanaged changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
 	 * This method supports proxied entities.
 	 * @param entity Entity to manage.
@@ -998,10 +997,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Make any {@link BaseEntity} managed if necessary. NOTE: This will discard any changes in the given entity!
-	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
-	 * This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code> when
-	 * entity has been deleted in the meanwhile.
+	 * Make any {@link BaseEntity} managed if necessary. NOTE: This will discard any unmanaged changes in the given
+	 * entity! This is particularly useful in case you intend to make sure that you have the most recent version at
+	 * hands. This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code>
+	 * when entity has been deleted in the meanwhile.
 	 * @param <I> The generic ID type of the given base entity.
 	 * @param <E> The generic base entity type of the given base entity.
 	 * @param entity Entity to manage, may be <code>null</code>.
@@ -1249,18 +1248,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
 	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
 	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
-	 * {@link Page#toString()}.
-	 * @param page The page on which this query is based.
+	 * the name of the <code>resultType</code>.
+	 * @param <T> The generic type of the entity or a DTO subclass thereof.
+	 * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
 	 * @param cacheable Whether the results should be cacheable.
 	 * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about
 	 * to be executed.
 	 */
-	protected Consumer<TypedQuery<?>> onPage(Page page, boolean cacheable) {
+	protected <T extends E> Consumer<TypedQuery<?>> onPage(Class<T> resultType, boolean cacheable) {
 		return typedQuery -> {
 			if (provider == HIBERNATE) {
 				typedQuery
 					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable)
-					.setHint(QUERY_HINT_HIBERNATE_CACHE_REGION, page.toString());
+					.setHint(QUERY_HINT_HIBERNATE_CACHE_REGION, resultType.getName());
 			}
 			else if (provider == ECLIPSELINK) {
 				typedQuery
@@ -1517,15 +1517,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return parameterValues;
 	}
 
-	private <T> TypedQuery<T> buildTypedQuery(PageBuilder<?> pageBuilder, CriteriaQuery<T> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
-		TypedQuery<T> typedQuery = getEntityManager().createQuery(criteriaQuery);
+	private <T extends E, Q> TypedQuery<Q> buildTypedQuery(PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
+		TypedQuery<Q> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(pageBuilder, typedQuery, root);
 		setParameterValues(typedQuery, parameterValues);
-		onPage(pageBuilder.getPage(), pageBuilder.isCacheable()).accept(typedQuery);
+		onPage(pageBuilder.getResultType(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}
 
-	private <T> void setParameterValues(TypedQuery<T> typedQuery, Map<String, Object> parameterValues) {
+	private <Q> void setParameterValues(TypedQuery<Q> typedQuery, Map<String, Object> parameterValues) {
 		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, parameterValues));
 		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
 	}
@@ -1545,7 +1545,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
-	private Root<E> buildRoot(AbstractQuery<?> query) {
+	private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
 		Root<E> root = query.from(entityType);
 		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
 	}
@@ -1554,14 +1554,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Map<Getter<T>, Expression<?>> mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
 		if (query instanceof Subquery) {
-			((Subquery<?>) query).select(root.get(ID));
+			((Subquery<T>) query).select(root.get(ID));
 		}
 
-		if (!isEmpty(mapping)) {
+		if (!isEmpty(mapping)) { // mapping is not empty when getPage(..., MappedQueryBuilder) is used.
 			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue(), (l, r) -> l, LinkedHashMap::new));
 
 			if (query instanceof CriteriaQuery) {
-				((CriteriaQuery<?>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
+				((CriteriaQuery<T>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
 			}
 
 			Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> provider.isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
@@ -1570,13 +1570,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				groupByIfNecessary(query, root);
 			}
 
-			pageBuilder.shouldBuildCountSubquery(true);
-			pageBuilder.canBuildValueBasedPagingPredicate(!aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet()));
+			boolean orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
+			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
+			pageBuilder.canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields); // Value based paging cannot be used if ordering contains aggregated fields, because it may return a semi-cartesian product.
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (pageBuilder.getResultType() == entityType) {
-			pageBuilder.shouldBuildCountSubquery(mapping != null);
-			pageBuilder.canBuildValueBasedPagingPredicate(mapping == null);
+			pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
+			pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains aggregated fields, so value based paging cannot be reliably used.
 			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else {
@@ -1584,7 +1585,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private void buildRange(PageBuilder<?> pageBuilder, Query query, Root<E> root) {
+	private <T extends E> void buildRange(PageBuilder<T> pageBuilder, Query query, Root<E> root) {
 		if (root == null) {
 			return;
 		}
@@ -1601,14 +1602,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (hasJoins && root instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<?>) root).runPostponedFetches(query);
+			((EclipseLinkRoot<E>) root).runPostponedFetches(query);
 		}
 	}
 
 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
-	private <T> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private <T extends E> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Map<String, Boolean> ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
@@ -1688,22 +1689,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	@SuppressWarnings("unchecked")
-	private <T extends E> Predicate buildValueBasedPagingPredicate(Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
-		// Value based paging https://blog.novatec-gmbh.de/art-pagination-offset-vs-value-based-paging/ is much faster than offset based pasing.
+	private <T extends E, V extends Comparable<V>> Predicate buildValueBasedPagingPredicate(Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+		// Value based paging https://blog.novatec-gmbh.de/art-pagination-offset-vs-value-based-paging/ is on large offsets much faster than offset based paging.
 		// (orderByField1 > ?1) OR (orderByField1 = ?1 AND orderByField2 > ?2) OR (orderByField1 = ?1 AND orderByField2 = ?2 AND orderByField3 > ?3) [...]
 
 		List<Predicate> predicates = new ArrayList<>(page.getOrdering().size());
-		Map<Expression<T>, ParameterExpression<T>> orderByFields = new HashMap<>();
-		Identifiable<?> last = page.getLast();
+		Map<Expression<V>, ParameterExpression<V>> orderByFields = new HashMap<>();
+		T last = (T) page.getLast();
 
 		for (Entry<String, Boolean> order : page.getOrdering().entrySet()) {
 			String field = order.getKey();
-			Object value = invokeGetter(last, field);
-			Expression<T> path = (Expression<T>) pathResolver.get(field);
-			ParameterExpression<T> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
+			V value = invokeGetter(last, field);
+			Expression<V> path = (Expression<V>) pathResolver.get(field);
+			ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
 			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
 
-			for (Entry<Expression<T>, ParameterExpression<T>> previousOrderByField : orderByFields.entrySet()) {
+			for (Entry<Expression<V>, ParameterExpression<V>> previousOrderByField : orderByFields.entrySet()) {
 				predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(previousOrderByField.getKey(), previousOrderByField.getValue()));
 			}
 
