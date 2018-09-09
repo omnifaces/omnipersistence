@@ -26,19 +26,19 @@ class UncheckedParameterBuilder implements ParameterBuilder {
 
 	private final String field;
 	private final CriteriaBuilder criteriaBuilder;
-	private final Map<String, Object> parameterValues;
+	private final Map<String, Object> parameters;
 
-	public UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameterValues) {
+	public UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameters) {
 		this.field = field.replace('.', '$') + "_";
 		this.criteriaBuilder = criteriaBuilder;
-		this.parameterValues = parameterValues;
+		this.parameters = parameters;
 	}
 
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> ParameterExpression<T> create(Object value) {
-		String name = field + parameterValues.size();
-		parameterValues.put(name, value);
+		String name = field + parameters.size();
+		parameters.put(name, value);
 		return (ParameterExpression<T>) criteriaBuilder.parameter(value.getClass(), name);
 	}
 

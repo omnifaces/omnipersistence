@@ -29,7 +29,12 @@ import static java.util.stream.IntStream.range;
 import static javax.persistence.CacheRetrieveMode.BYPASS;
 import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
-import static org.omnifaces.persistence.JPA.*;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
+import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
+import static org.omnifaces.persistence.JPA.getOptionalFirstResult;
+import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -53,6 +58,7 @@ import static org.omnifaces.utils.stream.Streams.stream;
 import java.io.Serializable;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -462,7 +468,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find entity by given query and positional parameters, if any.
+	 * Find entity by the given query and positional parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -470,15 +476,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
-	 * @return Found entity matching given query and positional parameters, if any.
-	 * @throws NonUniqueResultException When more than one entity is found matching given query and positional parameters.
+	 * @return Found entity matching the given query and positional parameters, if any.
+	 * @throws NonUniqueResultException When more than one entity is found matching the given query and positional parameters.
 	 */
 	protected Optional<E> find(String jpql, Object... parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
 	}
 
 	/**
-	 * Find entity by given query and mapped parameters, if any.
+	 * Find entity by the given query and mapped parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -489,15 +495,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching given query and mapped parameters, if any.
-	 * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
+	 * @return Found entity matching the given query and mapped parameters, if any.
+	 * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
 	 */
 	protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
 		return getOptionalSingleResult(list(jpql, parameters));
 	}
 
 	/**
-	 * Find entity by {@link QueryBuilder} and mapped parameters, if any.
+	 * Find entity by the given {@link QueryBuilder} and mapped parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -512,8 +518,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching {@link QueryBuilder} and mapped parameters, if any.
-	 * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
+	 * @return Found entity matching the given {@link QueryBuilder} and mapped parameters, if any.
+	 * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
 	 */
 	protected Optional<E> find(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return getOptionalSingleResult(list(queryBuilder, parameters));
@@ -532,7 +538,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find first entity by given query and positional parameters, if any.
+	 * Find first entity by the given query and positional parameters, if any.
 	 * The difference with {@link #find(String, Object...)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * <p>
 	 * Usage example:
@@ -541,14 +547,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
-	 * @return Found entity matching given query and positional parameters, if any.
+	 * @return Found entity matching the given query and positional parameters, if any.
 	 */
 	protected Optional<E> findFirst(String jpql, Object... parameters) {
 		return getOptionalFirstResult(createQuery(jpql, parameters));
 	}
 
 	/**
-	 * Find first entity by given query and mapped parameters, if any.
+	 * Find first entity by the given query and mapped parameters, if any.
 	 * The difference with {@link #find(String, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * <p>
 	 * Usage example:
@@ -560,14 +566,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching given query and mapped parameters, if any.
+	 * @return Found entity matching the given query and mapped parameters, if any.
 	 */
 	protected Optional<E> findFirst(String jpql, Consumer<Map<String, Object>> parameters) {
 		return getOptionalFirstResult(createQuery(jpql, parameters));
 	}
 
 	/**
-	 * Find first entity by {@link QueryBuilder} and mapped parameters, if any.
+	 * Find first entity by the given {@link QueryBuilder} and mapped parameters, if any.
 	 * The difference with {@link #find(QueryBuilder, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * <p>
 	 * Usage example:
@@ -583,14 +589,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching {@link QueryBuilder} and mapped parameters, if any.
+	 * @return Found entity matching the given {@link QueryBuilder} and mapped parameters, if any.
 	 */
 	protected Optional<E> findFirst(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return getOptionalFirstResult(createQuery(queryBuilder, parameters));
 	}
 
 	/**
-	 * Find entity by given ID. This does not include soft deleted one.
+	 * Find entity by the given ID. This does not include soft deleted one.
 	 * @param id Entity ID to find entity for.
 	 * @return Found entity, if any.
 	 */
@@ -599,7 +605,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find entity by given ID and set whether it may return a soft deleted one.
+	 * Find entity by the given ID and set whether it may return a soft deleted one.
 	 * @param id Entity ID to find entity for.
 	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
 	 * @return Found entity, if any.
@@ -609,7 +615,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find soft deleted entity by given ID.
+	 * Find soft deleted entity by the given ID.
 	 * @param id Entity ID to find soft deleted entity for.
 	 * @return Found soft deleted entity, if any.
 	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
@@ -619,7 +625,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get entity by given ID. This does not include soft deleted one.
+	 * Get entity by the given ID. This does not include soft deleted one.
 	 * @param id Entity ID to get entity by.
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
@@ -628,7 +634,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get entity by given ID and set whether it may return a soft deleted one.
+	 * Get entity by the given ID and set whether it may return a soft deleted one.
 	 * @param id Entity ID to get entity by.
 	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
 	 * @return Found entity, or <code>null</code> if there is none.
@@ -643,6 +649,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return entity;
 	}
 
+	/**
+	 * Get entity by the given ID and entity graph name.
+	 * @param id Entity ID to get entity by.
+	 * @param entityGraphName Entity graph name.
+	 * @return Found entity, or <code>null</code> if there is none.
+	 */
 	public E getByIdWithLoadGraph(I id, String entityGraphName) {
 		EntityGraph<?> entityGraph = entityManager.getEntityGraph(entityGraphName);
 
@@ -654,7 +666,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get soft deleted entity by given ID.
+	 * Get soft deleted entity by the given ID.
 	 * @param id Entity ID to get soft deleted entity by.
 	 * @return Found soft deleted entity, or <code>null</code> if there is none.
 	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
@@ -718,7 +730,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * List entities matching the {@link QueryBuilder} and mapped parameters, if any.
+	 * List entities matching the given {@link QueryBuilder} and mapped parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -733,7 +745,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return List of entities matching the {@link QueryBuilder} and mapped parameters, if any.
+	 * @return List of entities matching the given {@link QueryBuilder} and mapped parameters, if any.
 	 */
 	protected List<E> list(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return createQuery(queryBuilder, parameters).getResultList();
@@ -741,15 +753,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private TypedQuery<E> createQuery(String jpql, Object... parameters) {
 		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
-		range(0, parameters.length).forEach(i -> query.setParameter(i, parameters[i]));
+		setPositionalParameters(query, parameters);
 		return query;
 	}
 
 	private TypedQuery<E> createQuery(String jpql, Consumer<Map<String, Object>> parameters) {
-		Map<String, Object> params = new HashMap<>();
-		parameters.accept(params);
 		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
-		setParameterValues(query, params);
+		setSuppliedParameters(query, parameters);
 		return query;
 	}
 
@@ -760,10 +770,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
-		Map<String, Object> params = new HashMap<>();
-		parameters.accept(params);
 		TypedQuery<E> query = getEntityManager().createQuery(criteriaQuery);
-		setParameterValues(query, params);
+
+		if (root instanceof EclipseLinkRoot) {
+			((EclipseLinkRoot<E>) root).runPostponedFetches(query);
+		}
+
+		setSuppliedParameters(query, parameters);
 		return query;
 	}
 
@@ -800,7 +813,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get entities by given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
+	 * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
 	 * @param ids Entity IDs to get entities by.
 	 * @return Found entities, or an empty set if there is none.
 	 */
@@ -809,7 +822,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get entities by given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+	 * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
 	 * @param ids Entity IDs to get entities by.
 	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
 	 * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
@@ -1604,23 +1617,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		Root<E> entityQueryRoot = buildRoot(entityQuery);
 		PathResolver pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
 		buildOrderBy(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
-		Map<String, Object> parameterValues = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
-		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameterValues);
+		Map<String, Object> parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
+		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
 	}
 
 	private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
 		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
 		Root<E> countQueryRoot = countQuery.from(entityType);
 		countQuery.select(criteriaBuilder.count(countQueryRoot));
-		Map<String, Object> parameterValues = pageBuilder.shouldBuildCountSubquery() ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder) : emptyMap();
-		return buildTypedQuery(pageBuilder, countQuery, null, parameterValues);
+		Map<String, Object> parameters = pageBuilder.shouldBuildCountSubquery() ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder) : emptyMap();
+		return buildTypedQuery(pageBuilder, countQuery, null, parameters);
 	}
 
 	private <T extends E> Map<String, Object> buildCountSubquery(PageBuilder<T> pageBuilder, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder) {
 		Subquery<T> countSubquery = countQuery.subquery(pageBuilder.getResultType());
 		Root<E> countSubqueryRoot = buildRoot(countSubquery);
 		PathResolver subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
-		Map<String, Object> parameterValues = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
+		Map<String, Object> parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
 
 		if (provider == HIBERNATE) {
 			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
@@ -1640,20 +1653,31 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
 		}
 
-		return parameterValues;
+		return parameters;
 	}
 
-	private <T extends E, Q> TypedQuery<Q> buildTypedQuery(PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, Root<E> root, Map<String, Object> parameterValues) {
+	private <T extends E, Q> TypedQuery<Q> buildTypedQuery(PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, Root<E> root, Map<String, Object> parameters) {
 		TypedQuery<Q> typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(pageBuilder, typedQuery, root);
-		setParameterValues(typedQuery, parameterValues);
+		setMappedParameters(typedQuery, parameters);
 		onPage(pageBuilder.getResultType(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}
 
-	private <Q> void setParameterValues(TypedQuery<Q> typedQuery, Map<String, Object> parameterValues) {
-		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, parameterValues));
-		parameterValues.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+	private <Q> void setPositionalParameters(TypedQuery<Q> typedQuery, Object[] positionalParameters) {
+		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, Arrays.toString(positionalParameters)));
+		range(0, positionalParameters.length).forEach(i -> typedQuery.setParameter(i, positionalParameters[i]));
+	}
+
+	private <Q> void setMappedParameters(TypedQuery<Q> typedQuery, Map<String, Object> mappedParameters) {
+		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, mappedParameters));
+		mappedParameters.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+	}
+
+	private <Q> void setSuppliedParameters(TypedQuery<Q> typedQuery, Consumer<Map<String, Object>> suppliedParameters) {
+		Map<String, Object> mappedParameters = new HashMap<>();
+		suppliedParameters.accept(mappedParameters);
+		setMappedParameters(typedQuery, mappedParameters);
 	}
 
 	private <T extends E> PartialResultList<T> executeQuery(Page page, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
@@ -1766,9 +1790,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> Map<String, Object> buildRestrictions(PageBuilder<T> pageBuilder, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
 		Page page = pageBuilder.getPage();
-		Map<String, Object> parameterValues = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
-		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
-		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameterValues);
+		Map<String, Object> parameters = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
+		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameters);
+		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameters);
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
@@ -1803,7 +1827,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (!(query instanceof Subquery) && pageBuilder.canBuildValueBasedPagingPredicate()) {
-			restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameterValues));
+			restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameters));
 		}
 
 		if (restriction != null) {
@@ -1811,11 +1835,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
-		return parameterValues;
+		return parameters;
 	}
 
 	@SuppressWarnings("unchecked")
-	private <T extends E, V extends Comparable<V>> Predicate buildValueBasedPagingPredicate(Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+	private <T extends E, V extends Comparable<V>> Predicate buildValueBasedPagingPredicate(Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
 		// Value based paging https://blog.novatec-gmbh.de/art-pagination-offset-vs-value-based-paging/ is on large offsets much faster than offset based paging.
 		// (orderByField1 > ?1) OR (orderByField1 = ?1 AND orderByField2 > ?2) OR (orderByField1 = ?1 AND orderByField2 = ?2 AND orderByField3 > ?3) [...]
 
@@ -1827,7 +1851,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			String field = order.getKey();
 			V value = invokeGetter(last, field);
 			Expression<V> path = (Expression<V>) pathResolver.get(field);
-			ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues).create(value);
+			ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameters).create(value);
 			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
 
 			for (Entry<Expression<V>, ParameterExpression<V>> previousOrderByField : orderByFields.entrySet()) {
@@ -1841,18 +1865,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return criteriaBuilder.or(toArray(predicates));
 	}
 
-	private <T extends E> List<Predicate> buildPredicates(Map<String, Object> criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+	private <T extends E> List<Predicate> buildPredicates(Map<String, Object> criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
 		return stream(criteria)
-			.map(parameter -> buildPredicate(parameter, query, criteriaBuilder, pathResolver, parameterValues))
+			.map(parameter -> buildPredicate(parameter, query, criteriaBuilder, pathResolver, parameters))
 			.filter(Objects::nonNull)
 			.collect(toList());
 	}
 
-	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameterValues) {
+	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
 		String field = parameter.getKey();
 		Expression<?> path = pathResolver.get(elementCollections.contains(field) ? pathResolver.join(field) : field);
 		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
-		return buildTypedPredicate(path, type, field,  parameter.getValue(), query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameterValues));
+		return buildTypedPredicate(path, type, field,  parameter.getValue(), query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
 	}
 
 	@SuppressWarnings("unchecked")
