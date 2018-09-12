@@ -1483,7 +1483,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @see Page
 	 * @see Criteria
 	 */
-	public PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {
+	protected PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {
 		return getPage(page, count, true, fetchFields);
 	}
 
@@ -1722,7 +1722,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 			boolean orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
 			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
-			pageBuilder.canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields); // Value based paging cannot be used if ordering contains aggregated fields, because it may return a semi-cartesian product.
+			pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
 			return field -> (field == null) ? root : paths.get(field);
 		}
 		else if (pageBuilder.getResultType() == entityType) {
