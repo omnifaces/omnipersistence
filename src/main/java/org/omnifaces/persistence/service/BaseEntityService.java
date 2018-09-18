@@ -1144,21 +1144,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param <E> The generic base entity type of the given base entity.
 	 * @param entity Entity to manage, may be <code>null</code>.
 	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied or entity has been deleted
+	 * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
 	 * in the meanwhile.
 	 */
-	@SuppressWarnings({ "hiding" })
-	protected <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E manageIfNecessary(E entity) {
+	@SuppressWarnings({ "hiding", "unchecked" })
+	protected <E> E manageIfNecessary(E entity) {
 		if (entity == null) {
 			return null;
 		}
 
-		I id = provider.getIdentifier(entity);
+		if (!(entity instanceof BaseEntity)) {
+			throw new IllegalArgumentException();
+		}
 
-		if (id == null || (!provider.isProxy(entity) && getEntityManager().contains(entity))) {
+		BaseEntity<I> baseEntity = (BaseEntity<I>) entity;
+		I id = provider.getIdentifier(baseEntity);
+
+		if (id == null || (!provider.isProxy(baseEntity) && getEntityManager().contains(entity))) {
 			return entity;
 		}
 
-		return getEntityManager().find(provider.getEntityType(entity), id);
+		return (E) getEntityManager().find(provider.getEntityType(baseEntity), id);
 	}
 
 	/**
