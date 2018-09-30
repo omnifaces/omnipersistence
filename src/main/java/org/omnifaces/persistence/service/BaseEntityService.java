@@ -45,6 +45,7 @@ import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGI
 import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_ACTION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
+import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
@@ -448,11 +449,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * Create an instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
-	 * by the given name, usually to perform a SELECT.
+	 * by the given name, usually to perform a SELECT e.
 	 * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either
 	 * a {@link NamedQuery} or a <code>&lt;persistence-unit&gt;&lt;mapping-file&gt;</code>.
 	 * @return An instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
-	 * by the given name, usually to perform a SELECT.
+	 * by the given name, usually to perform a SELECT e.
 	 */
 	protected TypedQuery<E> createNamedTypedQuery(String name) {
 		return getEntityManager().createNamedQuery(name, entityType);
@@ -468,6 +469,39 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected Query createNamedQuery(String name) {
 		return getEntityManager().createNamedQuery(name);
+	}
+
+	/**
+	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement,
+	 * usually to perform a SELECT e.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement,
+	 * usually to perform a SELECT.
+	 */
+	protected TypedQuery<E> createTypedQuery(String jpql) {
+		return getEntityManager().createQuery(jpql, entityType);
+	}
+
+	/**
+	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns a <code>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns a <copde>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
+	 */
+	protected TypedQuery<Long> createLongQuery(String jpql) {
+		return getEntityManager().createQuery(jpql, Long.class);
+	}
+
+	/**
+	 * Create an instance of {@link Query} for executing the given Java Persistence Query Language statement,
+	 * usually to perform an INSERT, UPDATE or DELETE.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @return An instance of {@link Query} for executing the given Java Persistence Query Language statement,
+	 * usually to perform an INSERT, UPDATE or DELETE.
+	 */
+	protected Query createQuery(String jpql) {
+		return getEntityManager().createQuery(jpql);
 	}
 
 
@@ -713,6 +747,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
+	 * @param ids Entity IDs to get entities by.
+	 * @return Found entities, or an empty set if there is none.
+	 */
+	public List<E> getByIds(Iterable<I> ids) {
+		return getByIds(ids, false);
+	}
+
+	/**
+	 * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+	 * @param ids Entity IDs to get entities by.
+	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
+	 * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 */
+	protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
+		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
+		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (?1)"
+			+ " ORDER BY e.id DESC", ids);
+	}
+
+	/**
 	 * Check whether given entity exists.
 	 * This method supports proxied entities.
 	 * @param entity Entity to check.
@@ -724,6 +781,38 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			.createQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id", Long.class)
 			.setParameter("id", id)
 			.getSingleResult().intValue() > 0;
+	}
+
+	/**
+	 * List all entities. The default ordering is by ID, descending. This does not include soft deleted entities.
+	 * @return List of all entities.
+	 */
+	public List<E> list() {
+		return list(false);
+	}
+
+	/**
+	 * List all entities and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
+	 * @return List of all entities, optionally including soft deleted ones.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 */
+	protected List<E> list(boolean includeSoftDeleted) {
+		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+			+ softDeleteData.getWhereClause(includeSoftDeleted)
+			+ " ORDER BY e.id DESC");
+	}
+
+	/**
+	 * List all entities that have been soft deleted. The default ordering is by ID, descending.
+	 * @return List of all soft deleted entities.
+	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 */
+	public List<E> listSoftDeleted() {
+		softDeleteData.checkSoftDeletable();
+		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+			+ softDeleteData.getWhereClause(true)
+			+ " ORDER BY e.id DESC");
 	}
 
 	/**
@@ -811,58 +900,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Get all entities. The default ordering is by ID, descending. This does not include soft deleted entities.
-	 * @return All entities.
+	 * @deprecated Renamed to {@link #list()} for consistency.
 	 */
+	@Deprecated
 	public List<E> getAll() {
-		return getAll(false);
+		return list();
 	}
 
 	/**
-	 * Get all entities and set whether it may include soft deleted ones. The default ordering is by ID, descending.
-	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
-	 * @return All entities, optionally including soft deleted ones.
-	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @deprecated Renamed to {@link #list(boolean) for consistency.
 	 */
+	@Deprecated
 	protected List<E> getAll(boolean includeSoftDeleted) {
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ softDeleteData.getWhereClause(includeSoftDeleted)
-			+ " ORDER BY e.id DESC");
+		return list(includeSoftDeleted);
 	}
 
 	/**
-	 * Get all entities that have been soft deleted. The default ordering is by ID, descending.
-	 * @return All soft deleted entities.
-	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
+	 * @deprecated Renamed to {@link #listSoftDeleted()} for consistency.
 	 */
+	@Deprecated
 	public List<E> getAllSoftDeleted() {
-		softDeleteData.checkSoftDeletable();
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ softDeleteData.getWhereClause(true)
-			+ " ORDER BY e.id DESC");
-	}
-
-	/**
-	 * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
-	 * @param ids Entity IDs to get entities by.
-	 * @return Found entities, or an empty set if there is none.
-	 */
-	public List<E> getByIds(Iterable<I> ids) {
-		return getByIds(ids, false);
-	}
-
-	/**
-	 * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
-	 * @param ids Entity IDs to get entities by.
-	 * @param includeSoftDeleted Whether to include soft deleted ones in the search.
-	 * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
-	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
-	 */
-	protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
-		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (?1)"
-			+ " ORDER BY e.id DESC", ids);
+		return listSoftDeleted();
 	}
 
 
@@ -1158,16 +1216,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Make any {@link BaseEntity} managed if necessary. NOTE: This will discard any unmanaged changes in the given
-	 * entity! This is particularly useful in case you intend to make sure that you have the most recent version at
-	 * hands. This method supports <code>null</code> entities as well as proxied entities and returns <code>null</code>
-	 * when entity has been deleted in the meanwhile.
-	 * @param <I> The generic ID type of the given base entity.
-	 * @param <E> The generic base entity type of the given base entity.
+	 * Make any given entity managed if necessary. NOTE: This will discard any unmanaged changes in the given entity!
+	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
+	 * This method supports <code>null</code> entities as well as proxied entities.
+	 * @param <E> The generic entity type.
 	 * @param entity Entity to manage, may be <code>null</code>.
-	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied or entity has been deleted
+	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied.
+	 * It leniently returns the very same argument if the entity has been deleted in the meanwhile.
 	 * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
-	 * in the meanwhile.
 	 */
 	@SuppressWarnings({ "hiding", "unchecked" })
 	protected <E> E manageIfNecessary(E entity) {
@@ -1186,7 +1242,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return entity;
 		}
 
-		return (E) getEntityManager().find(provider.getEntityType(baseEntity), id);
+		return coalesce((E) getEntityManager().find(provider.getEntityType(baseEntity), id), entity);
 	}
 
 	/**
