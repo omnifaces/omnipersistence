@@ -486,7 +486,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * returns a <code>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
-	 * returns a <copde>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
+	 * returns a <code>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
 	 */
 	protected TypedQuery<Long> createLongQuery(String jpql) {
 		return getEntityManager().createQuery(jpql, Long.class);
@@ -900,6 +900,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * @deprecated Renamed to {@link #list()} for consistency.
+	 * @see #list()
 	 */
 	@Deprecated
 	public List<E> getAll() {
@@ -907,7 +908,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * @deprecated Renamed to {@link #list(boolean) for consistency.
+	 * @deprecated Renamed to {@link #list(boolean)} for consistency.
+	 * @see #list(boolean)
 	 */
 	@Deprecated
 	protected List<E> getAll(boolean includeSoftDeleted) {
@@ -916,6 +918,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	/**
 	 * @deprecated Renamed to {@link #listSoftDeleted()} for consistency.
+	 * @see #listSoftDeleted()
 	 */
 	@Deprecated
 	public List<E> getAllSoftDeleted() {
