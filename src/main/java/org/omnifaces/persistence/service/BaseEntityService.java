@@ -1753,7 +1753,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			boolean orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
 			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
 			pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
-			return field -> (field == null) ? root : paths.get(field);
+			return new MappedPathResolver(root, paths, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else if (pageBuilder.getResultType() == entityType) {
 			pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
