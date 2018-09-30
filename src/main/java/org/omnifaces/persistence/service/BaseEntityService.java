@@ -41,7 +41,6 @@ import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
 import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
-import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHE_REGION;
 import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_ACTION;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
@@ -1493,8 +1492,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
 	 * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
 	 * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
-	 * this is not supported by OpenJPA. Additionally, the default implementation sets Hibernate cache region identifier to
-	 * the name of the <code>resultType</code>.
+	 * this is not supported by OpenJPA.
 	 * @param <T> The generic type of the entity or a DTO subclass thereof.
 	 * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
 	 * @param cacheable Whether the results should be cacheable.
@@ -1505,8 +1503,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return typedQuery -> {
 			if (provider == HIBERNATE) {
 				typedQuery
-					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable)
-					.setHint(QUERY_HINT_HIBERNATE_CACHE_REGION, resultType.getName());
+					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable);
 			}
 			else if (provider == ECLIPSELINK) {
 				typedQuery
