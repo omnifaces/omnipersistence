@@ -503,7 +503,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find entity by the given {@link QueryBuilder} and mapped parameters, if any.
+	 * Find entity by {@link CriteriaQueryBuilder} and mapped parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -518,10 +518,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching the given {@link QueryBuilder} and mapped parameters, if any.
-	 * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
+	 * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
+	 * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
 	 */
-	protected Optional<E> find(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+	protected Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return getOptionalSingleResult(list(queryBuilder, parameters));
 	}
 
@@ -573,8 +573,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Find first entity by the given {@link QueryBuilder} and mapped parameters, if any.
-	 * The difference with {@link #find(QueryBuilder, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+	 * Find first entity by {@link CriteriaQueryBuilder} and mapped parameters, if any.
+	 * The difference with {@link #find(CriteriaQueryBuilder, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -589,9 +589,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return Found entity matching the given {@link QueryBuilder} and mapped parameters, if any.
+	 * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
 	 */
-	protected Optional<E> findFirst(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+	protected Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return getOptionalFirstResult(createQuery(queryBuilder, parameters));
 	}
 
@@ -730,7 +730,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * List entities matching the given {@link QueryBuilder} and mapped parameters, if any.
+	 * List entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
 	 * <p>
 	 * Usage example:
 	 * <pre>
@@ -745,9 +745,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * </pre>
 	 * @param queryBuilder This creates the JPA criteria query.
 	 * @param parameters To put the mapped query parameters in.
-	 * @return List of entities matching the given {@link QueryBuilder} and mapped parameters, if any.
+	 * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
 	 */
-	protected List<E> list(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+	protected List<E> list(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return createQuery(queryBuilder, parameters).getResultList();
 	}
 
@@ -763,7 +763,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return query;
 	}
 
-	private TypedQuery<E> createQuery(QueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+	private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
 		CriteriaQuery<E> criteriaQuery = criteriaBuilder.createQuery(entityType);
 		Root<E> root = buildRoot(criteriaQuery);
@@ -778,6 +778,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		setSuppliedParameters(query, parameters);
 		return query;
+	}
+
+	/**
+	 * Functional interface to fine-grain a JPA criteria query for any of
+	 * {@link #list(CriteriaQueryBuilder, Consumer)} or {@link #find(CriteriaQueryBuilder, Consumer)} methods.
+	 * <p>
+	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
+	 * <pre>
+	 * &#64;Stateless
+	 * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+	 *
+	 *     public List&lt;YourEntity&gt; getFooByType(Type type) {
+	 *         return list((criteriaBuilder, query, root) -&gt; {
+	 *             query.where(criteriaBuilder.equals(root.get("type"), type));
+	 *         }, noop());
+	 *     }
+	 *
+	 * }
+	 * </pre>
+	 * @param <E> The generic base entity type.
+	 */
+	@FunctionalInterface
+	protected static interface CriteriaQueryBuilder<E> {
+		void build(CriteriaBuilder criteriaBuilder, CriteriaQuery<E> query, Root<E> root);
 	}
 
 	/**
