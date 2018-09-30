@@ -356,10 +356,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 
-	// Standard actions -----------------------------------------------------------------------------------------------
+	// Getters --------------------------------------------------------------------------------------------------------
 
 	/**
-	 * Returns the JPA provider being used. This is immutable (you can't override the method to change the value).
+	 * Returns the JPA provider being used. This is immutable (you can't override the method to change the internally used value).
 	 * @return The JPA provider being used.
 	 */
 	public Provider getProvider() {
@@ -367,7 +367,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the SQL database being used. This is immutable (you can't override the method to change the value).
+	 * Returns the SQL database being used. This is immutable (you can't override the method to change the internally used value).
 	 * @return The SQL database being used.
 	 */
 	public Database getDatabase() {
@@ -375,7 +375,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the actual type of the generic ID type <code>I</code>. This is immutable (you can't override the method to change the value).
+	 * Returns the actual type of the generic ID type <code>I</code>. This is immutable (you can't override the method to change the internally used value).
 	 * @return The actual type of the generic ID type <code>I</code>.
 	 */
 	protected Class<I> getIdentifierType() {
@@ -383,7 +383,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns the actual type of the generic base entity type <code>E</code>. This is immutable (you can't override the method to change the value).
+	 * Returns the actual type of the generic base entity type <code>E</code>. This is immutable (you can't override the method to change the internally used value).
 	 * @return The actual type of the generic base entity type <code>E</code>.
 	 */
 	protected Class<E> getEntityType() {
@@ -391,31 +391,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Returns whether the ID is generated. This is immutable (you can't override the method to change the value).
+	 * Returns whether the ID is generated. This is immutable (you can't override the method to change the internally used value).
 	 * @return Whether the ID is generated.
 	 */
 	protected boolean isGeneratedId() {
 		return generatedId;
-	}
-
-	/**
-	 * Returns the metamodel of current base entity.
-	 * @return The metamodel of current base entity.
-	 */
-	protected EntityType<E> getMetamodel() {
-		return getEntityManager().getMetamodel().entity(entityType);
-	}
-
-	/**
-	 * Returns the metamodel of given base entity.
-	 * @param <I> The generic ID type of the given base entity.
-	 * @param <E> The generic base entity type of the given base entity.
-	 * @param entity Base entity to obtain metamodel for.
-	 * @return The metamodel of given base entity.
-	 */
-	@SuppressWarnings({ "unchecked", "hiding" })
-	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> EntityType<E> getMetamodel(E entity) {
-		return getEntityManager().getMetamodel().entity((Class<E>) entity.getClass());
 	}
 
 	/**
@@ -444,6 +424,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
+	 * Returns the metamodel of current base entity.
+	 * @return The metamodel of current base entity.
+	 */
+	protected EntityType<E> getMetamodel() {
+		return getEntityManager().getMetamodel().entity(entityType);
+	}
+
+	/**
+	 * Returns the metamodel of given base entity.
+	 * @param <I> The generic ID type of the given base entity.
+	 * @param <E> The generic base entity type of the given base entity.
+	 * @param entity Base entity to obtain metamodel for.
+	 * @return The metamodel of given base entity.
+	 */
+	@SuppressWarnings({ "unchecked", "hiding" })
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> EntityType<E> getMetamodel(E entity) {
+		return getEntityManager().getMetamodel().entity((Class<E>) entity.getClass());
+	}
+
+
+	// Preparing actions ----------------------------------------------------------------------------------------------
+
+	/**
 	 * Create an instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified
 	 * by the given name, usually to perform a SELECT.
 	 * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either
@@ -465,6 +468,33 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected Query createNamedQuery(String name) {
 		return getEntityManager().createNamedQuery(name);
+	}
+
+
+	// Select actions -------------------------------------------------------------------------------------------------
+
+	/**
+	 * Functional interface to fine-grain a JPA criteria query for any of
+	 * {@link #list(CriteriaQueryBuilder, Consumer)} or {@link #find(CriteriaQueryBuilder, Consumer)} methods.
+	 * <p>
+	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
+	 * <pre>
+	 * &#64;Stateless
+	 * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+	 *
+	 *     public List&lt;YourEntity&gt; getFooByType(Type type) {
+	 *         return list((criteriaBuilder, query, root) -&gt; {
+	 *             query.where(criteriaBuilder.equals(root.get("type"), type));
+	 *         }, noop());
+	 *     }
+	 *
+	 * }
+	 * </pre>
+	 * @param <E> The generic base entity type.
+	 */
+	@FunctionalInterface
+	protected interface CriteriaQueryBuilder<E> {
+		void build(CriteriaBuilder criteriaBuilder, CriteriaQuery<E> query, Root<E> root);
 	}
 
 	/**
@@ -781,30 +811,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Functional interface to fine-grain a JPA criteria query for any of
-	 * {@link #list(CriteriaQueryBuilder, Consumer)} or {@link #find(CriteriaQueryBuilder, Consumer)} methods.
-	 * <p>
-	 * You do not need this interface directly. Just supply a lambda. Below is an usage example:
-	 * <pre>
-	 * &#64;Stateless
-	 * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
-	 *
-	 *     public List&lt;YourEntity&gt; getFooByType(Type type) {
-	 *         return list((criteriaBuilder, query, root) -&gt; {
-	 *             query.where(criteriaBuilder.equals(root.get("type"), type));
-	 *         }, noop());
-	 *     }
-	 *
-	 * }
-	 * </pre>
-	 * @param <E> The generic base entity type.
-	 */
-	@FunctionalInterface
-	protected static interface CriteriaQueryBuilder<E> {
-		void build(CriteriaBuilder criteriaBuilder, CriteriaQuery<E> query, Root<E> root);
-	}
-
-	/**
 	 * Get all entities. The default ordering is by ID, descending. This does not include soft deleted entities.
 	 * @return All entities.
 	 */
@@ -859,6 +865,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			+ " ORDER BY e.id DESC", ids);
 	}
 
+
+	// Insert actions -------------------------------------------------------------------------------------------------
+
 	/**
 	 * Persist given entity. Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
@@ -903,6 +912,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		getEntityManager().flush();
 		return id;
 	}
+
+
+	// Update actions -------------------------------------------------------------------------------------------------
 
 	/**
 	 * Update given entity. If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
@@ -1042,25 +1054,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return savedEntity;
 	}
 
-	/**
-	 * Reset given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
-	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
-	 * which might have been edited in the client, without changing the reference. This is generally useful when the
-	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
-	 * This method supports proxied entities.
-	 * @param entity Entity to reset.
-	 * @throws IllegalEntityStateException When entity is already managed, or has no ID.
-	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
-	 */
-	public void reset(E entity) {
-		if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
-			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
-		}
 
-		E managed = manage(entity);
-		getMetamodel(entity).getAttributes().forEach(attribute -> map(attribute.getJavaMember(), managed, entity));
-		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
-	}
+	// Delete actions -------------------------------------------------------------------------------------------------
 
 	/**
 	 * Delete given entity.
@@ -1135,6 +1130,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		entities.forEach(this::softUndelete);
 	}
 
+
+	// Manage actions -------------------------------------------------------------------------------------------------
+
 	/**
 	 * Make given entity managed. NOTE: This will discard any unmanaged changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
@@ -1190,6 +1188,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		return (E) getEntityManager().find(provider.getEntityType(baseEntity), id);
 	}
+
+	/**
+	 * Reset given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached.
+	 * The actual intent of this method is to have the opportunity to completely reset the state of a given entity
+	 * which might have been edited in the client, without changing the reference. This is generally useful when the
+	 * entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection.
+	 * This method supports proxied entities.
+	 * @param entity Entity to reset.
+	 * @throws IllegalEntityStateException When entity is already managed, or has no ID.
+	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
+	 */
+	public void reset(E entity) {
+		if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
+			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
+		}
+
+		E managed = manage(entity);
+		getMetamodel(entity).getAttributes().forEach(attribute -> map(attribute.getJavaMember(), managed, entity));
+		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
+	}
+
+
+	// Count actions --------------------------------------------------------------------------------------------------
 
 	/**
 	 * Returns count of all foreign key references to given entity.
@@ -1347,7 +1368,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param <E> The generic base entity type.
 	 */
 	@FunctionalInterface
-	protected static interface QueryBuilder<E> {
+	protected interface QueryBuilder<E> {
 		void build(CriteriaBuilder criteriaBuilder, AbstractQuery<E> query, Root<E> root);
 	}
 
@@ -1397,7 +1418,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @param <T> The generic base entity type or from a DTO subclass thereof.
 	 */
 	@FunctionalInterface
-	protected static interface MappedQueryBuilder<T> {
+	protected interface MappedQueryBuilder<T> {
 		LinkedHashMap<Getter<T>, Expression<?>> build(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<? super T> root);
 	}
 

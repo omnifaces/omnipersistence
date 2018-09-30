@@ -12,14 +12,16 @@
  */
 package org.omnifaces.persistence.service;
 
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Root;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class MappedPathResolver implements PathResolver {
+import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.Root;
+
+/**
+ * Helper class of {@link BaseEntityService}.
+ */
+class MappedPathResolver implements PathResolver {
 
 	private final Root<?> root;
 	private final Map<String, Expression<?>> paths;
@@ -41,7 +43,8 @@ public class MappedPathResolver implements PathResolver {
 
 		if (path != null) {
 			return path;
-		} else {
+		}
+		else {
 			return rootPathResolver.get(field);
 		}
 	}
