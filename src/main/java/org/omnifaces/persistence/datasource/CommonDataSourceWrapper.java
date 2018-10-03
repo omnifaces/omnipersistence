@@ -14,6 +14,7 @@ package org.omnifaces.persistence.datasource;
 
 import static java.beans.Introspector.getBeanInfo;
 import static java.beans.PropertyEditorManager.findEditor;
+import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableMap;
 
 import java.beans.IntrospectionException;
@@ -23,7 +24,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.sql.CommonDataSource;
@@ -32,6 +35,14 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
 	private CommonDataSource commonDataSource;
 	private Map<String, PropertyDescriptor> dataSourceProperties;
+	private Set<String> commonProperties  = new HashSet<>(asList(
+	        "serverName", "databaseName", "portNumber", 
+	        "user", "password", "compatible", "logLevel",
+	        "protocolVersion", "prepareThreshold", "receiveBufferSize",
+	        "unknownLength", "socketTimeout", "ssl", "sslfactory",
+	        "applicationName", "tcpKeepAlive", "binaryTransfer",
+	        "binaryTransferEnable", "binaryTransferDisable"
+	));
 
 	public void initDataSource(CommonDataSource dataSource) {
 		this.commonDataSource = dataSource;
@@ -51,14 +62,30 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
 	@SuppressWarnings("unchecked")
 	public <T> T get(String name) {
+	    
+	    PropertyDescriptor property = dataSourceProperties.get(name);
+	    
+	    if ((property == null || property.getReadMethod() == null) && commonProperties.contains(name)) {
+	        // Ignore fabricated properties that the actual data source doesn't have.
+	        return null;
+	    }
+	    
 		try {
-			return (T) dataSourceProperties.get(name).getReadMethod().invoke(commonDataSource);
+			return (T) property.getReadMethod().invoke(commonDataSource);
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
 			throw new IllegalStateException(e);
 		}
 	}
 
 	public void set(String name, Object value) {
+	    
+	    PropertyDescriptor property = dataSourceProperties.get(name);
+        
+        if ((property == null || property.getReadMethod() == null) && commonProperties.contains(name)) {
+            // Ignore fabricated properties that the actual data source doesn't have.
+            return;
+        }
+	    
 		try {
 			dataSourceProperties.get(name).getWriteMethod().invoke(commonDataSource, value);
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
@@ -132,7 +159,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public int getPortNumber() {
-		return get("serverName");
+		return get("portNumber");
 	}
 
 	public void setPortNumber(int portNumber) {
@@ -144,7 +171,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public String getUser() {
-		return get("serverName");
+		return get("user");
 	}
 
 	public void setUser(String user) {
@@ -152,7 +179,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public String getPassword() {
-		return get("serverName");
+		return get("password");
 	}
 
 	public void setPassword(String password) {
@@ -160,7 +187,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public String getCompatible() {
-		return get("serverName");
+		return get("compatible");
 	}
 
 	public void setCompatible(String compatible) {
@@ -168,7 +195,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public int getLogLevel() {
-		return get("serverName");
+		return get("logLevel");
 	}
 
 	public void setLogLevel(int logLevel) {
@@ -176,12 +203,16 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 	}
 
 	public int getProtocolVersion() {
-		return get("serverName");
+		return get("protocolVersion");
 	}
 
 	public void setProtocolVersion(int protocolVersion) {
 		set("protocolVersion", protocolVersion);
 	}
+	
+	public int getPrepareThreshold() {
+        return get("prepareThreshold");
+    }
 
 	public void setPrepareThreshold(int prepareThreshold) {
 		set("prepareThreshold", prepareThreshold);
@@ -193,10 +224,6 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
 	public void setSendBufferSize(int sendBufferSize) {
 		set("sendBufferSize", sendBufferSize);
-	}
-
-	public int getPrepareThreshold() {
-		return get("prepareThreshold");
 	}
 
 	public void setUnknownLength(int unknownLength) {
