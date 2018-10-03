@@ -950,11 +950,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			getEntityManager().persist(entity);
+			
 		}
 		catch (ConstraintViolationException e) {
 			logConstraintViolations(e.getConstraintViolations());
 			throw e;
 		}
+		
+		// Entity is not guaranteed to have been given an Id before either the
+		// TX commits or flush is called.
+		getEntityManager().flush();
 
 		return entity.getId();
 	}
