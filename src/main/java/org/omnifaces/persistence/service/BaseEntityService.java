@@ -14,6 +14,7 @@ package org.omnifaces.persistence.service;
 
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.reverse;
 import static java.util.Collections.unmodifiableSet;
@@ -83,6 +84,7 @@ import javax.naming.InitialContext;
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
 import javax.persistence.ElementCollection;
+import javax.persistence.Entity;
 import javax.persistence.EntityGraph;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
@@ -762,6 +764,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
 	 */
 	protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
+		if (!ids.iterator().hasNext()) {
+			return emptyList();
+		}
+
 		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
 		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
 			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (?1)"
@@ -1245,7 +1251,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		BaseEntity<I> baseEntity = (BaseEntity<I>) entity;
 		I id = provider.getIdentifier(baseEntity);
 
-		if (id == null || (!provider.isProxy(baseEntity) && getEntityManager().contains(entity))) {
+		if (id == null || (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity))) {
 			return entity;
 		}
 
