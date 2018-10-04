@@ -39,7 +39,8 @@ class UncheckedParameterBuilder implements ParameterBuilder {
 	public <T> ParameterExpression<T> create(Object value) {
 		String name = field + parameters.size();
 		parameters.put(name, value);
-		return (ParameterExpression<T>) criteriaBuilder.parameter(value.getClass(), name);
+		Class<? extends Object> type = (value == null) ? Object.class : value.getClass();
+		return (ParameterExpression<T>) criteriaBuilder.parameter(type, name);
 	}
 
 }

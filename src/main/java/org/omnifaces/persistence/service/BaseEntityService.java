@@ -1976,10 +1976,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
 
 			for (Entry<Expression<V>, ParameterExpression<V>> previousOrderByField : orderByFields.entrySet()) {
-				predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(previousOrderByField.getKey(), previousOrderByField.getValue()));
+				Expression<V> previousPath = previousOrderByField.getKey();
+				ParameterExpression<V> previousParameter = previousOrderByField.getValue();
+				predicate = criteriaBuilder.and(predicate, (previousParameter == null) ? criteriaBuilder.isNull(previousPath) : criteriaBuilder.equal(previousPath, previousParameter));
 			}
 
-			orderByFields.put(path, parameter);
+			orderByFields.put(path, (value == null) ? null : parameter);
 			predicates.add(predicate);
 		}
 
