@@ -517,7 +517,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *
 	 *     public List&lt;YourEntity&gt; getFooByType(Type type) {
 	 *         return list((criteriaBuilder, query, root) -&gt; {
-	 *             query.where(criteriaBuilder.equals(root.get("type"), type));
+	 *             query.where(criteriaBuilder.equal(root.get("type"), type));
 	 *         }, noop());
 	 *     }
 	 *
@@ -572,7 +572,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * Optional&lt;Foo&gt; foo = find(
 	 * 		(criteriaBuilder, query, root) -&gt; {
-	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 			query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
 	 * 		},
 	 * 		params -&gt; {
 	 *     		params.put("foo", Type.FOO);
@@ -643,7 +643,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * Optional&lt;Foo&gt; foo = findFirst(
 	 * 		(criteriaBuilder, query, root) -&gt; {
-	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 			query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
 	 * 		},
 	 * 		params -&gt; {
 	 *     		params.put("foo", Type.FOO);
@@ -854,7 +854,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * List&lt;Foo&gt; foo = list(
 	 * 		(criteriaBuilder, query, root) -&gt; {
-	 * 			query.where(criteriaBuilder.equals(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
+	 * 			query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
 	 * 		},
 	 * 		params -&gt; {
 	 *     		params.put("foo", Type.FOO);
@@ -950,13 +950,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			getEntityManager().persist(entity);
-			
+
 		}
 		catch (ConstraintViolationException e) {
 			logConstraintViolations(e.getConstraintViolations());
 			throw e;
 		}
-		
+
 		// Entity is not guaranteed to have been given an Id before either the
 		// TX commits or flush is called.
 		getEntityManager().flush();
@@ -1422,7 +1422,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *
 	 *     public void getPageOfFooType(Page page, boolean count) {
 	 *         return getPage(page, count, (criteriaBuilder, query, root) -&gt; {
-	 *             query.where(criteriaBuilder.equals(root.get("type"), Type.FOO));
+	 *             query.where(criteriaBuilder.equal(root.get("type"), Type.FOO));
 	 *         });
 	 *     }
 	 *
