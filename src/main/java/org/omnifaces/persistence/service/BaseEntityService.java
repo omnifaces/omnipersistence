@@ -1709,7 +1709,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
 			TypedQuery<Long> countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
-			return executeQuery(page, entityQuery, countQuery);
+			return executeQuery(pageBuilder, entityQuery, countQuery);
 		}
 		finally {
 			afterPage().accept(getEntityManager());
@@ -1723,7 +1723,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		CriteriaQuery<T> entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
 		Root<E> entityQueryRoot = buildRoot(entityQuery);
 		PathResolver pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
-		buildOrderBy(pageBuilder.getPage(), entityQuery, criteriaBuilder, pathResolver);
+		buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
 		Map<String, Object> parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
 		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
 	}
@@ -1787,10 +1787,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		setMappedParameters(typedQuery, mappedParameters);
 	}
 
-	private <T extends E> PartialResultList<T> executeQuery(Page page, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
+	private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
+		Page page = pageBuilder.getPage();
 		List<T> entities = entityQuery.getResultList();
 
-		if (page.isReversed()) {
+		if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
 			reverse(entities);
 		}
 
@@ -1866,14 +1867,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
-	private <T extends E> void buildOrderBy(Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+	private <T extends E> void buildOrderBy(PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
+		Page page = pageBuilder.getPage();
 		Map<String, Boolean> ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
 			return;
 		}
 
-		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver, page.isReversed())).collect(toList()));
+		boolean reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
+		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver, reversed)).collect(toList()));
 	}
 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
