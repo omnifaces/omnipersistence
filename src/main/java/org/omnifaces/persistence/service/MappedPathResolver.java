@@ -21,31 +21,25 @@ import javax.persistence.criteria.Root;
 /**
  * Helper class of {@link BaseEntityService}.
  */
-class MappedPathResolver implements PathResolver {
+class MappedPathResolver extends RootPathResolver {
 
-	private final Root<?> root;
 	private final Map<String, Expression<?>> paths;
-	private final RootPathResolver rootPathResolver;
 
 	public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
-		this.root = root;
+		super(root, elementCollections, manyOrOneToOnes);
 		this.paths = paths;
-		this.rootPathResolver = new RootPathResolver(root, elementCollections, manyOrOneToOnes);
 	}
 
 	@Override
 	public Expression<?> get(String field) {
-		if (field == null) {
-			return root;
+		if (field != null) {
+			Expression<?> path = paths.get(field);
+
+			if (path != null) {
+				return path;
+			}
 		}
 
-		Expression<?> path = paths.get(field);
-
-		if (path != null) {
-			return path;
-		}
-		else {
-			return rootPathResolver.get(field);
-		}
+		return super.get(field);
 	}
 }
