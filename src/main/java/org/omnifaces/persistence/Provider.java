@@ -70,7 +70,7 @@ public enum Provider {
 
 		@Override
 		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyInitialized(E entity) {
-			return invokeOnProxy(entity, "isUninitialized", super::isProxyInitialized);
+			return !invokeOnProxy(entity, "isUninitialized", super::isProxyInitialized);
 		}
 
 		@Override
