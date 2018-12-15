@@ -770,8 +770,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
 		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
-			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (?1)"
-			+ " ORDER BY e.id DESC", ids);
+			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (:ids)"
+			+ " ORDER BY e.id DESC", p -> p.put("ids", ids));
 	}
 
 	/**
@@ -782,8 +782,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected boolean exists(E entity) {
 		I id = provider.getIdentifier(entity);
-		return id != null && getEntityManager()
-			.createQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id", Long.class)
+		return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id")
 			.setParameter("id", id)
 			.getSingleResult().intValue() > 0;
 	}
@@ -904,38 +903,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		return query;
 	}
 
-	/**
-	 * @deprecated Renamed to {@link #list()} for consistency.
-	 * @see #list()
-	 */
-	@Deprecated
-	public List<E> getAll() {
-		return list();
-	}
-
-	/**
-	 * @deprecated Renamed to {@link #list(boolean)} for consistency.
-	 * @see #list(boolean)
-	 */
-	@Deprecated
-	protected List<E> getAll(boolean includeSoftDeleted) {
-		return list(includeSoftDeleted);
-	}
-
-	/**
-	 * @deprecated Renamed to {@link #listSoftDeleted()} for consistency.
-	 * @see #listSoftDeleted()
-	 */
-	@Deprecated
-	public List<E> getAllSoftDeleted() {
-		return listSoftDeleted();
-	}
-
 
 	// Insert actions -------------------------------------------------------------------------------------------------
 
 	/**
-	 * Persist given entity. Any bean validation constraint violation will be logged separately.
+	 * Persist given entity and immediately perform a flush.
+	 * Any bean validation constraint violation will be logged separately.
 	 * @param entity Entity to persist.
 	 * @return Entity ID.
 	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
@@ -963,25 +936,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw e;
 		}
 
-		// Entity is not guaranteed to have been given an Id before either the
-		// TX commits or flush is called.
+		// Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
 		getEntityManager().flush();
 
 		return entity.getId();
-	}
-
-	/**
-	 * Persist given entity via {@link #persist(BaseEntity)} and immediately perform a flush so that all changes in
-	 * managed entities so far in the current transaction are persisted. This is particularly useful when you intend
-	 * to process the given entity further in an asynchronous service method.
-	 * @param entity Entity to persist.
-	 * @return Entity ID.
-	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
-	 */
-	protected I persistAndFlush(E entity) {
-		I id = persist(entity);
-		getEntityManager().flush();
-		return id;
 	}
 
 
@@ -1207,7 +1165,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Make given entity managed. NOTE: This will discard any unmanaged changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
-	 * This method supports proxied entities.
+	 * This method also supports proxied entities as well as DTOs.
 	 * @param entity Entity to manage.
 	 * @return The managed entity.
 	 * @throws NullPointerException When given entity is <code>null</code>.
@@ -1215,11 +1173,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	protected E manage(E entity) {
-		if (provider.getIdentifier(entity) == null) {
+		if (entity == null) {
+			throw new NullPointerException("Entity is null.");
+		}
+
+		I id = provider.getIdentifier(entity);
+
+		if (id == null) {
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
 		}
 
-		E managed = manageIfNecessary(entity);
+		if (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity)) {
+			return entity;
+		}
+
+		E managed = getEntityManager().find(provider.getEntityType(entity), id);
 
 		if (managed == null) {
 			throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
@@ -1231,11 +1199,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Make any given entity managed if necessary. NOTE: This will discard any unmanaged changes in the given entity!
 	 * This is particularly useful in case you intend to make sure that you have the most recent version at hands.
-	 * This method supports <code>null</code> entities as well as proxied entities.
+	 * This method also supports <code>null</code> entities as well as proxied entities as well as DTOs.
 	 * @param <E> The generic entity type.
 	 * @param entity Entity to manage, may be <code>null</code>.
 	 * @return The managed entity, or <code>null</code> when <code>null</code> was supplied.
-	 * It leniently returns the very same argument if the entity has been deleted in the meanwhile.
+	 * It leniently returns the very same argument if the entity has no ID or has been deleted in the meanwhile.
 	 * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
 	 */
 	@SuppressWarnings({ "hiding", "unchecked" })
