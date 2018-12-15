@@ -31,8 +31,10 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import javax.persistence.ElementCollection;
+import javax.persistence.Entity;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
+import javax.persistence.Table;
 import javax.persistence.criteria.Expression;
 import javax.persistence.metamodel.Attribute;
 
@@ -208,13 +210,34 @@ public enum Provider {
 		return entity;
 	}
 
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
-		return entity == null ? null : (Class<E>) entity.getClass();
+		if (entity == null) {
+			return null;
+		}
+
+		Class<? extends BaseEntity> entityType = entity.getClass();
+
+		while (entityType.isAssignableFrom(BaseEntity.class) && entityType.getAnnotation(Entity.class) == null)
+		{
+			entityType = (Class<? extends BaseEntity>) entityType.getSuperclass();
+		}
+
+		return (Class<E>) entityType;
 	}
 
 	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(E entity) {
 		return entity == null ? null : entity.getId();
+	}
+
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
+		if (entity == null) {
+			return null;
+		}
+
+		Class<E> entityType = getEntityType(entity);
+		Table table = entityType.getAnnotation(Table.class);
+		return table != null ? table.name() : entityType.getSimpleName().toUpperCase();
 	}
 
 }
