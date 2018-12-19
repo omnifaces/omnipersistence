@@ -71,8 +71,8 @@ public enum Provider {
 		}
 
 		@Override
-		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyInitialized(E entity) {
-			return !invokeOnProxy(entity, "isUninitialized", super::isProxyInitialized);
+		public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyUninitialized(E entity) {
+			return invokeOnProxy(entity, "isUninitialized", super::isProxyUninitialized);
 		}
 
 		@Override
@@ -202,7 +202,7 @@ public enum Provider {
 		return false;
 	}
 
-	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyInitialized(E entity) {
+	public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyUninitialized(E entity) {
 		return false;
 	}
 
