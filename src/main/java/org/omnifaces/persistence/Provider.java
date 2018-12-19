@@ -218,7 +218,7 @@ public enum Provider {
 
 		Class<? extends BaseEntity> entityType = entity.getClass();
 
-		while (entityType.isAssignableFrom(BaseEntity.class) && entityType.getAnnotation(Entity.class) == null)
+		while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null)
 		{
 			entityType = (Class<? extends BaseEntity>) entityType.getSuperclass();
 		}
