@@ -539,6 +539,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = find("WHERE bar = ?1 AND baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
 	 * @return Found entity matching the given query and positional parameters, if any.
@@ -554,6 +559,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * Usage example:
 	 * <pre>
 	 * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", params -&gt; {
 	 *     params.put("bar", bar);
 	 *     params.put("baz", baz);
 	 * });
@@ -610,12 +623,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = ?1 AND baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
 	 * @return Found entity matching the given query and positional parameters, if any.
 	 */
 	protected Optional<E> findFirst(String jpql, Object... parameters) {
-		return getOptionalFirstResult(createQuery(jpql, parameters));
+		return getOptionalFirstResult(createQuery(select(jpql), parameters));
 	}
 
 	/**
@@ -629,12 +647,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *     params.put("baz", baz);
 	 * });
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return Found entity matching the given query and mapped parameters, if any.
 	 */
 	protected Optional<E> findFirst(String jpql, Consumer<Map<String, Object>> parameters) {
-		return getOptionalFirstResult(createQuery(jpql, parameters));
+		return getOptionalFirstResult(createQuery(select(jpql), parameters));
 	}
 
 	/**
@@ -769,7 +795,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+		return list(select("")
 			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (:ids)"
 			+ " ORDER BY e.id DESC", p -> p.put("ids", ids));
 	}
@@ -802,7 +828,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
 	 */
 	protected List<E> list(boolean includeSoftDeleted) {
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+		return list(select("")
 			+ softDeleteData.getWhereClause(includeSoftDeleted)
 			+ " ORDER BY e.id DESC");
 	}
@@ -814,7 +840,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	public List<E> listSoftDeleted() {
 		softDeleteData.checkSoftDeletable();
-		return list("SELECT e FROM " + entityType.getSimpleName() + " e"
+		return list(select("")
 			+ softDeleteData.getWhereClause(true)
 			+ " ORDER BY e.id DESC");
 	}
@@ -826,12 +852,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * List&lt;Foo&gt; foos = list("WHERE bar = ?1 AND baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
 	 * @return List of entities matching the given query and positional parameters, if any.
 	 */
 	protected List<E> list(String jpql, Object... parameters) {
-		return createQuery(jpql, parameters).getResultList();
+		return createQuery(select(jpql), parameters).getResultList();
 	}
 
 	/**
@@ -844,12 +875,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *     params.put("baz", baz);
 	 * });
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in.
 	 * @return List of entities matching the given query and mapped parameters, if any.
 	 */
 	protected List<E> list(String jpql, Consumer<Map<String, Object>> parameters) {
-		return createQuery(jpql, parameters).getResultList();
+		return createQuery(select(jpql), parameters).getResultList();
 	}
 
 	/**
@@ -872,6 +911,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected List<E> list(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
 		return createQuery(queryBuilder, parameters).getResultList();
+	}
+
+	private String select(String jpql) {
+		if (!jpql.trim().toLowerCase().startsWith("select")) {
+			return "SELECT e FROM " + entityType.getSimpleName() + " e " + jpql;
+		}
+		else {
+			return jpql;
+		}
+	}
+
+	private String update(String jpql) {
+		if (!jpql.trim().toLowerCase().startsWith("update")) {
+			return "UPDATE " + entityType.getSimpleName() + " e " + jpql;
+		}
+		else {
+			return jpql;
+		}
 	}
 
 	private TypedQuery<E> createQuery(String jpql, Object... parameters) {
@@ -1025,13 +1082,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * <pre>
 	 * int affectedRows = update("UPDATE Foo f SET f.bar = ?1 WHERE f.baz = ?2", bar, baz);
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * int affectedRows = update("SET bar = ?1 WHERE baz = ?2", bar, baz);
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters The positional query parameters, if any.
 	 * @return The number of entities updated or deleted.
 	 * @see Query#executeUpdate()
 	 */
 	protected int update(String jpql, Object... parameters) {
-		return createQuery(jpql, parameters).executeUpdate();
+		return createQuery(update(jpql), parameters).executeUpdate();
 	}
 
 	/**
@@ -1044,13 +1106,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 *     params.put("baz", baz);
 	 * });
 	 * </pre>
+	 * <p>
+	 * Short jpql is also supported:
+	 * <pre>
+	 * int affectedRows = update("SET bar = :bar WHERE baz = :baz", params -&gt; {
+	 *     params.put("bar", bar);
+	 *     params.put("baz", baz);
+	 * });
+	 * </pre>
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param parameters To put the mapped query parameters in, if any.
 	 * @return The number of entities updated or deleted.
 	 * @see Query#executeUpdate()
 	 */
 	protected int update(String jpql, Consumer<Map<String, Object>> parameters) {
-		return createQuery(jpql, parameters).executeUpdate();
+		return createQuery(update(jpql), parameters).executeUpdate();
 	}
 
 	/**
