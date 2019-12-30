@@ -47,6 +47,7 @@ import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
+import static org.omnifaces.utils.Lang.startsWithOneOf;
 import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
@@ -914,7 +915,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private String select(String jpql) {
-		if (!jpql.trim().toLowerCase().startsWith("select")) {
+		if (!startsWithOneOf(jpql.trim().toLowerCase(), "select", "from")) {
 			return "SELECT e FROM " + entityType.getSimpleName() + " e " + jpql;
 		}
 		else {
