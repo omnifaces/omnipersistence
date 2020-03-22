@@ -1,7 +1,7 @@
-[![Maven](https://img.shields.io/maven-metadata/v/http/central.maven.org/maven2/org/omnifaces/omnipersistence/maven-metadata.xml.svg)](http://central.maven.org/maven2/org/omnifaces/omnipersistence/)
-[![Javadoc](http://javadoc.io/badge/org.omnifaces/omnipersistence.svg)](http://javadoc.io/doc/org.omnifaces/omnipersistence) 
+[![Maven](https://img.shields.io/maven-metadata/v/https/repo.maven.apache.org/maven2/org/omnifaces/omnipersistence/maven-metadata.xml.svg)](https://repo.maven.apache.org/maven2/org/omnifaces/omnipersistence/)
+[![Javadoc](https://javadoc.io/badge/org.omnifaces/omnipersistence.svg)](https://javadoc.io/doc/org.omnifaces/omnipersistence) 
 [![Travis](https://travis-ci.org/omnifaces/omnipersistence.svg?branch=develop)](https://travis-ci.org/omnifaces/omnipersistence)
-[![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+[![License](https://img.shields.io/:license-apache-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 
 # OmniPersistence
 
