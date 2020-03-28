@@ -2071,10 +2071,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			else if (type.isEnum()) {
 				predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
 			}
-			else if (Number.class.isAssignableFrom(type)) {
+			else if (Numeric.is(type)) {
 				predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);
 			}
-			else if (Boolean.class.isAssignableFrom(type)) {
+			else if (Bool.is(type)) {
 				predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (String.class.isAssignableFrom(type) || value instanceof String) {

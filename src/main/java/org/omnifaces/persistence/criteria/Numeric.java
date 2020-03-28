@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import static org.omnifaces.utils.Lang.isOneOf;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Objects;
@@ -37,6 +39,10 @@ public final class Numeric extends Criteria<Number> {
 
 	public static Numeric parse(Object searchValue, Class<Number> targetType) {
 		return new Numeric(parseNumber(searchValue, targetType));
+	}
+
+	public static boolean is(Class<?> type) {
+		return isOneOf(type, byte.class, short.class, int.class, long.class, float.class, double.class) || Number.class.isAssignableFrom(type);
 	}
 
 	@Override

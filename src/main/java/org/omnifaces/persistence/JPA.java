@@ -355,7 +355,7 @@ public final class JPA {
 				pattern = "YYYY-MM-DD'T'HH24:MI:SS'Z'"; // NOTE: PostgreSQL uses ISO_INSTANT instead of ISO_LOCAL_DATE_TIME.
 			}
 			else if (OffsetTime.class.isAssignableFrom(expression.getJavaType())) {
-				pattern = "HH24:MI:SS-OF";
+				pattern = "HH24:MI:SS-OF"; // TODO: PostgreSQL doc says it's not supported?
 			}
 			else if (OffsetDateTime.class.isAssignableFrom(expression.getJavaType())) {
 				pattern = "YYYY-MM-DD'T'HH24:MI:SS-OF";

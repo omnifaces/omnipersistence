@@ -70,6 +70,7 @@ public final class Like extends Criteria<String> {
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
 		Class<?> type = path.getJavaType();
 
@@ -77,8 +78,12 @@ public final class Like extends Criteria<String> {
 			Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
 			return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1)) : path.in(parameterBuilder.create(matches));
 		}
+		else if (Bool.is(type)) {
+			Expression<Boolean> pathAsBoolean = (Expression<Boolean>) path;
+			return Bool.isTruthy(getValue()) ? criteriaBuilder.isTrue(pathAsBoolean) : criteriaBuilder.isFalse(pathAsBoolean);
+		}
 		else {
-			boolean lowercaseable = !Number.class.isAssignableFrom(type);
+			boolean lowercaseable = Numeric.is(type);
 			String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
 			Expression<String> pathAsString = castAsString(criteriaBuilder, path);
 			return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));

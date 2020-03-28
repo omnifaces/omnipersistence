@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import java.math.BigDecimal;
 import java.util.Objects;
 
 import javax.persistence.criteria.CriteriaBuilder;
@@ -34,7 +35,11 @@ public final class Bool extends Criteria<Boolean> {
 	}
 
 	public static Bool parse(Object searchValue) {
-		return new Bool(parseBoolean(searchValue));
+		return new Bool(isTruthy(searchValue));
+	}
+
+	public static boolean is(Class<?> type) {
+		return type == boolean.class || Boolean.class.isAssignableFrom(type);
 	}
 
 	@Override
@@ -46,10 +51,13 @@ public final class Bool extends Criteria<Boolean> {
 
 	@Override
 	public boolean applies(Object modelValue) {
-		return Objects.equals(parseBoolean(modelValue), getValue());
+		return Objects.equals(isTruthy(modelValue), getValue());
 	}
 
-	private static Boolean parseBoolean(Object value) {
+	public static Boolean isTruthy(Object value) {
+		if (value == null) {
+			return false;
+		}
 		if (value instanceof Boolean) {
 			return (Boolean) value;
 		}
@@ -57,7 +65,14 @@ public final class Bool extends Criteria<Boolean> {
 			return ((Number) value).intValue() > 0;
 		}
 		else {
-			return Boolean.parseBoolean(value.toString());
+			String valueAsString = value.toString();
+
+			try {
+				return new BigDecimal(valueAsString).intValue() > 0;
+			}
+			catch (NumberFormatException ignore) {
+				return Boolean.parseBoolean(valueAsString);
+			}
 		}
 	}
 
