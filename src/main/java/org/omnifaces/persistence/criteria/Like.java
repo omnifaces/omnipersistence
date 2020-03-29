@@ -83,7 +83,7 @@ public final class Like extends Criteria<String> {
 			return Bool.isTruthy(getValue()) ? criteriaBuilder.isTrue(pathAsBoolean) : criteriaBuilder.isFalse(pathAsBoolean);
 		}
 		else {
-			boolean lowercaseable = Numeric.is(type);
+			boolean lowercaseable = !Numeric.is(type);
 			String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
 			Expression<String> pathAsString = castAsString(criteriaBuilder, path);
 			return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
