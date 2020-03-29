@@ -16,7 +16,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.reverse;
+import static java.util.Collections.reverseOrder;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
@@ -1759,7 +1759,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
 			TypedQuery<Long> countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
-			return executeQuery(pageBuilder, entityQuery, countQuery);
+			PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery);
+			logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, resultList, resultList.getEstimatedTotalNumberOfResults()));
+			return resultList;
 		}
 		finally {
 			afterPage().accept(getEntityManager());
@@ -1842,11 +1844,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		List<T> entities = entityQuery.getResultList();
 
 		if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
-			reverse(entities);
+			entities = entities.stream().sorted(reverseOrder()).collect(toList());
 		}
 
 		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
-		logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, entities, estimatedTotalNumberOfResults));
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
 	}
 
