@@ -2126,13 +2126,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
 		boolean oneToManyField = oneToManys.test(field);
 
-		if (oneToManyField) {
-			if (provider == ECLIPSELINK) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
-			}
-			else if (provider == OPENJPA) {
-//				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
-			}
+		if (oneToManyField && provider == ECLIPSELINK) {
+			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 		}
 
 		boolean elementCollectionField = elementCollections.contains(field);
