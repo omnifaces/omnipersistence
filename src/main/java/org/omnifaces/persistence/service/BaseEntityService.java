@@ -214,8 +214,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		"Sorry, OpenJPA does not support sorting a @OneToMany or @ElementCollection relationship. Consider using a DTO or a DB view instead.";
 	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK =
 		"Sorry, EclipseLink does not support searching in a @OneToMany relationship. Consider using a DTO or a DB view instead.";
-	private static final String ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA =
-		"Sorry, OpenJPA does not support searching in a @OneToMany relationship. Consider using a DTO or a DB view instead.";
 
 	@SuppressWarnings("rawtypes")
 	private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
@@ -2133,7 +2131,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
 			else if (provider == OPENJPA) {
-				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
+//				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_OPENJPA); // OpenJPA bugs on setting parameters in a nested subquery "java.lang.IllegalArgumentException: Parameter named X is not declared in query"
 			}
 		}
 
