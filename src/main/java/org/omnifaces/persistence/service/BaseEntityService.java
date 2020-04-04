@@ -1168,7 +1168,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		getEntityManager().remove(manage(entity));
-		entity.setId(null);
+
+		if (getProvider() != ECLIPSELINK || !getEntityManager().contains(entity)) {
+			entity.setId(null);
+		}
 	}
 
 	/**
