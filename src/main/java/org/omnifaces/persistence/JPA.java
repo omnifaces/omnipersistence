@@ -59,6 +59,8 @@ import javax.persistence.metamodel.PluralAttribute;
 import javax.persistence.metamodel.SetAttribute;
 import javax.persistence.metamodel.SingularAttribute;
 
+import org.omnifaces.persistence.criteria.Numeric;
+
 /**
  * JPA utilities.
  */
@@ -342,7 +344,7 @@ public final class JPA {
 		if (Database.is(POSTGRESQL)) {
 			String pattern = null;
 
-			if (Number.class.isAssignableFrom(expression.getJavaType())) {
+			if (Numeric.is(expression.getJavaType())) {
 				pattern = "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
 			}
 			else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
