@@ -16,7 +16,6 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.reverseOrder;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
@@ -62,6 +61,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1845,7 +1845,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		List<T> entities = entityQuery.getResultList();
 
 		if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
-			entities = entities.stream().sorted(reverseOrder()).collect(toList());
+			List<T> reversed = new ArrayList<>(entities);
+			Collections.reverse(reversed);
+			entities = reversed;
 		}
 
 		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
