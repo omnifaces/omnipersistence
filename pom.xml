@@ -11,7 +11,7 @@
 
 	<groupId>org.omnifaces</groupId>
 	<artifactId>omnipersistence</artifactId>
-	<version>0.14</version>
+	<version>0.15-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
 	<name>OmniPersistence</name>
