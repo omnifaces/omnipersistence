@@ -356,7 +356,7 @@
 			<build>
 				<plugins>
 
-					<!-- Signing with GPG is a requirement for a release deployment (to Maven central) -->
+					<!-- Signing with GPG is a requirement for a release deployment to Maven central. -->
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-gpg-plugin</artifactId>
@@ -375,4 +375,5 @@
 			</build>
 		</profile>
 	</profiles>
+
 </project>
