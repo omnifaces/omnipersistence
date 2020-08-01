@@ -24,8 +24,10 @@ import static org.omnifaces.persistence.model.EnumMapping.CODE_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_HISTORY_TABLE_POSTFIX;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_TABLE_POSTFIX;
+import static org.omnifaces.persistence.model.EnumMappingTable.MappingType.NO_ACTION;
 import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.findField;
+import static org.omnifaces.utils.reflect.Reflections.listAnnotatedEnumFields;
 import static org.omnifaces.utils.reflect.Reflections.modifyField;
 
 import java.lang.reflect.Array;
@@ -41,11 +43,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import javax.ejb.Singleton;
 import javax.ejb.Startup;
@@ -54,8 +58,10 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.EnumType;
 import javax.persistence.PersistenceUnit;
+import javax.persistence.metamodel.EntityType;
 import javax.transaction.UserTransaction;
 
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.EnumMappingTable;
 
@@ -106,12 +112,46 @@ public class EnumMappingTableService {
 
         private static final String LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED = "Data for table %s was modified basing on enum %s data: %d number of %s was performed";
         private static final String LOG_INFO_ENUM_DATA_MODIFIED = "Data for enum %s was modified: %d number of %s was performed";
+    	private static final String LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING = "Enum mapping for enum %s: was %smodified";
+    	private static final String LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE = "Enum mapping table for enum %s: was %smodified";
+
+    	private static final Map<Class<? extends Enum<?>>, Boolean> MODIFIED_ENUM_MAPPINGS = new ConcurrentHashMap<>();
+    	private static final Map<Class<? extends Enum<?>>, Boolean> MODIFIED_ENUM_TABLE_MAPPINGS = new ConcurrentHashMap<>();
 
         @PersistenceUnit
         private EntityManagerFactory emf;
 
         @Resource
         UserTransaction ut;
+
+        @PostConstruct
+        public void init() {
+        	emf.getMetamodel().getEntities().stream()
+        		.map(EntityType::getJavaType)
+        		.filter(BaseEntity.class::isAssignableFrom)
+        		.forEach(this::computeModifiedEnumMapping);
+        }
+
+    	private boolean computeModifiedEnumMapping(Class<?> entityType) {
+    		List<Class<? extends Enum<?>>> enumsToUpdate = listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
+    			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
+    			.peek(enumeratedType -> {
+    				boolean modified = EnumMappingTableService.modifyEnumMapping(enumeratedType);
+    				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING, enumeratedType, modified ? "" : "not "));
+    				MODIFIED_ENUM_MAPPINGS.put(enumeratedType, modified);
+    			})
+    			.filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
+    			.collect(toList());
+
+    		if (!enumsToUpdate.isEmpty()) {
+    			computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
+    				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE, enumeratedType, modified ? "" : "not "));
+    				MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
+    			});
+    		}
+
+    		return true;
+    	}
 
         public Map<Class<? extends Enum<?>>, Boolean> computeModifiedEnumMappingTable(List<Class<? extends Enum<?>>> enumsToUpdate) {
                 return enumsToUpdate.stream()
