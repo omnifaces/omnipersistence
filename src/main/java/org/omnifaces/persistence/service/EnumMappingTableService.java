@@ -320,13 +320,7 @@ public class EnumMappingTableService {
                         boolean existsTable = false;
                         boolean existsHistoryTable = false;
                         try {
-                                String countTableQuery = "SELECT "
-                                        + ("".equals(idEnumColumn) ? "" : "COUNT(et." + idEnumColumn + ")")
-                                        + ("".equals(codeEnumColumn) ? "" : (oneFieldMapping ? "" : ", ") + "COUNT(et." + codeEnumColumn + ")")
-                                        + ("".equals(deletedColumn) ? "" : ", COUNT(et." + deletedColumn + ")")
-                                        + " FROM " + enumTable + " et;";// select count(et.id), count(et.code), count(et.deleted) from enum_table as et
-
-                                entityManager.createNativeQuery(countTableQuery).getSingleResult();
+                                entityManager.createNativeQuery("SELECT 1 FROM " + enumTable).getSingleResult();
                                 existsTable = true;
                         } catch (Exception ignore) {
                                 // Table doesn't exist.
@@ -336,12 +330,7 @@ public class EnumMappingTableService {
                         // Check database history table for existence if necessary.
                         if (!"".equals(historyTable)) {
                                 try {
-                                        String countHistoryTableQuery = "SELECT "
-                                                + ("".equals(idEnumColumn) ? "" : "COUNT(et." + idEnumColumn + ")")
-                                                + ("".equals(codeEnumColumn) ? "" : (oneFieldMapping ? "" : ", ") + "COUNT(et." + codeEnumColumn + ")")
-                                                + " FROM " + historyTable + " et;";// select count(et.id), count(et.code) from enum_table as et
-
-                                        entityManager.createNativeQuery(countHistoryTableQuery).getSingleResult();
+                                        entityManager.createNativeQuery("SELECT 1 FROM " + historyTable).getSingleResult();
                                         existsHistoryTable = true;
                                 } catch (Exception ignore) {
                                         // History table doesn't exist.
@@ -351,7 +340,6 @@ public class EnumMappingTableService {
 
                         // Create database tables if necessary.
                         boolean createdTable = false;
-                        boolean createdHistoryTable = false;
                         if (!existsTable) {
                                 if (!enumPrecedence) {
                                         logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CONNECTION_ERROR, enumTable, enumTable,
@@ -397,13 +385,11 @@ public class EnumMappingTableService {
                                         entityManager.joinTransaction();
                                         entityManager.createNativeQuery(createHistoryTableQuery).executeUpdate();
                                         ut.commit();
-                                        createdHistoryTable = true;
                                 } catch (Exception ex) {
                                         try {
                                                 ut.rollback();
                                         } catch (Exception ignore) {
                                         }
-                                        createdHistoryTable = false;
                                         logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CREATION_ERROR, historyTable));
                                         return false;
                                 }
