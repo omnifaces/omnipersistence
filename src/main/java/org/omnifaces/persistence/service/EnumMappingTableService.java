@@ -328,7 +328,7 @@ public class EnumMappingTableService {
 
                                 entityManager.createNativeQuery(countTableQuery).getSingleResult();
                                 existsTable = true;
-                        } catch (Exception ex) {
+                        } catch (Exception ignore) {
                                 // Table doesn't exist.
                                 existsTable = false;
                         }
@@ -343,7 +343,7 @@ public class EnumMappingTableService {
 
                                         entityManager.createNativeQuery(countHistoryTableQuery).getSingleResult();
                                         existsHistoryTable = true;
-                                } catch (Exception ex) {
+                                } catch (Exception ignore) {
                                         // History table doesn't exist.
                                         existsHistoryTable = false;
                                 }
@@ -354,7 +354,7 @@ public class EnumMappingTableService {
                         boolean createdHistoryTable = false;
                         if (!existsTable) {
                                 if (!enumPrecedence) {
-                                        logger.log(Level.WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CONNECTION_ERROR, enumTable, enumTable,
+                                        logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CONNECTION_ERROR, enumTable, enumTable,
                                                  oneFieldMapping ? "" : "s",
                                                  oneFieldMapping ? ordinal ? idEnumColumn : codeEnumColumn : idEnumColumn + ", " + codeEnumColumn,
                                                  oneFieldMapping ? "is" : "are"));
@@ -370,6 +370,7 @@ public class EnumMappingTableService {
 
                                 try {
                                         ut.begin();
+                                        entityManager.joinTransaction();
                                         entityManager.createNativeQuery(createTableQuery).executeUpdate();
                                         ut.commit();
                                         createdTable = true;
@@ -379,10 +380,7 @@ public class EnumMappingTableService {
                                         } catch (Exception ignore) {
                                         }
                                         createdTable = false;
-                                }
-
-                                if (!createdTable) {
-                                        logger.log(Level.WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CREATION_ERROR, enumTable));
+                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CREATION_ERROR, enumTable));
                                         return false;
                                 }
                         }
@@ -396,6 +394,7 @@ public class EnumMappingTableService {
 
                                 try {
                                         ut.begin();
+                                        entityManager.joinTransaction();
                                         entityManager.createNativeQuery(createHistoryTableQuery).executeUpdate();
                                         ut.commit();
                                         createdHistoryTable = true;
@@ -405,10 +404,7 @@ public class EnumMappingTableService {
                                         } catch (Exception ignore) {
                                         }
                                         createdHistoryTable = false;
-                                }
-
-                                if (!createdHistoryTable) {
-                                        logger.log(Level.WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CREATION_ERROR, historyTable));
+                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_CREATION_ERROR, historyTable));
                                         return false;
                                 }
                         }
@@ -438,7 +434,7 @@ public class EnumMappingTableService {
                                                 }
                                         }
                                 } catch (Exception ex) {
-                                        logger.log(Level.WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_READ_ERROR, enumTable,
+                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_READ_ERROR, enumTable,
                                                  oneFieldMapping ? "" : "s",
                                                  oneFieldMapping ? ordinal ? "Integer" : "String" : "Integer, String",
                                                  oneFieldMapping ? "" : "s",
@@ -526,6 +522,7 @@ public class EnumMappingTableService {
 
                                         try {
                                                 ut.begin();
+                                                entityManager.joinTransaction();
                                                 int deletes = numDeletes = entityManager.createNativeQuery(deleteQuery.toString()).executeUpdate();
                                                 logger.log(INFO, () -> format(LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED, enumTable, enumeratedType.getSimpleName(), deletes, "deletes"));
                                                 ut.commit();
@@ -534,7 +531,7 @@ public class EnumMappingTableService {
                                                         ut.rollback();
                                                 } catch (Exception ignore) {
                                                 }
-                                                logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "delete", absentInBase.size(), "delete", ""));
+                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "delete", absentInBase.size(), "delete", ""));
                                                 return false;
                                         }
 
@@ -553,6 +550,7 @@ public class EnumMappingTableService {
 
                                                         try {
                                                                 ut.begin();
+                                                                entityManager.joinTransaction();
                                                                 inserts += entityManager.createNativeQuery(insertHistoryQuery).executeUpdate();
                                                                 ut.commit();
                                                         } catch (Exception ex) {
@@ -560,7 +558,7 @@ public class EnumMappingTableService {
                                                                         ut.rollback();
                                                                 } catch (Exception ignore) {
                                                                 }
-                                                                logger.log(INFO, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, historyTable, "insert", 1, "insert", ", possible duplicate entry with key "
+                                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, historyTable, "insert", 1, "insert", ", possible duplicate entry with key "
                                                                         + (ordinal ? ede.getId() : "'" + ede.getCode() + "'")));
                                                         }
                                                 }
@@ -570,7 +568,7 @@ public class EnumMappingTableService {
                                                         logger.log(INFO, () -> format(LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED, historyTable, enumeratedType.getSimpleName(), number, "inserts in history table"));
                                                 }
                                                 if (inserts != absentInBase.size()) {
-                                                        logger.log(INFO, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, historyTable, "insert", absentInBase.size(), "insert", ", but only " + number + " of inserts was successful"));
+                                                        logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, historyTable, "insert", absentInBase.size(), "insert", ", but only " + number + " of inserts was successful"));
                                                 }
                                         }
                                 }
@@ -591,6 +589,7 @@ public class EnumMappingTableService {
 
                                         try {
                                                 ut.begin();
+                                                entityManager.joinTransaction();
                                                 int inserts = numInserts = entityManager.createNativeQuery(insertQuery.toString()).executeUpdate();
                                                 logger.log(INFO, () -> format(LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED, enumTable, enumeratedType.getSimpleName(), inserts, "inserts"));
                                                 ut.commit();
@@ -599,7 +598,7 @@ public class EnumMappingTableService {
                                                         ut.rollback();
                                                 } catch (Exception ignore) {
                                                 }
-                                                logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", absentInTarget.size(), "insert", ""));
+                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", absentInTarget.size(), "insert", ""));
                                                 return false;
                                         }
                                 }
@@ -619,6 +618,7 @@ public class EnumMappingTableService {
 
                                         try {
                                                 ut.begin();
+                                                entityManager.joinTransaction();
                                                 int updates = entityManager.createNativeQuery(updateQuery.toString()).executeUpdate();
                                                 logger.log(INFO, () -> format(LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED, enumTable, enumeratedType.getSimpleName(), updates, "updates"));
                                                 ut.commit();
@@ -627,7 +627,7 @@ public class EnumMappingTableService {
                                                         ut.rollback();
                                                 } catch (Exception ignore) {
                                                 }
-                                                logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "update", different.size(), "update", ""));
+                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "update", different.size(), "update", ""));
                                                 return false;
                                         }
                                 }
@@ -653,7 +653,7 @@ public class EnumMappingTableService {
                                                                         .filter(field -> {
                                                                                 try {
                                                                                         return field.isEnumConstant() && field.get(null) == enumToDelete;
-                                                                                } catch (Exception ex) {
+                                                                                } catch (Exception ignore) {
                                                                                         return false;
                                                                                 }
                                                                         }).findFirst();
@@ -661,7 +661,7 @@ public class EnumMappingTableService {
                                                                         try {
                                                                                 modifyField(null, staticEnumConstantOptional.get(), null);
                                                                         } catch (Exception ex) {
-                                                                                logger.log(INFO, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, staticEnumConstantOptional.get().getName(), enumeratedType));
+                                                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, staticEnumConstantOptional.get().getName(), enumeratedType));
                                                                         }
                                                                 }
                                                                 return 1;
@@ -688,6 +688,7 @@ public class EnumMappingTableService {
 
                                                         try {
                                                                 ut.begin();
+                                                                entityManager.joinTransaction();
                                                                 inserts += entityManager.createNativeQuery(insertHistoryQuery).executeUpdate();
                                                                 ut.commit();
                                                         } catch (Exception ex) {
@@ -695,7 +696,7 @@ public class EnumMappingTableService {
                                                                         ut.rollback();
                                                                 } catch (Exception ignore) {
                                                                 }
-                                                                logger.log(INFO, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", 1, "insert", ", possible duplicate entry with key "
+                                                                logger.log(WARNING, ex, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", 1, "insert", ", possible duplicate entry with key "
                                                                         + (ordinal ? ede.getId() : ede.getCode())));
                                                         }
                                                 }
@@ -705,7 +706,7 @@ public class EnumMappingTableService {
                                                         logger.log(INFO, () -> format(LOG_INFO_ENUM_MAPPING_TABLE_MODIFIED, enumTable, enumeratedType.getSimpleName(), number, "number of inserts in history table"));
                                                 }
                                                 if (inserts != absentInTarget.size()) {
-                                                        logger.log(INFO, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", absentInBase.size(), "number of inserts in history table", ", but only " + number + " number of inserts was successful"));
+                                                        logger.log(WARNING, () -> format(LOG_WARNING_ENUM_MAPPING_TABLE_MODIFICATION_ERROR, enumTable, "insert", absentInBase.size(), "number of inserts in history table", ", but only " + number + " number of inserts was successful"));
                                                 }
                                         }
 
@@ -751,7 +752,7 @@ public class EnumMappingTableService {
                                                                 if (codeEnumFieldOptional.isPresent()) {
                                                                         modifyField(newEnum, codeEnumFieldOptional.get(), code);
                                                                 }
-                                                        } catch (Exception ex) {
+                                                        } catch (Exception ignore) {
                                                                 return 0;
                                                         }
                                                         return 1;
@@ -780,7 +781,7 @@ public class EnumMappingTableService {
                                                                 try {
                                                                         modifyField(enumToModifyOptional.get(), secondaryEnumField, secondaryValue);
                                                                 } catch (Exception ex) {
-                                                                        logger.log(WARNING, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, secondaryEnumField.getName(), enumeratedType));
+                                                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, secondaryEnumField.getName(), enumeratedType));
                                                                         return true;
                                                                 }
                                                         }
@@ -810,7 +811,7 @@ public class EnumMappingTableService {
                                                         Object value = accessField(constant, secondaryEnumField);
                                                         modifyField(constant, targetSecondaryField, value);
                                                 } catch (Exception ex) {
-                                                        logger.log(WARNING, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, targetSecondaryField.getName(), enumeratedType));
+                                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, targetSecondaryField.getName(), enumeratedType));
                                                         return true;
                                                 }
                                                 return false;
@@ -863,7 +864,7 @@ public class EnumMappingTableService {
                                                 logger.log(INFO, () -> format(LOG_INFO_ENUM_DATA_MODIFIED, enumeratedType, number, "deletes"));
                                         }
                                 } catch (Exception ex) {
-                                        logger.log(WARNING, () -> format(LOG_WARNING_CANNOT_MODIFY_ENUM_DATA, enumeratedType, "replacement of enum values"));
+                                        logger.log(WARNING, ex, () -> format(LOG_WARNING_CANNOT_MODIFY_ENUM_DATA, enumeratedType, "replacement of enum values"));
                                         return false;
                                 }
                         }
@@ -925,8 +926,8 @@ public class EnumMappingTableService {
     				// Return back the values array so that direct usage in code yields predictable behaviour.
     				modifyField(null, enumValues, oldValues);
     			}
-    			catch (Exception e) {
-    				logger.log(WARNING, e, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, enumeratedType, fieldName));
+    			catch (Exception ex) {
+    				logger.log(WARNING, ex, () -> format(LOG_WARNING_UNMODIFIABLE_ENUM_FIELD, enumeratedType, fieldName));
     				return false;
     			}
     		}
@@ -963,7 +964,7 @@ public class EnumMappingTableService {
                         constructorAccessor = constructorAccessorField.get(noArgumentEnumConstructor);
 
                         return Optional.of(constructorAccessor);
-                } catch (Exception ex) {
+                } catch (Exception ignore) {
                         return Optional.empty();
                 }
         }
@@ -975,7 +976,7 @@ public class EnumMappingTableService {
                         newInstanceMethod.setAccessible(true);
 
                         return Optional.of(newInstanceMethod);
-                } catch (Exception ex) {
+                } catch (Exception ignore) {
                         return Optional.empty();
                 }
         }
