@@ -307,10 +307,8 @@
 					<version>2.22.2</version>
 					<configuration>
 						<trimStackTrace>false</trimStackTrace>
-						<environmentVariables>
-							<profile.id>${project.activeProfiles[0].id}</profile.id>
-						</environmentVariables>
 						<systemPropertyVariables>
+							<profile.id>${project.activeProfiles[0].id}</profile.id>
 							<test.h2.version>${test.h2.version}</test.h2.version>
 						</systemPropertyVariables>
 					</configuration>
