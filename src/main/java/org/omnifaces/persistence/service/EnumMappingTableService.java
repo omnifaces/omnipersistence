@@ -320,7 +320,13 @@ public class EnumMappingTableService {
                         boolean existsTable = false;
                         boolean existsHistoryTable = false;
                         try {
-                                entityManager.createNativeQuery("SELECT 1 FROM " + enumTable).getSingleResult();
+                                String countTableQuery = "SELECT "
+                                        + ("".equals(idEnumColumn) ? "" : "COUNT(et." + idEnumColumn + ")")
+                                        + ("".equals(codeEnumColumn) ? "" : (oneFieldMapping ? "" : ", ") + "COUNT(et." + codeEnumColumn + ")")
+                                        + ("".equals(deletedColumn) ? "" : ", COUNT(et." + deletedColumn + ")")
+                                        + " FROM " + enumTable + " et;";// select count(et.id), count(et.code), count(et.deleted) from enum_table as et
+
+                                entityManager.createNativeQuery(countTableQuery).getSingleResult();
                                 existsTable = true;
                         } catch (Exception ignore) {
                                 // Table doesn't exist.
@@ -330,7 +336,12 @@ public class EnumMappingTableService {
                         // Check database history table for existence if necessary.
                         if (!"".equals(historyTable)) {
                                 try {
-                                        entityManager.createNativeQuery("SELECT 1 FROM " + historyTable).getSingleResult();
+                                        String countHistoryTableQuery = "SELECT "
+                                                + ("".equals(idEnumColumn) ? "" : "COUNT(et." + idEnumColumn + ")")
+                                                + ("".equals(codeEnumColumn) ? "" : (oneFieldMapping ? "" : ", ") + "COUNT(et." + codeEnumColumn + ")")
+                                                + " FROM " + historyTable + " et;";// select count(et.id), count(et.code) from enum_table as et
+
+                                        entityManager.createNativeQuery(countHistoryTableQuery).getSingleResult();
                                         existsHistoryTable = true;
                                 } catch (Exception ignore) {
                                         // History table doesn't exist.
