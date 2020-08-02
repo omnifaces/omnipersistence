@@ -61,6 +61,7 @@ import javax.persistence.PersistenceUnit;
 import javax.persistence.metamodel.EntityType;
 import javax.transaction.UserTransaction;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.EnumMappingTable;
@@ -126,6 +127,10 @@ public class EnumMappingTableService {
 
         @PostConstruct
         public void init() {
+        	if (Provider.of(emf.createEntityManager()) == Provider.ECLIPSELINK) {
+        		return; // Doesn't work at all with EclipseLink.
+        	}
+
         	emf.getMetamodel().getEntities().stream()
         		.map(EntityType::getJavaType)
         		.filter(BaseEntity.class::isAssignableFrom)
