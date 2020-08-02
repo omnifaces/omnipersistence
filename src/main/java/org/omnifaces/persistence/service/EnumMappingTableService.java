@@ -132,8 +132,8 @@ public class EnumMappingTableService {
         		.forEach(this::computeModifiedEnumMapping);
         }
 
-    	private boolean computeModifiedEnumMapping(Class<?> entityType) {
-    		List<Class<? extends Enum<?>>> enumsToUpdate = listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
+    	private void computeModifiedEnumMapping(Class<?> entityType) {
+    		listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
     			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
     			.peek(enumeratedType -> {
     				boolean modified = EnumMappingTableService.modifyEnumMapping(enumeratedType);
@@ -141,22 +141,12 @@ public class EnumMappingTableService {
     				MODIFIED_ENUM_MAPPINGS.put(enumeratedType, modified);
     			})
     			.filter(enumeratedType -> !MODIFIED_ENUM_TABLE_MAPPINGS.containsKey(enumeratedType) && enumeratedType.getAnnotation(EnumMapping.class).enumMappingTable().mappingType() != NO_ACTION)
-    			.collect(toList());
-
-    		if (!enumsToUpdate.isEmpty()) {
-    			computeModifiedEnumMappingTable(enumsToUpdate).forEach((enumeratedType, modified) -> {
+    			.forEach(enumeratedType -> {
+    				boolean modified = modifyEnumMappingTable(enumeratedType);
     				logger.log(INFO, () -> format(LOG_INFO_COMPUTED_MODIFIED_ENUM_MAPPING_TABLE, enumeratedType, modified ? "" : "not "));
     				MODIFIED_ENUM_TABLE_MAPPINGS.put(enumeratedType, modified);
     			});
-    		}
-
-    		return true;
     	}
-
-        public Map<Class<? extends Enum<?>>, Boolean> computeModifiedEnumMappingTable(List<Class<? extends Enum<?>>> enumsToUpdate) {
-                return enumsToUpdate.stream()
-                        .collect(Collectors.toMap(Function.identity(), this::modifyEnumMappingTable));
-        }
 
         private static class EnumData {
 

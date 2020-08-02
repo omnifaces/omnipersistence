@@ -77,6 +77,7 @@
 
 		<!-- Test versions. -->
 		<test.wildfly.version>19.0.0.Final</test.wildfly.version>
+		<test.payara.version>5.201</test.payara.version>
 		<test.h2.version>1.4.200</test.h2.version>
 	</properties>
 
@@ -282,6 +283,38 @@
 						</lifecycleMappingMetadata>
 					</configuration>
 				</plugin>
+
+				<!-- Global configuration for test profiles. -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-dependency-plugin</artifactId>
+					<version>3.1.2</version>
+					<executions>
+						<execution>
+							<phase>process-test-classes</phase>
+							<goals>
+								<goal>unpack</goal>
+							</goals>
+						</execution>
+					</executions>
+					<configuration>
+						<outputDirectory>${project.build.directory}</outputDirectory>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>2.22.2</version>
+					<configuration>
+						<trimStackTrace>false</trimStackTrace>
+						<environmentVariables>
+							<profile.id>${project.activeProfiles[0].id}</profile.id>
+						</environmentVariables>
+						<systemPropertyVariables>
+							<test.h2.version>${test.h2.version}</test.h2.version>
+						</systemPropertyVariables>
+					</configuration>
+				</plugin>
 			</plugins>
 		</pluginManagement>
 	</build>
@@ -291,9 +324,9 @@
 		<!-- below sections, then you need to add a default lifecycle mapping as instructed in M2E documentation: -->
 		<!-- https://www.eclipse.org/m2e/documentation/m2e-execution-not-covered.html#common-problems -->
 
-		<!-- WildFly test profile: mvn verify -P wildfly -->
+		<!-- WildFly/Hibernate test profile: mvn verify -P wildfly-hibernate -->
 		<profile>
-			<id>wildfly</id>
+			<id>wildfly-hibernate</id>
 			<activation>
 				<activeByDefault>true</activeByDefault>
 			</activation>
@@ -310,13 +343,8 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-dependency-plugin</artifactId>
-						<version>3.1.2</version>
 						<executions>
 							<execution>
-								<phase>process-test-classes</phase>
-								<goals>
-									<goal>unpack</goal>
-								</goals>
 								<configuration>
 									<artifactItems>
 										<artifactItem>
@@ -329,21 +357,59 @@
 								</configuration>
 							</execution>
 						</executions>
-						<configuration>
-							<outputDirectory>${project.build.directory}</outputDirectory>
-						</configuration>
 					</plugin>
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
-						<version>2.22.2</version>
 						<configuration>
-							<trimStackTrace>false</trimStackTrace>
 							<systemPropertyVariables>
 								<jboss.home>${project.build.directory}/wildfly-${test.wildfly.version}</jboss.home>
 								<java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-								<test.h2.version>${test.h2.version}</test.h2.version>
 							</systemPropertyVariables>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!-- Payara/EclipseLink test profile: mvn verify -P payara-eclipselink -->
+		<profile>
+			<id>payara-eclipselink</id>
+			<dependencies>
+				<dependency>
+					<groupId>org.jboss.arquillian.container</groupId>
+					<artifactId>arquillian-glassfish-managed-3.1</artifactId>
+					<version>1.0.2</version>
+					<scope>test</scope>
+				</dependency>
+			</dependencies>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-dependency-plugin</artifactId>
+						<executions>
+							<execution>
+								<configuration>
+									<artifactItems>
+										<artifactItem>
+											<groupId>fish.payara.distributions</groupId>
+											<artifactId>payara-web</artifactId>
+											<version>${test.payara.version}</version>
+											<type>zip</type>
+										</artifactItem>
+									</artifactItems>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<environmentVariables>
+								<GLASSFISH_HOME>${project.build.directory}/payara5</GLASSFISH_HOME>
+							</environmentVariables>
 						</configuration>
 					</plugin>
 				</plugins>

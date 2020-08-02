@@ -25,6 +25,7 @@ import javax.ejb.Singleton;
 import javax.ejb.Startup;
 import javax.inject.Inject;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
@@ -110,16 +111,18 @@ public class StartupService {
 	}
 
 	private void createTestProducts() {
-		Product product = new Product();
-		product.setProductStatus(ProductStatus.IN_STOCK);
-		product.addUserRole(UserRole.USER);
-		productService.persist(product);
+		if (productService.getProvider() != Provider.ECLIPSELINK) { // EclipseLink doesn't seem to support EnumMappingTableService's actions.
+			Product product = new Product();
+			product.setProductStatus(ProductStatus.IN_STOCK);
+			product.addUserRole(UserRole.USER);
+			productService.persist(product);
 
-		product = new Product();
-		product.setProductStatus(ProductStatus.DISCONTINUED);
-		product.addUserRole(UserRole.EMPLOYEE);
-		product.addUserRole(UserRole.MANAGER);
-		productService.persist(product);
+			product = new Product();
+			product.setProductStatus(ProductStatus.DISCONTINUED);
+			product.addUserRole(UserRole.EMPLOYEE);
+			product.addUserRole(UserRole.MANAGER);
+			productService.persist(product);
+		}
 	}
 
 }

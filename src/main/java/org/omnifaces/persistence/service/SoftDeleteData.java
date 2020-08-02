@@ -87,7 +87,7 @@ class SoftDeleteData {
 			return "";
 		}
 
-		return (" WHERE " + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
+		return (" WHERE e." + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
 	}
 
 	@Override

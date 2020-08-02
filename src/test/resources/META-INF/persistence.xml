@@ -23,15 +23,27 @@
 		<jta-data-source>java:app/OmniPersistenceTest</jta-data-source>
 
 		<properties>
+			<!-- JPA -->
 			<property name="javax.persistence.schema-generation.database.action" value="drop-and-create" />
 			<property name="javax.persistence.schema-generation.create-source" value="metadata-then-script" />
 			<property name="javax.persistence.schema-generation.create-script-source" value="META-INF/sql/create-test.sql" />
 			<property name="javax.persistence.schema-generation.drop-source" value="metadata-then-script" />
 			<property name="javax.persistence.schema-generation.drop-script-source" value="META-INF/sql/drop-test.sql" />
 			<property name="javax.persistence.sql-load-script-source" value="META-INF/sql/load-test.sql" />
+
+			<!-- Hibernate -->
 			<property name="hibernate.show_sql" value="true" />
 			<property name="hibernate.cache.use_second_level_cache" value="false" />
 			<property name="hibernate.cache.use_query_cache" value="false" />
+
+			<!-- EclipseLink -->
+			<property name="eclipselink.logging.logger" value="ServerLogger"/>
+			<property name="eclipselink.logging.level.sql" value="FINE" />
+			<property name="eclipselink.logging.timestamp" value="false" />
+			<property name="eclipselink.logging.thread" value="false" />
+			<property name="eclipselink.logging.session" value="false" />
+
+			<!-- WildFly -->
 			<property name="wildfly.jpa.twophasebootstrap" value="false" /> <!-- https://issues.jboss.org/browse/WFLY-2727 -->
 		</properties>
 	</persistence-unit>

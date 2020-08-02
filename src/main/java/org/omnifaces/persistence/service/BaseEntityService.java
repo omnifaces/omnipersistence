@@ -54,6 +54,7 @@ import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1283,7 +1284,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		E managed = manage(entity);
-		getMetamodel(entity).getAttributes().forEach(attribute -> map(attribute.getJavaMember(), managed, entity));
+		getMetamodel(entity).getAttributes().stream().map(Attribute::getJavaMember).filter(Field.class::isInstance).forEach(field -> map(field, managed, entity));
 		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
 	}
 

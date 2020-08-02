@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.test;
 
 import static java.lang.System.getProperty;
+import static java.lang.System.getenv;
 import static java.util.Arrays.asList;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.Assert.assertEquals;
@@ -86,9 +87,9 @@ public class OmniPersistenceTest {
 			.addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
 			.addAsWebInfResource("web.xml")
 			.addAsResource("META-INF/persistence.xml")
-                        .addAsResource("META-INF/sql/create-test.sql")
-                        .addAsResource("META-INF/sql/drop-test.sql")
-                        .addAsResource("META-INF/sql/load-test.sql")
+			.addAsResource("META-INF/sql/create-test.sql")
+			.addAsResource("META-INF/sql/drop-test.sql")
+			.addAsResource("META-INF/sql/load-test.sql")
 			.addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
 			.addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
 			.addAsLibraries(maven.resolve("com.h2database:h2:" + getProperty("test.h2.version")).withTransitivity().asFile());
@@ -111,6 +112,10 @@ public class OmniPersistenceTest {
 
 	@EJB
 	private EnumEntityService enumEntityService;
+
+	protected static boolean isEclipseLink() {
+		return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
+	}
 
 	// Basic ----------------------------------------------------------------------------------------------------------
 
@@ -335,6 +340,10 @@ public class OmniPersistenceTest {
 
 	@Test
 	public void testPersistedEntitiesWithEnums() {
+		if (isEclipseLink()) {
+			return; // EclipseLink doesn't like EnumMappingTableService's actions.
+		}
+
 		Product product = productService.getByIdWithUserRoles(1L);
 		assertEquals("Product status for product 1 was persisted", ProductStatus.IN_STOCK, product.getProductStatus());
 		assertEquals("Product status id for product 1 was persisted", ProductStatus.IN_STOCK.getId(), productService.getRawProductStatus(product.getId()));
@@ -497,6 +506,10 @@ public class OmniPersistenceTest {
 
 	@Test
 	public void testEnumMappingPersistence() {
+		if (isEclipseLink()) {
+			return; // EclipseLink doesn't like EnumMappingTableService's actions.
+		}
+
 		// Test if an entity is persisted
 		EnumEntity newEnumEntity = new EnumEntity();
 		newEnumEntity.setHardDeleteCodeEnum(HardDeleteCodeEnum.FIRST);
