@@ -8,8 +8,9 @@ cache:
 
 # Do integration test on configured servers.
 env:
-   - SERVER=wildfly-hibernate
-   - SERVER=payara-eclipselink
+   - SERVER=glassfish-eclipselink
+#  - SERVER=wildfly-hibernate
+#  - SERVER=payara-eclipselink
 script: mvn verify -Dmaven.javadoc.skip=true -P $SERVER
 
 # Do snapshot deployment.
@@ -18,5 +19,5 @@ deploy:
    script: mvn deploy -Dmaven.test.skip -s settings.xml
    skip_cleanup: true
    on:
-      branch: develop
-      condition: "$SERVER = wildfly-hibernate"
+      branch: jakartified
+      condition: "$SERVER = glassfish-eclipselink"
