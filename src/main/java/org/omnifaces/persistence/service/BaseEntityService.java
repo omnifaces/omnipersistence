@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.persistence.CacheRetrieveMode.BYPASS;
+import static jakarta.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
@@ -25,8 +27,6 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
-import static javax.persistence.CacheRetrieveMode.BYPASS;
-import static javax.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
@@ -75,49 +75,50 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.PostConstruct;
-import javax.ejb.SessionContext;
-import javax.ejb.Stateless;
-import javax.enterprise.inject.spi.CDI;
 import javax.naming.InitialContext;
-import javax.persistence.CacheRetrieveMode;
-import javax.persistence.CacheStoreMode;
-import javax.persistence.ElementCollection;
-import javax.persistence.Entity;
-import javax.persistence.EntityGraph;
-import javax.persistence.EntityManager;
-import javax.persistence.EntityNotFoundException;
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
-import javax.persistence.ManyToOne;
-import javax.persistence.NamedQuery;
-import javax.persistence.NonUniqueResultException;
-import javax.persistence.OneToMany;
-import javax.persistence.OneToOne;
-import javax.persistence.PersistenceContext;
-import javax.persistence.Query;
-import javax.persistence.TypedQuery;
-import javax.persistence.ValidationMode;
-import javax.persistence.criteria.AbstractQuery;
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.CriteriaQuery;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.FetchParent;
-import javax.persistence.criteria.From;
-import javax.persistence.criteria.Order;
-import javax.persistence.criteria.ParameterExpression;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Predicate;
-import javax.persistence.criteria.Root;
-import javax.persistence.criteria.Subquery;
-import javax.persistence.metamodel.Attribute;
-import javax.persistence.metamodel.Bindable;
-import javax.persistence.metamodel.EntityType;
-import javax.persistence.metamodel.PluralAttribute;
-import javax.persistence.metamodel.PluralAttribute.CollectionType;
-import javax.validation.ConstraintViolation;
-import javax.validation.ConstraintViolationException;
-import javax.validation.Validator;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.ejb.SessionContext;
+import jakarta.ejb.Stateless;
+import jakarta.enterprise.inject.spi.CDI;
+import jakarta.persistence.CacheRetrieveMode;
+import jakarta.persistence.CacheStoreMode;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityGraph;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedQuery;
+import jakarta.persistence.NonUniqueResultException;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.ValidationMode;
+import jakarta.persistence.criteria.AbstractQuery;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.FetchParent;
+import jakarta.persistence.criteria.From;
+import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.ParameterExpression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.Bindable;
+import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.PluralAttribute;
+import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
@@ -173,7 +174,7 @@ import org.omnifaces.utils.reflect.Getter;
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
  * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
  * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
- * happen when <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set to
+ * happen when <code>jakarta.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set to
  * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
@@ -198,7 +199,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
 	private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
 	private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
-	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "javax.validation.ConstraintViolation: @%s %s#%s %s on %s";
+	private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
 
 	private static final String ERROR_ILLEGAL_MAPPING =
 		"You must return a getter-path mapping from MappedQueryBuilder";
@@ -972,7 +973,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Update actions -------------------------------------------------------------------------------------------------
 
 	/**
-	 * Update given entity. If <code>javax.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
+	 * Update given entity. If <code>jakarta.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set
 	 * to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be
 	 * logged separately. Due to technical limitations, this effectively means that bean validation is invoked twice. First in this method
 	 * in order to be able to obtain the constraint violations and then once more while JTA is committing the transaction, but is executed

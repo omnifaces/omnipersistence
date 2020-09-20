@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import javax.persistence.Entity;
+import jakarta.persistence.Entity;
 
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;

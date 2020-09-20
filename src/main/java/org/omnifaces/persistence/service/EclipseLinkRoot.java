@@ -16,10 +16,10 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import javax.persistence.Query;
-import javax.persistence.criteria.Fetch;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Root;
+import jakarta.persistence.Query;
+import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
 
 /**
  * EclipseLink stubbornly refuses to perform a join when a range (offset/limit) is fetched, resulting in cartesian products.

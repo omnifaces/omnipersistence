@@ -12,8 +12,8 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import javax.persistence.Entity;
-import javax.validation.constraints.NotNull;
+import jakarta.persistence.Entity;
+import jakarta.validation.constraints.NotNull;
 
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 

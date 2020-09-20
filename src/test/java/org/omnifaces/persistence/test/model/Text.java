@@ -14,7 +14,7 @@ package org.omnifaces.persistence.test.model;
 
 import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
-import javax.persistence.Entity;
+import jakarta.persistence.Entity;
 
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;

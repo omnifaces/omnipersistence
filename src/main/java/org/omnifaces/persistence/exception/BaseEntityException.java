@@ -12,8 +12,8 @@
  */
 package org.omnifaces.persistence.exception;
 
-import javax.ejb.ApplicationException;
-import javax.persistence.PersistenceException;
+import jakarta.ejb.ApplicationException;
+import jakarta.persistence.PersistenceException;
 
 import org.omnifaces.persistence.model.BaseEntity;
 

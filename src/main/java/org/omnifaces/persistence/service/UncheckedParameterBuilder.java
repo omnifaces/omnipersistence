@@ -14,8 +14,8 @@ package org.omnifaces.persistence.service;
 
 import java.util.Map;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.ParameterExpression;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.ParameterExpression;
 
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
 

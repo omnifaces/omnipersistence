@@ -12,7 +12,6 @@
  */
 package org.omnifaces.persistence.test;
 
-import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.util.Arrays.asList;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
@@ -26,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import javax.ejb.EJB;
+import jakarta.ejb.EJB;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
@@ -91,8 +90,7 @@ public class OmniPersistenceTest {
 			.addAsResource("META-INF/sql/drop-test.sql")
 			.addAsResource("META-INF/sql/load-test.sql")
 			.addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
-			.addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
-			.addAsLibraries(maven.resolve("com.h2database:h2:" + getProperty("test.h2.version")).withTransitivity().asFile());
+			.addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile());
 	}
 
 	@EJB

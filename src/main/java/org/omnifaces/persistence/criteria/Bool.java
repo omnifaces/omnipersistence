@@ -15,9 +15,9 @@ package org.omnifaces.persistence.criteria;
 import java.math.BigDecimal;
 import java.util.Objects;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path IS (NOT) TRUE</code>.

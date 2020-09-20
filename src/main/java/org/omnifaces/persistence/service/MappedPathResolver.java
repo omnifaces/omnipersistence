@@ -15,8 +15,8 @@ package org.omnifaces.persistence.service;
 import java.util.Map;
 import java.util.Set;
 
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Root;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Root;
 
 /**
  * Helper class of {@link BaseEntityService}.

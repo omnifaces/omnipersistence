@@ -14,9 +14,9 @@ package org.omnifaces.persistence.criteria;
 
 import static org.omnifaces.persistence.JPA.castAsString;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>LOWER(path) = LOWER(value)</code>.

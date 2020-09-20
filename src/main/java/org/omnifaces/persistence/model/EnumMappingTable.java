@@ -20,7 +20,7 @@ import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
-import javax.persistence.EnumType;
+import jakarta.persistence.EnumType;
 
 /**
  * Enhanced annotation to fine-tune the default behaviour of

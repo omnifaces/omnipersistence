@@ -21,8 +21,8 @@ import static org.omnifaces.utils.Lang.startsWithOneOf;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 
 import org.omnifaces.persistence.service.BaseEntityService;
 

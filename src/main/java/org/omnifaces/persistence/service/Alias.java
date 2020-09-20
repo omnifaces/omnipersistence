@@ -15,9 +15,9 @@ package org.omnifaces.persistence.service;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Map.Entry;
 
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Predicate;
-import javax.persistence.criteria.Selection;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Selection;
 
 import org.omnifaces.persistence.Provider;
 

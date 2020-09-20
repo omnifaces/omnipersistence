@@ -18,8 +18,8 @@ import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static javax.ejb.TransactionManagementType.BEAN;
-import static javax.persistence.EnumType.ORDINAL;
+import static jakarta.ejb.TransactionManagementType.BEAN;
+import static jakarta.persistence.EnumType.ORDINAL;
 import static org.omnifaces.persistence.model.EnumMapping.CODE_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_HISTORY_TABLE_POSTFIX;
@@ -49,17 +49,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
-import javax.ejb.Singleton;
-import javax.ejb.Startup;
-import javax.ejb.TransactionManagement;
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.EnumType;
-import javax.persistence.PersistenceUnit;
-import javax.persistence.metamodel.EntityType;
-import javax.transaction.UserTransaction;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
+import jakarta.ejb.Singleton;
+import jakarta.ejb.Startup;
+import jakarta.ejb.TransactionManagement;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.PersistenceUnit;
+import jakarta.persistence.metamodel.EntityType;
+import jakarta.transaction.UserTransaction;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -138,7 +138,7 @@ public class EnumMappingTableService {
         }
 
     	private void computeModifiedEnumMapping(Class<?> entityType) {
-    		listAnnotatedEnumFields(entityType, javax.persistence.Enumerated.class).stream()
+    		listAnnotatedEnumFields(entityType, jakarta.persistence.Enumerated.class).stream()
     			.filter(enumeratedType -> enumeratedType.isAnnotationPresent(EnumMapping.class) && !MODIFIED_ENUM_MAPPINGS.containsKey(enumeratedType))
     			.peek(enumeratedType -> {
     				boolean modified = EnumMappingTableService.modifyEnumMapping(enumeratedType);

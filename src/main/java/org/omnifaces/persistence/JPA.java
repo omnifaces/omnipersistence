@@ -33,31 +33,31 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.enterprise.inject.Typed;
-import javax.persistence.EntityManager;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.NoResultException;
-import javax.persistence.NonUniqueResultException;
-import javax.persistence.Query;
-import javax.persistence.TypedQuery;
-import javax.persistence.ValidationMode;
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.CriteriaQuery;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Join;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Root;
-import javax.persistence.metamodel.Attribute;
-import javax.persistence.metamodel.Bindable;
-import javax.persistence.metamodel.CollectionAttribute;
-import javax.persistence.metamodel.EntityType;
-import javax.persistence.metamodel.ListAttribute;
-import javax.persistence.metamodel.MapAttribute;
-import javax.persistence.metamodel.Metamodel;
-import javax.persistence.metamodel.PluralAttribute;
-import javax.persistence.metamodel.SetAttribute;
-import javax.persistence.metamodel.SingularAttribute;
+import jakarta.enterprise.inject.Typed;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.NonUniqueResultException;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.ValidationMode;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.Bindable;
+import jakarta.persistence.metamodel.CollectionAttribute;
+import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ListAttribute;
+import jakarta.persistence.metamodel.MapAttribute;
+import jakarta.persistence.metamodel.Metamodel;
+import jakarta.persistence.metamodel.PluralAttribute;
+import jakarta.persistence.metamodel.SetAttribute;
+import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Numeric;
 
@@ -69,11 +69,11 @@ public final class JPA {
 
 	// Public constants -------------------------------------------------------------------------------------------------------------------
 
-	public static final String QUERY_HINT_LOAD_GRAPH = "javax.persistence.loadgraph";
-	public static final String QUERY_HINT_FETCH_GRAPH = "javax.persistence.fetchgraph";
-	public static final String QUERY_HINT_CACHE_STORE_MODE = "javax.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
-	public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "javax.persistence.cache.retrieveMode"; // USE | BYPASS
-	public static final String PROPERTY_VALIDATION_MODE = "javax.persistence.validation.mode"; // AUTO | CALLBACK | NONE
+	public static final String QUERY_HINT_LOAD_GRAPH = "jakarta.persistence.loadgraph";
+	public static final String QUERY_HINT_FETCH_GRAPH = "jakarta.persistence.fetchgraph";
+	public static final String QUERY_HINT_CACHE_STORE_MODE = "jakarta.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
+	public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "jakarta.persistence.cache.retrieveMode"; // USE | BYPASS
+	public static final String PROPERTY_VALIDATION_MODE = "jakarta.persistence.validation.mode"; // AUTO | CALLBACK | NONE
 
 
 	// Constructors -----------------------------------------------------------------------------------------------------------------------

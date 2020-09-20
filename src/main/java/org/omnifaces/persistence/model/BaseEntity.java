@@ -15,8 +15,8 @@ package org.omnifaces.persistence.model;
 import java.io.Serializable;
 import java.util.Objects;
 
-import javax.persistence.EntityListeners;
-import javax.persistence.MappedSuperclass;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.MappedSuperclass;
 
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.service.BaseEntityService;

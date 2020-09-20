@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.model.enums;
 
-import javax.persistence.EnumType;
+import jakarta.persistence.EnumType;
 import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.EnumMappingTable;
 

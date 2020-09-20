@@ -28,10 +28,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.enterprise.inject.spi.CDI;
-import javax.persistence.PostLoad;
-import javax.persistence.PreUpdate;
-import javax.persistence.metamodel.Attribute;
+import jakarta.enterprise.inject.spi.CDI;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;

@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.service;
 
-import javax.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Expression;
 
 /**
  * Helper functional interface of {@link BaseEntityService}.

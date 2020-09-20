@@ -16,9 +16,9 @@ import static org.omnifaces.persistence.JPA.concat;
 
 import java.util.LinkedHashMap;
 
-import javax.ejb.Stateless;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Join;
+import jakarta.ejb.Stateless;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Join;
 
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;

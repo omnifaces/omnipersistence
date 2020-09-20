@@ -14,7 +14,7 @@ package org.omnifaces.persistence.service;
 
 import java.util.Set;
 
-import javax.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Fetch;
 
 /**
  * This class postpones all {@link Fetch#fetch(String)} calls.

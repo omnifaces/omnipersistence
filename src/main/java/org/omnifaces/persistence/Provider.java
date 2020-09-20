@@ -12,10 +12,10 @@
  */
 package org.omnifaces.persistence;
 
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
-import static javax.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.Lang.isOneOf;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
@@ -30,13 +30,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import javax.persistence.ElementCollection;
-import javax.persistence.Entity;
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.Table;
-import javax.persistence.criteria.Expression;
-import javax.persistence.metamodel.Attribute;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Table;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
