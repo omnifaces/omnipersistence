@@ -82,6 +82,14 @@
 		<test.h2.version>1.4.200</test.h2.version>
 	</properties>
 
+	<repositories>
+		<repository>
+			<id>jakarta-staging</id>
+			<snapshots />
+			<url>https://jakarta.oss.sonatype.org/content/repositories/staging</url> <!-- Currently only used for jersey-bom:pom:3.0.0-M4 which is required by GlassFish 6.0.0.M1 and the updated jakarta-faces-3.0.0-RC3 -->
+		</repository>
+	</repositories>
+
 	<dependencies>
 
 		<!-- Jakarta EE 9 web profile dependencies. -->
