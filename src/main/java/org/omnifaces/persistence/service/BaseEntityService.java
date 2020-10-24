@@ -1104,7 +1104,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Saved entity.
 	 */
 	public E save(E entity) {
-		if (entity.getId() == null) {
+		if ((generatedId && entity.getId() == null) || (!generatedId && !exists(entity))) {
 			persist(entity);
 			return entity;
 		}
