@@ -442,14 +442,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	/**
-	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement,
-	 * usually to perform a SELECT e.
+	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns the specified <code>T</code>, usually to perform a SELECT t.
+	 * @param T The generic result type.
 	 * @param jpql The Java Persistence Query Language statement.
-	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement,
-	 * usually to perform a SELECT.
+	 * @param resultType The result type.
+	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns the specified <code>T</code>, usually to perform a SELECT t.
+	 */
+	protected <T> TypedQuery<T> createTypedQuery(String jpql, Class<T> resultType) {
+		return getEntityManager().createQuery(jpql, resultType);
+	}
+
+	/**
+	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns a <code>E</code>, usually to perform a SELECT e.
+	 * @param jpql The Java Persistence Query Language statement.
+	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
+	 * returns a <code>E</code>, usually to perform a SELECT e.
 	 */
 	protected TypedQuery<E> createTypedQuery(String jpql) {
-		return getEntityManager().createQuery(jpql, entityType);
+		return createTypedQuery(jpql, entityType);
 	}
 
 	/**
@@ -460,7 +473,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * returns a <code>Long</code>, usually a SELECT e.id or SELECT COUNT(e).
 	 */
 	protected TypedQuery<Long> createLongQuery(String jpql) {
-		return getEntityManager().createQuery(jpql, Long.class);
+		return createTypedQuery(jpql, Long.class);
 	}
 
 	/**
@@ -940,12 +953,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
 	 */
 	public I persist(E entity) {
-		return persist(entity, true);
-	}
-
-	private I persist(E entity, boolean checkExists) {
 		if (entity.getId() != null) {
-			if (generatedId || (checkExists && exists(entity))) {
+			if (generatedId || exists(entity)) {
 				throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
 			}
 		}
@@ -982,10 +991,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
 	 */
 	public E update(E entity) {
-		return update(entity, true);
-	}
-
-	private E update(E entity, boolean checkExists) {
 		if (entity.getId() == null) {
 			if (generatedId) {
 				throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
@@ -995,7 +1000,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 		}
 
-		if (checkExists && !exists(entity)) {
+		if (!exists(entity)) {
 			throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
 		}
 
@@ -1099,12 +1104,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Saved entity.
 	 */
 	public E save(E entity) {
-		if ((generatedId && entity.getId() == null) || (!generatedId && !exists(entity))) {
-			persist(entity, false);
+		if (entity.getId() == null) {
+			persist(entity);
 			return entity;
 		}
 		else {
-			E update = update(entity, false);
+			E update = update(entity);
 			return update;
 		}
 	}
