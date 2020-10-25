@@ -63,9 +63,9 @@ public final class Page { // This class MAY NOT be mutable!
 	 * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
 	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
-	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+	 * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+	 * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+	 * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
 	public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
@@ -78,9 +78,9 @@ public final class Page { // This class MAY NOT be mutable!
 	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
 	 * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
 	 * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code>.
-	 * @param ordering Ordering of results. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @param requiredCriteria Required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
-	 * @param optionalCriteria Optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+	 * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+	 * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+	 * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
 	 */
 	public Page(Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
 		this.offset = validateIntegerArgument("offset", offset, 0, 0);
@@ -142,7 +142,7 @@ public final class Page { // This class MAY NOT be mutable!
 	}
 
 	/**
-	 * Returns the ordering. Map key represents property name and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+	 * Returns the ordering. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
 	 * @return The ordering.
 	 */
 	public Map<String, Boolean> getOrdering() {
@@ -150,7 +150,7 @@ public final class Page { // This class MAY NOT be mutable!
 	}
 
 	/**
-	 * Returns the required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
+	 * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
 	 * @return The required criteria.
 	 */
 	public Map<String, Object> getRequiredCriteria() {
@@ -158,7 +158,7 @@ public final class Page { // This class MAY NOT be mutable!
 	}
 
 	/**
-	 * Returns the optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+	 * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
 	 * @return The optional criteria.
 	 */
 	public Map<String, Object> getOptionalCriteria() {
@@ -276,7 +276,7 @@ public final class Page { // This class MAY NOT be mutable!
 		}
 
 		/**
-		 * Set the required criteria. Map key represents property name and map value represents criteria. Each entity must match all of given criteria.
+		 * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
 		 * @param requiredCriteria Required criteria.
 		 * @return This builder.
 		 * @throws IllegalStateException When another required criteria is already set in this builder.
@@ -292,7 +292,7 @@ public final class Page { // This class MAY NOT be mutable!
 		}
 
 		/**
-		 * Set the optional criteria. Map key represents property name and map value represents criteria. Each entity must match at least one of given criteria.
+		 * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
 		 * @param optionalCriteria Optional criteria.
 		 * @return This builder.
 		 * @throws IllegalStateException When another optional criteria is already set in this builder.
