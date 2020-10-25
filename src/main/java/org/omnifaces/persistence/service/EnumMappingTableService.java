@@ -12,14 +12,14 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.ejb.TransactionManagementType.BEAN;
+import static jakarta.persistence.EnumType.ORDINAL;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static jakarta.ejb.TransactionManagementType.BEAN;
-import static jakarta.persistence.EnumType.ORDINAL;
 import static org.omnifaces.persistence.model.EnumMapping.CODE_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMapping.ID_FIELD_NAME;
 import static org.omnifaces.persistence.model.EnumMappingTable.DEFAULT_ENUM_HISTORY_TABLE_POSTFIX;
