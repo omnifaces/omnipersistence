@@ -444,7 +444,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	/**
 	 * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
 	 * returns the specified <code>T</code>, usually to perform a SELECT t.
-	 * @param T The generic result type.
+	 * @param <T> The generic result type.
 	 * @param jpql The Java Persistence Query Language statement.
 	 * @param resultType The result type.
 	 * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which
