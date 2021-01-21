@@ -9,7 +9,7 @@ cache:
 # Do integration test on configured servers.
 env:
    - SERVER=glassfish-eclipselink
-#  - SERVER=wildfly-hibernate
+   - SERVER=wildfly-hibernate
 #  - SERVER=payara-eclipselink
 script: mvn verify -Dmaven.javadoc.skip=true -P $SERVER
 

@@ -73,8 +73,8 @@
 		<maven.source.excludeResources>true</maven.source.excludeResources>
 
 		<!-- Test versions. -->
-		<test.glassfish.version>6.0.0-M1</test.glassfish.version>
-		<test.wildfly.version>19.0.0.Final</test.wildfly.version> <!-- TODO: JEE9 compatible version -->
+		<test.glassfish.version>6.0.0</test.glassfish.version>
+		<test.wildfly.version>22.0.0.Beta1</test.wildfly.version>
 		<test.payara.version>5.201</test.payara.version> <!-- TODO: JEE9 compatible version -->
 		<test.h2.version>1.4.200</test.h2.version>
 	</properties>
@@ -83,7 +83,12 @@
 		<repository>
 			<id>jakarta-staging</id>
 			<snapshots />
-			<url>https://jakarta.oss.sonatype.org/content/repositories/staging</url> <!-- Currently only used for jersey-bom:pom:3.0.0-M4 which is required by GlassFish 6.0.0.M1 and the updated jakarta-faces-3.0.0-RC3 -->
+			<url>https://jakarta.oss.sonatype.org/content/repositories/staging</url> <!-- Currently only used for jersey-bom:pom:3.0.0-M4 which is required by GlassFish 6.0.0 -->
+		</repository>
+		<repository>
+			<id>redhat-all</id>
+			<snapshots />
+			<url>https://maven.repository.redhat.com/techpreview/all</url> <!-- Currently only used for org.picketbox:picketbox:jar:5.0.3.Final-redhat-00006 which is required by WildFly 22.0.0.Beta1 -->
 		</repository>
 	</repositories>
 
@@ -93,7 +98,7 @@
 		<dependency>
 			<groupId>jakarta.platform</groupId>
 			<artifactId>jakarta.jakartaee-web-api</artifactId>
-			<version>${jakartaee.version}.0.0-RC2</version> <!-- minimum version for OmniFaces 4.0 -->
+			<version>${jakartaee.version}.0.0</version> <!-- minimum version for OmniFaces 4.0 -->
 			<scope>provided</scope> <!-- by enduser (of course enduser can provide a newer version) -->
 		</dependency>
 
@@ -382,32 +387,6 @@
 					</plugin>
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-resources-plugin</artifactId>
-						<version>3.1.0</version>
-						<executions>
-							<execution>
-								<id>update-internal-api</id>
-								<phase>process-test-classes</phase>
-								<goals>
-									<goal>copy-resources</goal>
-								</goals>
-								<configuration>
-									<resources>
-										<resource>
-											<directory>${project.basedir}/src/test/resources/glassfish</directory>
-											<includes>
-												<include>internal-api.jar</include> <!-- Patched version with correct OSGI version in MANIFEST.MF, else it will fail when executing with a Java Agent. -->
-											</includes>
-										</resource>
-									</resources>
-									<outputDirectory>${project.build.directory}/glassfish6/glassfish/modules</outputDirectory>
-									<overwrite>true</overwrite>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
 							<environmentVariables>
@@ -426,7 +405,7 @@
 				<dependency>
 					<groupId>org.wildfly.arquillian</groupId>
 					<artifactId>wildfly-arquillian-container-managed</artifactId>
-					<version>2.2.0.Final</version>
+					<version>3.0.1.Final</version>
 					<scope>test</scope>
 				</dependency>
 			</dependencies>
@@ -441,7 +420,7 @@
 									<artifactItems>
 										<artifactItem>
 											<groupId>org.wildfly</groupId>
-											<artifactId>wildfly-dist</artifactId>
+											<artifactId>wildfly-preview-dist</artifactId>
 											<version>${test.wildfly.version}</version>
 											<type>zip</type>
 										</artifactItem>
@@ -455,7 +434,7 @@
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
 							<systemPropertyVariables>
-								<jboss.home>${project.build.directory}/wildfly-${test.wildfly.version}</jboss.home>
+								<jboss.home>${project.build.directory}/wildfly-preview-${test.wildfly.version}</jboss.home>
 								<java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
 							</systemPropertyVariables>
 						</configuration>
