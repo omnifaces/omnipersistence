@@ -20,9 +20,10 @@ import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.EnumEntity;
 
 @Stateless
+@SuppressWarnings("unchecked")
 public class EnumEntityService extends BaseEntityService<Long, EnumEntity> {
 
-        public List<Object> getHardDeleteIdEnumTable() {
+		public List<Object> getHardDeleteIdEnumTable() {
                 return getEntityManager().createNativeQuery("SELECT * FROM hard_delete_id_enum_info")
                         .getResultList();
         }
