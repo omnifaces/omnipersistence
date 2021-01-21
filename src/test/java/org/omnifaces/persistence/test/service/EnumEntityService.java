@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 OmniFaces
+ * Copyright 2021 OmniFaces
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -20,9 +20,10 @@ import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.EnumEntity;
 
 @Stateless
+@SuppressWarnings("unchecked")
 public class EnumEntityService extends BaseEntityService<Long, EnumEntity> {
 
-        public List<Object> getHardDeleteIdEnumTable() {
+		public List<Object> getHardDeleteIdEnumTable() {
                 return getEntityManager().createNativeQuery("SELECT * FROM hard_delete_id_enum_info")
                         .getResultList();
         }

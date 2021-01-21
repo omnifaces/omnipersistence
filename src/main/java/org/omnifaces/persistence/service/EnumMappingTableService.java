@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 OmniFaces
+ * Copyright 2021 OmniFaces
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -409,7 +409,9 @@ public class EnumMappingTableService {
                                                 + (oneFieldMapping ? "" : (ordinal ? ", et." + codeEnumColumn : ", et." + idEnumColumn))
                                                 + " FROM " + enumTable + " et"
                                                 + ("".equals(deletedColumn) ? ";" : " WHERE et." + deletedColumn + " = 0;");// select et.id, et.code from enum_table et where et.deleted = 0;
-                                        List<Object> databaseValues = entityManager.createNativeQuery(getDatabaseDataQuery).getResultList();
+
+                                        @SuppressWarnings("unchecked")
+										List<Object> databaseValues = entityManager.createNativeQuery(getDatabaseDataQuery).getResultList();
 
                                         for (Object object : databaseValues) {
                                                 if (oneFieldMapping) {
@@ -936,7 +938,7 @@ public class EnumMappingTableService {
         }
 
         // TODO refactor to Omniutils.
-        public static Optional<Object> getEnumConstructorAccessor(Class<? extends Enum<?>> enumeratedType) {
+        private static Optional<Object> getEnumConstructorAccessor(Class<? extends Enum<?>> enumeratedType) {
                 Object constructorAccessor = null;
 
                 try {
