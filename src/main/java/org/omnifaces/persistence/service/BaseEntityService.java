@@ -133,7 +133,6 @@ import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.model.EnumMapping;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
@@ -167,10 +166,9 @@ import org.omnifaces.utils.reflect.Getter;
  * <ul>
  * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and
- * whether the ID is generated, and whether the entity is {@link SoftDeletable}, and whether any {@link EnumMapping} is modified, and
+ * whether the ID is generated, and whether the entity is {@link SoftDeletable}, and
  * any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and {@link OneToMany} mappings of the entity. This is
  * internally used in order to be able to build proper queries to perform a search inside those fields.
- * <li>{@link Level#INFO} will log both successful and unsuccessful attempts to modify enum representations basing on {@link EnumMapping}.
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
  * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during
  * {@link #persist(BaseEntity)} and {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only
@@ -183,7 +181,6 @@ import org.omnifaces.utils.reflect.Getter;
  * @see BaseEntity
  * @see Page
  * @see Criteria
- * @see EnumMappingTableService
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
 
