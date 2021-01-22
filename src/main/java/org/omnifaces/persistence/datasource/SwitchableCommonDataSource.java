@@ -13,13 +13,12 @@
 package org.omnifaces.persistence.datasource;
 
 import static org.omnifaces.utils.properties.PropertiesUtils.loadPropertiesFromClasspath;
+import static org.omnifaces.utils.reflect.Reflections.instantiate;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ServiceLoader;
-
-import javax.sql.CommonDataSource;
 
 public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
@@ -61,19 +60,19 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 	public void doInit() {
 
 		// Get the properties that were defined separately from the @DataSourceDefinition/data-source element
-		
+
 		ServiceLoader<PropertiesFileLoader> loader = ServiceLoader.load(PropertiesFileLoader.class);
 		if (!loader.iterator().hasNext()) {
 			loader = ServiceLoader.load(PropertiesFileLoader.class, SwitchableCommonDataSource.class.getClassLoader());
 		}
-		
+
 		Map<String, String> properties = new HashMap<>();
-		
+
 		if (!loader.iterator().hasNext()) {
 			// No service loader was specified for loading the configfile.
 			// Try the fallback default location of META-INF on the classpath
 			properties.putAll(loadPropertiesFromClasspath("META-INF/" + configFile));
-			
+
 		} else {
 			for (PropertiesFileLoader propertiesFileLoader : loader) {
 				properties.putAll(propertiesFileLoader.loadFromFile(configFile));
@@ -86,7 +85,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 			throw new IllegalStateException("Required parameter 'className' missing.");
 		}
 
-		initDataSource(newInstance(className));
+		initDataSource(instantiate(className));
 
 		// Set the properties on the wrapped data source that were already set on this class before doInit()
 		// was possible.
@@ -103,14 +102,6 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
 		// After this properties will be set directly on the wrapped data source instance.
 		init = true;
-	}
-
-	private CommonDataSource newInstance(String className) {
-		try {
-			return (CommonDataSource) Class.forName(className).newInstance();
-		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
-			throw new IllegalStateException(e);
-		}
 	}
 
 }
