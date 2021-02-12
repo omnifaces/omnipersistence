@@ -14,6 +14,9 @@ package org.omnifaces.persistence.listener;
 
 import static org.omnifaces.utils.annotation.Annotations.createAnnotationInstance;
 
+import java.lang.annotation.Annotation;
+import java.util.Optional;
+
 import javax.enterprise.event.Observes;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.CDI;
@@ -56,27 +59,46 @@ public class BaseEntityListener {
 	@Inject
 	private BeanManager beanManager;
 
+	private Optional<BeanManager> optionalBeanManager;
+
 	@PostPersist
 	public void onPostPersist(BaseEntity<?> entity) {
-		getBeanManager().fireEvent(entity, createAnnotationInstance(Created.class));
+		fireOptionalEvent(entity, Created.class);
 	}
 
 	@PostUpdate
 	public void onPostUpdate(BaseEntity<?> entity) {
-		getBeanManager().fireEvent(entity, createAnnotationInstance(Updated.class));
+		fireOptionalEvent(entity, Updated.class);
 	}
 
 	@PostRemove
 	public void onPostRemove(BaseEntity<?> entity) {
-		getBeanManager().fireEvent(entity, createAnnotationInstance(Deleted.class));
+		fireOptionalEvent(entity, Deleted.class);
 	}
 
 	private BeanManager getBeanManager() {
 		if (beanManager == null) {
-			beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
+			try {
+				beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
+			}
+			catch (IllegalStateException ignore) {
+				beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
+			}
 		}
 
 		return beanManager;
+	}
+
+	private Optional<BeanManager> getOptionalBeanManager() {
+		if (optionalBeanManager == null) {
+			optionalBeanManager = Optional.ofNullable(getBeanManager());
+		}
+
+		return optionalBeanManager;
+	}
+
+	private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
+		getOptionalBeanManager().ifPresent(beanManager -> beanManager.fireEvent(entity, createAnnotationInstance(eventType)));
 	}
 
 }
