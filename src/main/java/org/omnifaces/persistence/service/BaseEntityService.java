@@ -16,6 +16,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
@@ -224,11 +225,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private final boolean generatedId;
 	private final SoftDeleteData softDeleteData;
 
-	private Provider provider;
-	private Database database;
-	private Set<String> elementCollections;
-	private Set<String> manyOrOneToOnes;
-	private java.util.function.Predicate<String> oneToManys;
+	private Provider provider = Provider.UNKNOWN;
+	private Database database = Database.UNKNOWN;
+	private Set<String> elementCollections = emptySet();
+	private Set<String> manyOrOneToOnes = emptySet();
+	private java.util.function.Predicate<String> oneToManys = field -> false;
 	private Validator validator;
 
 	@PersistenceContext
@@ -254,7 +255,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * The postconstruct initializes the properties dependent on entity manager.
 	 */
 	@PostConstruct
-	private void initWithEntityManager() {
+	protected void initWithEntityManager() {
 		provider = Provider.of(getEntityManager());
 		database = Database.of(getEntityManager());
 		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
@@ -288,19 +289,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isElementCollection);
+		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isElementCollection);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
 		return elementCollectionMapping;
 	}
 
 	private Set<String> computeManyOrOneToOneMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isManyOrOneToOne);
+		Set<String> manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isManyOrOneToOne);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, manyOrOneToOneMapping));
 		return manyOrOneToOneMapping;
 	}
 
 	private Set<String> computeOneToManyMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), provider::isOneToMany);
+		Set<String> oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isOneToMany);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, entityType, oneToManyMapping));
 		return oneToManyMapping;
 	}
@@ -789,7 +790,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Whether entity with given entity exists.
 	 */
 	protected boolean exists(E entity) {
-		I id = provider.getIdentifier(entity);
+		I id = getProvider().getIdentifier(entity);
 		return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id")
 			.setParameter("id", id)
 			.getSingleResult().intValue() > 0;
@@ -1224,7 +1225,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new NullPointerException("Entity is null.");
 		}
 
-		I id = provider.getIdentifier(entity);
+		I id = getProvider().getIdentifier(entity);
 
 		if (id == null) {
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
@@ -1234,7 +1235,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return entity;
 		}
 
-		E managed = getEntityManager().find(provider.getEntityType(entity), id);
+		E managed = getEntityManager().find(getProvider().getEntityType(entity), id);
 
 		if (managed == null) {
 			throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
@@ -1264,13 +1265,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		BaseEntity<I> baseEntity = (BaseEntity<I>) entity;
-		I id = provider.getIdentifier(baseEntity);
+		I id = getProvider().getIdentifier(baseEntity);
 
 		if (id == null || (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity))) {
 			return entity;
 		}
 
-		return coalesce((E) getEntityManager().find(provider.getEntityType(baseEntity), id), entity);
+		return coalesce((E) getEntityManager().find(getProvider().getEntityType(baseEntity), id), entity);
 	}
 
 	/**
@@ -1284,7 +1285,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws EntityNotFoundException When entity has in meanwhile been deleted.
 	 */
 	public void reset(E entity) {
-		if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
+		if (!getProvider().isProxy(entity) && getEntityManager().contains(entity)) {
 			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
 		}
 
@@ -1530,17 +1531,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected <T extends E> Consumer<TypedQuery<?>> onPage(Class<T> resultType, boolean cacheable) {
 		return typedQuery -> {
-			if (provider == HIBERNATE) {
+			if (getProvider() == HIBERNATE) {
 				typedQuery
 					.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable);
 			}
-			else if (provider == ECLIPSELINK) {
+			else if (getProvider() == ECLIPSELINK) {
 				typedQuery
 					.setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
 					.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
 			}
 
-			if (provider != OPENJPA) {
+			if (getProvider() != OPENJPA) {
 				// OpenJPA doesn't support 2nd level cache.
 				typedQuery
 					.setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
@@ -1770,13 +1771,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		PathResolver subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
 		Map<String, Object> parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
 
-		if (provider == HIBERNATE) {
+		if (getProvider() == HIBERNATE) {
 			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
 			countQuery.where(criteriaBuilder.in(countRoot).value(countSubquery));
 			// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
 			// OpenJPA (tested 2.4.2) fails here as it doesn't interpret root as @Id: org.apache.openjpa.persistence.ArgumentException: Filter invalid. Cannot compare value of type optimusfaces.test.Person to value of type java.lang.Long.
 		}
-		else if (provider == OPENJPA) {
+		else if (getProvider() == OPENJPA) {
 			// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT t.id FROM T t WHERE [restrictions])
 			countQuery.where(criteriaBuilder.in(countRoot.get(ID)).value(countSubquery));
 			// Hibernate (tested 5.0.10) fails here when DTO is used as it does not have a mapped ID.
@@ -1834,7 +1835,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
 		Root<E> root = query.from(entityType);
-		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (provider == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
+		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (getProvider() == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
 	}
 
 	private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
@@ -1851,7 +1852,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				((CriteriaQuery<T>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
 			}
 
-			Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> provider.isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
+			Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> getProvider().isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
 
 			if (!aggregatedFields.isEmpty()) {
 				groupByIfNecessary(query, root);
@@ -1859,7 +1860,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 			boolean orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
 			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
-			pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
+			pageBuilder.canBuildValueBasedPagingPredicate(getProvider() != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
 			return new MappedPathResolver(root, paths, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
 		}
 		else if (pageBuilder.getResultType() == entityType) {
@@ -1912,10 +1913,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		String field = order.getKey();
 
 		if (oneToManys.test(field) || elementCollections.contains(field)) {
-			if (provider == ECLIPSELINK) {
+			if (getProvider() == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
-			else if (provider == OPENJPA) {
+			else if (getProvider() == OPENJPA) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_OPENJPA); // OpenJPA adds for some reason a second JOIN on the join table referenced in ORDER BY column causing it to be not sorted on the intended join.
 			}
 		}
@@ -2022,7 +2023,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@SuppressWarnings("unchecked")
 	private <T extends E> Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		Alias alias = Alias.create(provider, path, field);
+		Alias alias = Alias.create(getProvider(), path, field);
 		Object value = criteria;
 		boolean negated = value instanceof Not;
 		Predicate predicate;
@@ -2077,7 +2078,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		if (provider == ECLIPSELINK || (provider == HIBERNATE && database == POSTGRESQL)) {
+		if (getProvider() == ECLIPSELINK || (getProvider() == HIBERNATE && getDatabase() == POSTGRESQL)) {
 			// EclipseLink refuses to perform GROUP BY on IN clause on @ElementCollection, causing a cartesian product.
 			// Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
 			return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -2106,7 +2107,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
 		boolean oneToManyField = oneToManys.test(field);
 
-		if (oneToManyField && provider == ECLIPSELINK) {
+		if (oneToManyField && getProvider() == ECLIPSELINK) {
 			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 		}
 
