@@ -50,12 +50,14 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			if (HIBERNATE_SESSION_FACTORY.get().isInstance(entityManagerFactory)) {
+			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+
+			if (HIBERNATE_SESSION_FACTORY.get().isInstance(unwrappedEntityManagerFactory)) {
 				// 5.2+ has merged hibernate-entitymanager into hibernate-core, and made EntityManagerFactory impl an instance of SessionFactory, and removed getDialect() shortcut method.
-				return invokeMethod(invokeMethod(invokeMethod(entityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
+				return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
 			}
 			else {
-				return invokeMethod(invokeMethod(entityManagerFactory, "getSessionFactory"), "getDialect").getClass().getSimpleName();
+				return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getSessionFactory"), "getDialect").getClass().getSimpleName();
 			}
 		}
 
@@ -100,7 +102,8 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			return invokeMethod(invokeMethod(entityManagerFactory, "getDatabaseSession"), "getDatasourcePlatform").getClass().getSimpleName();
+			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+			return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getDatabaseSession"), "getDatasourcePlatform").getClass().getSimpleName();
 		}
 
 		@Override
@@ -113,9 +116,8 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			Optional<Method> getDelegate = findMethod(entityManagerFactory, "getDelegate");
-			Object openjpaEntityManagerFactory = getDelegate.isPresent() ? invokeMethod(entityManagerFactory, getDelegate.get()) : entityManagerFactory;
-			return invokeMethod(invokeMethod(openjpaEntityManagerFactory, "getConfiguration"), "getDBDictionaryInstance").getClass().getSimpleName();
+			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+			return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getConfiguration"), "getDBDictionaryInstance").getClass().getSimpleName();
 		}
 
 		@Override
@@ -156,6 +158,17 @@ public enum Provider {
 	private static final Optional<Class<Object>> HIBERNATE_COMPARISON_PREDICATE = Stream.of(HIBERNATE_5_2_0_COMPARISON_PREDICATE, HIBERNATE_4_3_0_COMPARISON_PREDICATE, HIBERNATE_3_5_0_COMPARISON_PREDICATE).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
 	private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
 	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
+
+	private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
+		String packageName = entityManagerFactory.getClass().getPackage().getName();
+
+		if (packageName.startsWith("org.apache.openejb.")) {
+			Optional<Method> getDelegate = findMethod(entityManagerFactory, "getDelegate");
+			return getDelegate.isPresent() ? invokeMethod(entityManagerFactory, getDelegate.get()) : entityManagerFactory;
+		}
+
+		return entityManagerFactory;
+	}
 
 	public static Provider of(EntityManager entityManager) {
 		String packageName = entityManager.getDelegate().getClass().getPackage().getName();
