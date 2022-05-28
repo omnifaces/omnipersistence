@@ -73,8 +73,8 @@
 		<maven.source.excludeResources>true</maven.source.excludeResources>
 
 		<!-- Test versions. -->
-		<test.wildfly.version>23.0.1.Final</test.wildfly.version>
-		<test.payara.version>5.2021.2</test.payara.version>
+		<test.wildfly.version>26.1.1.Final</test.wildfly.version> <!-- https://search.maven.org/artifact/org.wildfly.bom/wildfly -->
+		<test.payara.version>5.2022.2</test.payara.version> <!-- https://search.maven.org/artifact/fish.payara.distributions/payara-web -->
 		<test.h2.version>1.4.200</test.h2.version>
 	</properties>
 
