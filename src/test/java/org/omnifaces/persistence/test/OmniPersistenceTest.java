@@ -16,8 +16,9 @@ import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.util.Arrays.asList;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.test.service.StartupService.TOTAL_RECORDS;
 
 import java.time.LocalDate;
@@ -29,15 +30,15 @@ import java.util.Optional;
 import javax.ejb.EJB;
 
 import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
 import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.dto.Page;
@@ -76,7 +77,7 @@ import org.omnifaces.persistence.test.service.ProductService;
 import org.omnifaces.persistence.test.service.TextService;
 import org.omnifaces.utils.collection.PartialResultList;
 
-@RunWith(Arquillian.class)
+@ExtendWith(ArquillianExtension.class)
 public class OmniPersistenceTest {
 
 	@Deployment
@@ -122,17 +123,17 @@ public class OmniPersistenceTest {
 	@Test
 	public void testFindPerson() {
 		Optional<Person> existingPerson = personService.findById(1L);
-		assertTrue("Existing person", existingPerson.isPresent());
+		assertTrue(existingPerson.isPresent(), "Existing person");
 		Optional<Person> nonExistingPerson = personService.findById(0L);
-		assertTrue("Non-existing person", !nonExistingPerson.isPresent());
+		assertTrue(!nonExistingPerson.isPresent(), "Non-existing person");
 	}
 
 	@Test
 	public void testGetPerson() {
 		Person existingPerson = personService.getById(1L);
-		assertTrue("Existing person", existingPerson != null);
+		assertTrue(existingPerson != null, "Existing person");
 		Person nonExistingPerson = personService.getById(0L);
-		assertTrue("Non-existing person", nonExistingPerson == null);
+		assertTrue(nonExistingPerson == null, "Non-existing person");
 	}
 
 	@Test
@@ -140,57 +141,57 @@ public class OmniPersistenceTest {
 		Person newPerson = createNewPerson("testPersistNewPerson@example.com");
 		personService.persist(newPerson);
 		Long expectedNewId = TOTAL_RECORDS + 1L;
-		assertEquals("New person ID", expectedNewId, newPerson.getId());
-		assertEquals("Total records", TOTAL_RECORDS + 1, personService.list().size());
+		assertEquals(expectedNewId, newPerson.getId(), "New person ID");
+		assertEquals(TOTAL_RECORDS + 1, personService.list().size(), "Total records");
 
 		personService.delete(newPerson);
-		assertEquals("Total records", TOTAL_RECORDS, personService.list().size());
+		assertEquals(TOTAL_RECORDS, personService.list().size(), "Total records");
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testPersistExistingPerson() {
 		Person existingPerson = createNewPerson("testPersistExistingPerson@example.com");
 		existingPerson.setId(1L);
-		personService.persist(existingPerson);
+		assertThrows(IllegalEntityStateException.class, () -> personService.persist(existingPerson));
 	}
 
 	@Test
 	public void testUpdateExistingPerson() {
 		Person existingPerson = personService.getById(1L);
-		assertTrue("Existing person", existingPerson != null);
+		assertTrue(existingPerson != null, "Existing person");
 		String newEmail = "testUpdateExistingPerson@example.com";
 		existingPerson.setEmail(newEmail);
 		personService.update(existingPerson);
 		Person existingPersonAfterUpdate = personService.getById(1L);
-		assertEquals("Email updated", newEmail, existingPersonAfterUpdate.getEmail());
+		assertEquals(newEmail, existingPersonAfterUpdate.getEmail(), "Email updated");
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testUpdateNewPerson() {
 		Person newPerson = createNewPerson("testUpdateNewPerson@example.com");
-		personService.update(newPerson);
+		assertThrows(IllegalEntityStateException.class, () -> personService.update(newPerson));
 	}
 
 	@Test
 	public void testResetExistingPerson() {
 		Person existingPerson = personService.getById(1L);
-		assertTrue("Existing person", existingPerson != null);
+		assertTrue(existingPerson != null, "Existing person");
 		String oldEmail = existingPerson.getEmail();
 		existingPerson.setEmail("testResetExistingPerson@example.com");
 		personService.reset(existingPerson);
-		assertEquals("Email resetted", oldEmail, existingPerson.getEmail());
+		assertEquals(oldEmail, existingPerson.getEmail(), "Email resetted");
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testResetNonExistingPerson() {
 		Person nonExistingPerson = createNewPerson("testResetNonExistingPerson@example.com");
-		personService.reset(nonExistingPerson);
+		assertThrows(IllegalEntityStateException.class, () -> personService.reset(nonExistingPerson));
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testDeleteNonExistingPerson() {
 		Person nonExistingPerson = createNewPerson("testDeleteNonExistingPerson@example.com");
-		personService.delete(nonExistingPerson);
+		assertThrows(IllegalEntityStateException.class, () -> personService.delete(nonExistingPerson));
 	}
 
 	private static Person createNewPerson(String email) {
@@ -207,10 +208,10 @@ public class OmniPersistenceTest {
 	@Test
 	public void testPage() {
 		PartialResultList<Person> persons = personService.getPage(Page.ALL, true);
-		assertEquals("There are 200 records", TOTAL_RECORDS, persons.size());
+		assertEquals(TOTAL_RECORDS, persons.size(), "There are 200 records");
 
 		PartialResultList<Person> males = personService.getPage(Page.with().anyMatch(Collections.singletonMap("gender", Gender.MALE)).build(), true);
-		assertTrue("There are less than 200 records", males.size() < TOTAL_RECORDS);
+		assertTrue(males.size() < TOTAL_RECORDS, "There are less than 200 records");
 	}
 
 	// @SoftDeletable -------------------------------------------------------------------------------------------------
@@ -223,83 +224,83 @@ public class OmniPersistenceTest {
 		Text activeText = textService.getById(1L);
 		textService.softDelete(activeText);
 		Text activeTextAfterSoftDelete = textService.getSoftDeletedById(1L);
-		assertTrue("Text entity was soft deleted", !activeTextAfterSoftDelete.isActive());
-		assertEquals("Total records for texts", textService.list().size(), allTexts.size() - 1);
-		assertEquals("Total deleted records for texts", textService.listSoftDeleted().size(), 1);
+		assertTrue(!activeTextAfterSoftDelete.isActive(), "Text entity was soft deleted");
+		assertEquals(textService.list().size(), allTexts.size() - 1, "Total records for texts");
+		assertEquals(textService.listSoftDeleted().size(), 1, "Total deleted records for texts");
 
 		Comment activeComment = commentService.getById(1L);
 		commentService.softDelete(activeComment);
 		Comment activeCommentAfterSoftDelete = commentService.getSoftDeletedById(1L);
-		assertTrue("Comment entity was soft deleted", activeCommentAfterSoftDelete.isDeleted());
-		assertEquals("Total records for comments", commentService.list().size(), allComments.size() - 1);
-		assertEquals("Total deleted records for comments", commentService.listSoftDeleted().size(), 1);
+		assertTrue(activeCommentAfterSoftDelete.isDeleted(), "Comment entity was soft deleted");
+		assertEquals(commentService.list().size(), allComments.size() - 1, "Total records for comments");
+		assertEquals(commentService.listSoftDeleted().size(), 1, "Total deleted records for comments");
 
 		Text deletedText = textService.getSoftDeletedById(1L);
 		textService.softUndelete(deletedText);
 		Text deletedTextAfterSoftUndelete = textService.getById(1L);
-		assertTrue("Text entity was soft undeleted", deletedTextAfterSoftUndelete.isActive());
-		assertEquals("Total records for texts", textService.list().size(), allTexts.size());
-		assertEquals("Total deleted records for texts", textService.listSoftDeleted().size(), 0);
+		assertTrue(deletedTextAfterSoftUndelete.isActive(), "Text entity was soft undeleted");
+		assertEquals(textService.list().size(), allTexts.size(), "Total records for texts");
+		assertEquals(textService.listSoftDeleted().size(), 0, "Total deleted records for texts");
 
 		Comment deletedComment = commentService.getSoftDeletedById(1L);
 		commentService.softUndelete(deletedComment);
 		Comment deletedCommentAfterSoftUndelete = commentService.getById(1L);
-		assertTrue("Comment entity was soft undeleted", !deletedCommentAfterSoftUndelete.isDeleted());
-		assertEquals("Total records for comments", commentService.list().size(), allComments.size());
-		assertEquals("Total deleted records for comments", commentService.listSoftDeleted().size(), 0);
+		assertTrue(!deletedCommentAfterSoftUndelete.isDeleted(), "Comment entity was soft undeleted");
+		assertEquals(commentService.list().size(), allComments.size(), "Total records for comments");
+		assertEquals(commentService.listSoftDeleted().size(), 0, "Total deleted records for comments");
 
 		textService.softDelete(allTexts);
-		assertEquals("Total records for texts", textService.list().size(), 0);
-		assertEquals("Total deleted records for texts", textService.listSoftDeleted().size(), allTexts.size());
+		assertEquals(textService.list().size(), 0, "Total records for texts");
+		assertEquals(textService.listSoftDeleted().size(), allTexts.size(), "Total deleted records for texts");
 
 		commentService.softDelete(allComments);
-		assertEquals("Total records for comments", commentService.list().size(), 0);
-		assertEquals("Total deleted records for comments", commentService.listSoftDeleted().size(), allComments.size());
+		assertEquals(commentService.list().size(), 0, "Total records for comments");
+		assertEquals(commentService.listSoftDeleted().size(), allComments.size(), "Total deleted records for comments");
 	}
 
-	@Test(expected = NonSoftDeletableEntityException.class)
+	@Test
 	public void testGetAllSoftDeletedForNonSoftDeletable() {
-		personService.listSoftDeleted();
+		assertThrows(NonSoftDeletableEntityException.class, () -> personService.listSoftDeleted());
 	}
 
-	@Test(expected = NonSoftDeletableEntityException.class)
+	@Test
 	public void testSoftDeleteNonSoftDeletable() {
 		Person person = personService.getById(1L);
-		personService.softDelete(person);
+		assertThrows(NonSoftDeletableEntityException.class, () -> personService.softDelete(person));
 	}
 
-	@Test(expected = NonSoftDeletableEntityException.class)
+	@Test
 	public void testSoftUndeleteNonSoftDeletable() {
 		Person person = personService.getById(1L);
-		personService.softUndelete(person);
+		assertThrows(NonSoftDeletableEntityException.class, () -> personService.softUndelete(person));
 	}
 
 	@Test
 	public void testGetSoftDeletableById() {
 		lookupService.persist(new Lookup("aa"));
 		Lookup activeLookup = lookupService.getById("aa");
-		assertTrue("Got active entity with getById method", activeLookup != null);
+		assertTrue(activeLookup != null, "Got active entity with getById method");
 
 		lookupService.softDelete(activeLookup);
 		Lookup softDeletedLookup = lookupService.getById("aa");
-		assertTrue("Not able to get deleted entity with getById method", softDeletedLookup == null);
+		assertTrue(softDeletedLookup == null, "Not able to get deleted entity with getById method");
 
 		softDeletedLookup = lookupService.getSoftDeletedById("aa");
-		assertTrue("Got deleted entity with getSoftDeletedById method", softDeletedLookup != null);
+		assertTrue(softDeletedLookup != null, "Got deleted entity with getSoftDeletedById method");
 	}
 
 	@Test
 	public void testFindSoftDeletableById() {
 		lookupService.persist(new Lookup("bb"));
 		Optional<Lookup> activeLookup = lookupService.findById("bb");
-		assertTrue("Got active entity with findById method", activeLookup.isPresent());
+		assertTrue(activeLookup.isPresent(), "Got active entity with findById method");
 
 		lookupService.softDelete(activeLookup.get());
 		Optional<Lookup> softDeletedLookup = lookupService.findById("bb");
-		assertTrue("Not able to get deleted entity with findById method", !softDeletedLookup.isPresent());
+		assertTrue(!softDeletedLookup.isPresent(), "Not able to get deleted entity with findById method");
 
 		softDeletedLookup = lookupService.findSoftDeletedById("bb");
-		assertTrue("Got deleted entity with findSoftDeletedById method", softDeletedLookup.isPresent());
+		assertTrue(softDeletedLookup.isPresent(), "Got deleted entity with findSoftDeletedById method");
 	}
 
 	@Test
@@ -307,32 +308,32 @@ public class OmniPersistenceTest {
 		Lookup lookup = new Lookup("cc");
 		lookupService.save(lookup);
 		Lookup persistedLookup = lookupService.getById("cc");
-		assertTrue("New entity was persisted with save method", persistedLookup != null);
+		assertTrue(persistedLookup != null, "New entity was persisted with save method");
 
 		persistedLookup.setActive(false);
 		lookupService.save(persistedLookup);
 		persistedLookup = lookupService.getSoftDeletedById("cc");
-		assertTrue("Entity was merged with save method", persistedLookup != null && !persistedLookup.isActive());
+		assertTrue(persistedLookup != null && !persistedLookup.isActive(), "Entity was merged with save method");
 
 		persistedLookup.setActive(true);
 		lookupService.update(persistedLookup);
 		persistedLookup = lookupService.getById("cc");
-		assertTrue("Entity was merged with update method", persistedLookup != null && persistedLookup.isActive());
+		assertTrue(persistedLookup != null && persistedLookup.isActive(), "Entity was merged with update method");
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testPersistExistingLookup() {
 		Lookup lookup = new Lookup("dd");
 		lookupService.save(lookup);
 		Lookup persistedLookup = lookupService.getById("dd");
 		persistedLookup.setActive(false);
-		lookupService.persist(lookup);
+		assertThrows(IllegalEntityStateException.class, () -> lookupService.persist(lookup));
 	}
 
-	@Test(expected = IllegalEntityStateException.class)
+	@Test
 	public void testUpdateNewLookup() {
 		Lookup lookup = new Lookup("ee");
-		lookupService.update(lookup);
+		assertThrows(IllegalEntityStateException.class, () -> lookupService.update(lookup));
 	}
 
 
@@ -345,16 +346,16 @@ public class OmniPersistenceTest {
 		}
 
 		Product product = productService.getByIdWithUserRoles(1L);
-		assertEquals("Product status for product 1 was persisted", ProductStatus.IN_STOCK, product.getProductStatus());
-		assertEquals("Product status id for product 1 was persisted", ProductStatus.IN_STOCK.getId(), productService.getRawProductStatus(product.getId()));
-		assertTrue("User roles for product 1 were persisted", product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER));
-		assertTrue("User roles code for product 1 were persisted", productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()));
+		assertEquals(ProductStatus.IN_STOCK, product.getProductStatus(), "Product status for product 1 was persisted");
+		assertEquals(ProductStatus.IN_STOCK.getId(), productService.getRawProductStatus(product.getId()), "Product status id for product 1 was persisted");
+		assertTrue(product.getUserRoles().size() == 1 && product.getUserRoles().contains(UserRole.USER), "User roles for product 1 were persisted");
+		assertTrue(productService.getRawUserRoles(product.getId()).contains(UserRole.USER.getCode()), "User roles code for product 1 were persisted");
 
 		product = productService.getByIdWithUserRoles(2L);
-		assertEquals("Product status for product 2 was persisted", ProductStatus.DISCONTINUED, product.getProductStatus());
-		assertEquals("Product status id for product 2 was persisted", ProductStatus.DISCONTINUED.getId(), productService.getRawProductStatus(product.getId()));
-		assertTrue("User roles for product 2 were persisted", product.getUserRoles().size() == 2 && product.getUserRoles().containsAll(asList(UserRole.EMPLOYEE, UserRole.MANAGER)));
-		assertTrue("User roles code for product 2 were persisted", productService.getRawUserRoles(product.getId()).containsAll(asList(UserRole.EMPLOYEE.getCode(), UserRole.MANAGER.getCode())));
+		assertEquals(ProductStatus.DISCONTINUED, product.getProductStatus(), "Product status for product 2 was persisted");
+		assertEquals(ProductStatus.DISCONTINUED.getId(), productService.getRawProductStatus(product.getId()), "Product status id for product 2 was persisted");
+		assertTrue(product.getUserRoles().size() == 2 && product.getUserRoles().containsAll(asList(UserRole.EMPLOYEE, UserRole.MANAGER)), "User roles for product 2 were persisted");
+		assertTrue(productService.getRawUserRoles(product.getId()).containsAll(asList(UserRole.EMPLOYEE.getCode(), UserRole.MANAGER.getCode())), "User roles code for product 2 were persisted");
 	}
 
 	@Test
@@ -365,63 +366,63 @@ public class OmniPersistenceTest {
 
 		// Test hard delete id enum
 		List<Object> hardDeleteIdEnumResultList = enumEntityService.getHardDeleteIdEnumTable();
-		assertTrue("Hard delete id enum table size = 3", hardDeleteIdEnumResultList.size() == 3);
-		assertTrue("Hard delete id enum values size = 3", asList(HardDeleteIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(hardDeleteIdEnumResultList.size() == 3, "Hard delete id enum table size = 3");
+		assertTrue(asList(HardDeleteIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Hard delete id enum values size = 3");
 		testEnumToTableCorrespondence(HardDeleteIdEnum.class, hardDeleteIdEnumResultList, false, true, false);
 
 		// Test hard delete id table
 		List<Object> hardDeleteIdTableResultList = enumEntityService.getHardDeleteIdTableTable();
-		assertTrue("Hard delete id table table size = 2", hardDeleteIdTableResultList.size() == 2);
-		assertTrue("Hard delete id table values size = 2", asList(HardDeleteIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(hardDeleteIdTableResultList.size() == 2, "Hard delete id table table size = 2");
+		assertTrue(asList(HardDeleteIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Hard delete id table values size = 2");
 		testEnumToTableCorrespondence(HardDeleteIdTable.class, hardDeleteIdTableResultList, false, true, false);
 
 		// Test soft delete id enum
 		List<Object> softDeleteIdEnumResultList = enumEntityService.getSoftDeleteIdEnumTable();
-		assertTrue("Soft delete id enum table size = 3", softDeleteIdEnumResultList.size() == 3);
-		assertTrue("Soft delete id enum values size = 3", asList(SoftDeleteIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(softDeleteIdEnumResultList.size() == 3, "Soft delete id enum table size = 3");
+		assertTrue(asList(SoftDeleteIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Soft delete id enum values size = 3");
 		testEnumToTableCorrespondence(SoftDeleteIdEnum.class, softDeleteIdEnumResultList, false, true, false);
 		List<Object> softDeleteIdEnumHistoryResultList = enumEntityService.getSoftDeleteIdEnumHistoryTable();
-		assertTrue("Soft delete id enum history table size = 1", softDeleteIdEnumHistoryResultList.size() == 1);
+		assertTrue(softDeleteIdEnumHistoryResultList.size() == 1, "Soft delete id enum history table size = 1");
 		testEnumToTableCorrespondence(SoftDeleteIdEnum.class, softDeleteIdEnumHistoryResultList, false, true, true);
 
 		// Test soft delete id table
 		List<Object> softDeleteIdTableResultList = enumEntityService.getSoftDeleteIdTableTable();
-		assertTrue("Soft delete id table table size = 2", softDeleteIdTableResultList.size() == 2);
-		assertTrue("Soft delete id table values size = 2", asList(SoftDeleteIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(softDeleteIdTableResultList.size() == 2, "Soft delete id table table size = 2");
+		assertTrue(asList(SoftDeleteIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Soft delete id table values size = 2");
 		testEnumToTableCorrespondence(SoftDeleteIdTable.class, softDeleteIdTableResultList, false, true, false);
 		List<Object> softDeleteIdTableHistoryResultList = enumEntityService.getSoftDeleteIdTableHistoryTable();
-		assertTrue("Soft delete id table history table size = 2", softDeleteIdTableHistoryResultList.size() == 2);
+		assertTrue(softDeleteIdTableHistoryResultList.size() == 2, "Soft delete id table history table size = 2");
 		testEnumToTableCorrespondence(SoftDeleteIdTable.class, softDeleteIdTableHistoryResultList, false, true, true);
 
 		// Test hard delete code enum
 		List<Object> hardDeleteCodeEnumResultList = enumEntityService.getHardDeleteCodeEnumTable();
-		assertTrue("Hard delete code enum table size = 3", hardDeleteCodeEnumResultList.size() == 3);
-		assertTrue("Hard delete code enum values size = 3", asList(HardDeleteCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(hardDeleteCodeEnumResultList.size() == 3, "Hard delete code enum table size = 3");
+		assertTrue(asList(HardDeleteCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Hard delete code enum values size = 3");
 		testEnumToTableCorrespondence(HardDeleteCodeEnum.class, hardDeleteCodeEnumResultList, false, false, false);
 
 		// Test hard delete code table
 		List<Object> hardDeleteCodeTableResultList = enumEntityService.getHardDeleteCodeTableTable();
-		assertTrue("Hard delete code table table size = 2", hardDeleteCodeTableResultList.size() == 2);
-		assertTrue("Hard delete code table values size = 2", asList(HardDeleteCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(hardDeleteCodeTableResultList.size() == 2, "Hard delete code table table size = 2");
+		assertTrue(asList(HardDeleteCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Hard delete code table values size = 2");
 		testEnumToTableCorrespondence(HardDeleteCodeTable.class, hardDeleteCodeTableResultList, false, false, false);
 
 		// Test soft delete code enum
 		List<Object> softDeleteCodeEnumResultList = enumEntityService.getSoftDeleteCodeEnumTable();
-		assertTrue("Soft delete code enum table size = 3", softDeleteCodeEnumResultList.size() == 3);
-		assertTrue("Soft delete code enum values size = 3", asList(SoftDeleteCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(softDeleteCodeEnumResultList.size() == 3, "Soft delete code enum table size = 3");
+		assertTrue(asList(SoftDeleteCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Soft delete code enum values size = 3");
 		testEnumToTableCorrespondence(SoftDeleteCodeEnum.class, softDeleteCodeEnumResultList, false, false, false);
 		List<Object> softDeleteCodeEnumHistoryResultList = enumEntityService.getSoftDeleteCodeEnumHistoryTable();
-		assertTrue("Soft delete code enum history table size = 2", softDeleteCodeEnumHistoryResultList.size() == 2);
+		assertTrue(softDeleteCodeEnumHistoryResultList.size() == 2, "Soft delete code enum history table size = 2");
 		testEnumToTableCorrespondence(SoftDeleteCodeEnum.class, softDeleteCodeEnumHistoryResultList, false, false,
 				true);
 
 		// Test soft delete code table
 		List<Object> softDeleteCodeTableResultList = enumEntityService.getSoftDeleteCodeTableTable();
-		assertTrue("Soft delete code table table size = 2", softDeleteCodeTableResultList.size() == 2);
-		assertTrue("Soft delete code table values size = 2", asList(SoftDeleteCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(softDeleteCodeTableResultList.size() == 2, "Soft delete code table table size = 2");
+		assertTrue(asList(SoftDeleteCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Soft delete code table values size = 2");
 		testEnumToTableCorrespondence(SoftDeleteCodeTable.class, softDeleteCodeTableResultList, false, false, false);
 		List<Object> softDeleteCodeTableHistoryResultList = enumEntityService.getSoftDeleteCodeTableHistoryTable();
-		assertTrue("Soft delete code table history table size = 3", softDeleteCodeTableHistoryResultList.size() == 3);
+		assertTrue(softDeleteCodeTableHistoryResultList.size() == 3, "Soft delete code table history table size = 3");
 		testEnumToTableCorrespondence(SoftDeleteCodeTable.class, softDeleteCodeTableHistoryResultList, false, false,
 				true);
 	}
@@ -434,62 +435,62 @@ public class OmniPersistenceTest {
 
 		// Test hard delete only id enum
 		List<Object> hardDeleteOnlyIdEnumResultList = enumEntityService.getHardDeleteOnlyIdEnumTable();
-		assertTrue("Hard delete only id enum table size = 3", hardDeleteOnlyIdEnumResultList.size() == 3);
-		assertTrue("Hard delete only id enum values size = 3", asList(HardDeleteOnlyIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(hardDeleteOnlyIdEnumResultList.size() == 3, "Hard delete only id enum table size = 3");
+		assertTrue(asList(HardDeleteOnlyIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Hard delete only id enum values size = 3");
 		testEnumToTableCorrespondence(HardDeleteOnlyIdEnum.class, hardDeleteOnlyIdEnumResultList, true, true, false);
 
 		// Test hard delete only id table
 		List<Object> hardDeleteOnlyIdTableResultList = enumEntityService.getHardDeleteOnlyIdTableTable();
-		assertTrue("Hard delete only id table table size = 2", hardDeleteOnlyIdTableResultList.size() == 2);
-		assertTrue("Hard delete only id table values size = 2", asList(HardDeleteOnlyIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(hardDeleteOnlyIdTableResultList.size() == 2, "Hard delete only id table table size = 2");
+		assertTrue(asList(HardDeleteOnlyIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Hard delete only id table values size = 2");
 		testEnumToTableCorrespondence(HardDeleteOnlyIdTable.class, hardDeleteOnlyIdTableResultList, true, true, false);
 
 		// Test soft delete only id enum
 		List<Object> softDeleteOnlyIdEnumResultList = enumEntityService.getSoftDeleteOnlyIdEnumTable();
-		assertTrue("Soft delete only id enum table size = 3", softDeleteOnlyIdEnumResultList.size() == 3);
-		assertTrue("Soft delete only id enum values size = 3", asList(SoftDeleteOnlyIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(softDeleteOnlyIdEnumResultList.size() == 3, "Soft delete only id enum table size = 3");
+		assertTrue(asList(SoftDeleteOnlyIdEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Soft delete only id enum values size = 3");
 		testEnumToTableCorrespondence(SoftDeleteOnlyIdEnum.class, softDeleteOnlyIdEnumResultList, true, true, false);
 		List<Object> softDeleteOnlyIdEnumHistoryResultList = enumEntityService.getSoftDeleteOnlyIdEnumHistoryTable();
-		assertTrue("Soft delete only id enum history table size = 1", softDeleteOnlyIdEnumHistoryResultList.size() == 1);
+		assertTrue(softDeleteOnlyIdEnumHistoryResultList.size() == 1, "Soft delete only id enum history table size = 1");
 		testEnumToTableCorrespondence(SoftDeleteOnlyIdEnum.class, softDeleteOnlyIdEnumHistoryResultList, true, true, true);
 
 		// Test soft delete only id table
 		List<Object> softDeleteOnlyIdTableResultList = enumEntityService.getSoftDeleteOnlyIdTableTable();
-		assertTrue("Soft delete only id table table size = 2", softDeleteOnlyIdTableResultList.size() == 2);
-		assertTrue("Soft delete only id table values size = 2", asList(SoftDeleteOnlyIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(softDeleteOnlyIdTableResultList.size() == 2, "Soft delete only id table table size = 2");
+		assertTrue(asList(SoftDeleteOnlyIdTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Soft delete only id table values size = 2");
 		testEnumToTableCorrespondence(SoftDeleteOnlyIdTable.class, softDeleteOnlyIdTableResultList, true, true, false);
 		List<Object> softDeleteOnlyIdTableHistoryResultList = enumEntityService.getSoftDeleteOnlyIdTableHistoryTable();
-		assertTrue("Soft delete only id table history table size = 2", softDeleteOnlyIdTableHistoryResultList.size() == 2);
+		assertTrue(softDeleteOnlyIdTableHistoryResultList.size() == 2, "Soft delete only id table history table size = 2");
 		testEnumToTableCorrespondence(SoftDeleteOnlyIdTable.class, softDeleteOnlyIdTableHistoryResultList, true, true, true);
 
 		// Test hard delete only code enum
 		List<Object> hardDeleteOnlyCodeEnumResultList = enumEntityService.getHardDeleteOnlyCodeEnumTable();
-		assertTrue("Hard delete only code enum table size = 3", hardDeleteOnlyCodeEnumResultList.size() == 3);
-		assertTrue("Hard delete only code enum values size = 3", asList(HardDeleteOnlyCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(hardDeleteOnlyCodeEnumResultList.size() == 3, "Hard delete only code enum table size = 3");
+		assertTrue(asList(HardDeleteOnlyCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Hard delete only code enum values size = 3");
 		testEnumToTableCorrespondence(HardDeleteOnlyCodeEnum.class, hardDeleteOnlyCodeEnumResultList, true, false, false);
 
 		// Test hard delete only code table
 		List<Object> hardDeleteOnlyCodeTableResultList = enumEntityService.getHardDeleteOnlyCodeTableTable();
-		assertTrue("Hard delete only code table table size = 2", hardDeleteOnlyCodeTableResultList.size() == 2);
-		assertTrue("Hard delete only code table values size = 2", asList(HardDeleteOnlyCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(hardDeleteOnlyCodeTableResultList.size() == 2, "Hard delete only code table table size = 2");
+		assertTrue(asList(HardDeleteOnlyCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Hard delete only code table values size = 2");
 		testEnumToTableCorrespondence(HardDeleteOnlyCodeTable.class, hardDeleteOnlyCodeTableResultList, true, false, false);
 
 		// Test soft delete only code enum
 		List<Object> softDeleteOnlyCodeEnumResultList = enumEntityService.getSoftDeleteOnlyCodeEnumTable();
-		assertTrue("Soft delete only code enum table size = 3", softDeleteOnlyCodeEnumResultList.size() == 3);
-		assertTrue("Soft delete only code enum values size = 3", asList(SoftDeleteOnlyCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(softDeleteOnlyCodeEnumResultList.size() == 3, "Soft delete only code enum table size = 3");
+		assertTrue(asList(SoftDeleteOnlyCodeEnum.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Soft delete only code enum values size = 3");
 		testEnumToTableCorrespondence(SoftDeleteOnlyCodeEnum.class, softDeleteOnlyCodeEnumResultList, true, false, false);
 		List<Object> softDeleteOnlyCodeEnumHistoryResultList = enumEntityService.getSoftDeleteOnlyCodeEnumHistoryTable();
-		assertTrue("Soft delete only code enum history table size = 2", softDeleteOnlyCodeEnumHistoryResultList.size() == 2);
+		assertTrue(softDeleteOnlyCodeEnumHistoryResultList.size() == 2, "Soft delete only code enum history table size = 2");
 		testEnumToTableCorrespondence(SoftDeleteOnlyCodeEnum.class, softDeleteOnlyCodeEnumHistoryResultList, true, false, true);
 
 		// Test soft delete only code table
 		List<Object> softDeleteOnlyCodeTableResultList = enumEntityService.getSoftDeleteOnlyCodeTableTable();
-		assertTrue("Soft delete only code table table size = 2", softDeleteOnlyCodeTableResultList.size() == 2);
-		assertTrue("Soft delete only code table values size = 2", asList(SoftDeleteOnlyCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(softDeleteOnlyCodeTableResultList.size() == 2, "Soft delete only code table table size = 2");
+		assertTrue(asList(SoftDeleteOnlyCodeTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Soft delete only code table values size = 2");
 		testEnumToTableCorrespondence(SoftDeleteOnlyCodeTable.class, softDeleteOnlyCodeTableResultList, true, false, false);
 		List<Object> softDeleteOnlyCodeTableHistoryResultList = enumEntityService.getSoftDeleteOnlyCodeTableHistoryTable();
-		assertTrue("Soft delete only code table history table size = 3", softDeleteOnlyCodeTableHistoryResultList.size() == 3);
+		assertTrue(softDeleteOnlyCodeTableHistoryResultList.size() == 3, "Soft delete only code table history table size = 3");
 		testEnumToTableCorrespondence(SoftDeleteOnlyCodeTable.class, softDeleteOnlyCodeTableHistoryResultList, true, false, true);
 	}
 
@@ -501,18 +502,18 @@ public class OmniPersistenceTest {
 
 		// Test non-default enum table mappings
 		List<Object> idCodeEnumWithoutTableResultList = enumEntityService.getIdCodeEnumWithoutTableTable();
-		assertTrue("Non-default enum mapping table size = 3", idCodeEnumWithoutTableResultList.size() == 3);
-		assertTrue("Non-default enum values size = 3", asList(IdCodeEnumWithoutTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L);
+		assertTrue(idCodeEnumWithoutTableResultList.size() == 3, "Non-default enum mapping table size = 3");
+		assertTrue(asList(IdCodeEnumWithoutTable.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 3L, "Non-default enum values size = 3");
 		testEnumToTableCorrespondence(IdCodeEnumWithoutTable.class, idCodeEnumWithoutTableResultList, false, true, false);
 		List<Object> idCodeEnumWithoutTableHistoryResultList = enumEntityService.getIdCodeEnumWithoutTableHistoryTable();
-		assertTrue("Non-default enum mapping history table size = 0", idCodeEnumWithoutTableHistoryResultList.isEmpty());
+		assertTrue(idCodeEnumWithoutTableHistoryResultList.isEmpty(), "Non-default enum mapping history table size = 0");
 
 		List<Object> idCodeEnumTableNonDefaultResultList = enumEntityService.getIdCodeEnumTableNonDefaultTable();
-		assertTrue("Non-default table enum mapping table size = 2", idCodeEnumTableNonDefaultResultList.size() == 2);
-		assertTrue("Non-default table enum values size = 2", asList(IdCodeEnumTableNonDefault.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L);
+		assertTrue(idCodeEnumTableNonDefaultResultList.size() == 2, "Non-default table enum mapping table size = 2");
+		assertTrue(asList(IdCodeEnumTableNonDefault.class.getEnumConstants()).stream().filter(Objects::nonNull).count() == 2L, "Non-default table enum values size = 2");
 		testEnumToTableCorrespondence(IdCodeEnumTableNonDefault.class, idCodeEnumTableNonDefaultResultList, false, true, false);
 		List<Object> idCodeEnumTableNonDefaultHistoryResultList = enumEntityService.getIdCodeEnumTableNonDefaultHistoryTable();
-		assertTrue("Non-default table enum mapping history table size = 2", idCodeEnumTableNonDefaultHistoryResultList.size() == 2);
+		assertTrue(idCodeEnumTableNonDefaultHistoryResultList.size() == 2, "Non-default table enum mapping history table size = 2");
 		testEnumToTableCorrespondence(IdCodeEnumTableNonDefault.class, idCodeEnumTableNonDefaultHistoryResultList, false, true, true);
 	}
 
@@ -544,7 +545,7 @@ public class OmniPersistenceTest {
 		newEnumEntity.setIdCodeEnumTableNonDefault(IdCodeEnumTableNonDefault.valueOf("DEF"));
 
 		enumEntityService.persist(newEnumEntity);
-		assertEquals("New enum entity id", Long.valueOf(1L), newEnumEntity.getId());
+		assertEquals(Long.valueOf(1L), newEnumEntity.getId(), "New enum entity id");
 
 		// Test if a persisted entity equals a loaded one
 		EnumEntity persistedEnumEntity = enumEntityService.getById(1L);
@@ -567,7 +568,7 @@ public class OmniPersistenceTest {
 				&& newEnumEntity.getIdCodeEnumWithoutTable() == persistedEnumEntity.getIdCodeEnumWithoutTable()
 				&& newEnumEntity.getIdCodeEnumTableNonDefault() == persistedEnumEntity.getIdCodeEnumTableNonDefault();
 
-		assertTrue("Enum entity from the database equals persisted one", equality);
+		assertTrue(equality, "Enum entity from the database equals persisted one");
 	}
 
 	private void testEnumToTableCorrespondence(Class<? extends Enum<?>> enumClass, List<Object> tableResultList, boolean isOneValue, boolean isOrdinal, boolean isHistory) {
@@ -581,9 +582,9 @@ public class OmniPersistenceTest {
 						: ((id == enumConstant.ordinal() && enumConstant.name().equals(code)) ? 1 : 0);
 			}).sum();
 			if (isHistory) {
-				assertTrue("No matches found between enum constant and database table", number == 0);
+				assertTrue(number == 0, "No matches found between enum constant and database table");
 			} else {
-				assertTrue("Exactly one enum constant found and corresponds to the database table", number == 1);
+				assertTrue(number == 1, "Exactly one enum constant found and corresponds to the database table");
 			}
 		});
 	}
