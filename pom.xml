@@ -8,7 +8,7 @@
 
 	<groupId>org.omnifaces</groupId>
 	<artifactId>omnipersistence</artifactId>
-	<version>0.17.J1-SNAPSHOT</version>
+	<version>0.20.J1-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
 	<name>OmniPersistence</name>
@@ -119,14 +119,14 @@
 
 		<!-- Test dependencies.	-->
 		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<version>4.13.1</version>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>5.8.2</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.jboss.arquillian.junit</groupId>
-			<artifactId>arquillian-junit-container</artifactId>
+			<groupId>org.jboss.arquillian.junit5</groupId>
+			<artifactId>arquillian-junit5-container</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -144,7 +144,7 @@
 			<dependency>
 				<groupId>org.jboss.arquillian</groupId>
 				<artifactId>arquillian-bom</artifactId>
-				<version>1.6.0.Final</version>
+				<version>1.7.0.Alpha10</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
@@ -165,7 +165,7 @@
 			<plugin>
 				<groupId>com.mycila</groupId>
 				<artifactId>license-maven-plugin</artifactId>
-				<version>3.0</version>
+				<version>4.1</version>
 				<configuration>
 					<header>license.txt</header>
 					<excludes>
@@ -189,7 +189,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.2.0</version>
+				<version>3.2.2</version>
 				<executions>
 					<execution>
 						<goals>
@@ -230,7 +230,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
-				<version>3.2.0</version>
+				<version>3.4.0</version>
 				<configuration>
 					<javadocExecutable>${java.home}/bin/javadoc</javadocExecutable>
 					<javadocVersion>${javase.version}</javadocVersion>
@@ -255,7 +255,7 @@
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
                 <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.8</version>
+                <version>1.6.13</version>
                 <extensions>true</extensions>
                 <configuration>
                     <serverId>ossrh</serverId>
@@ -280,7 +280,7 @@
 									<pluginExecutionFilter>
 										<groupId>com.mycila</groupId>
 										<artifactId>license-maven-plugin</artifactId>
-										<versionRange>[3.0,)</versionRange>
+										<versionRange>[4.1,)</versionRange>
 										<goals>
 											<goal>format</goal>
 										</goals>
@@ -300,7 +300,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-dependency-plugin</artifactId>
-					<version>3.1.2</version>
+					<version>3.3.0</version>
 					<executions>
 						<execution>
 							<phase>process-test-classes</phase>
@@ -516,7 +516,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-gpg-plugin</artifactId>
-						<version>1.6</version>
+						<version>3.0.1</version>
 						<executions>
 							<execution>
 								<id>sign-artifacts</id>
