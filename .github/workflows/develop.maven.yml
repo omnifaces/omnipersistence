@@ -13,7 +13,11 @@
 
 name: develop
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ jakartified ]
+  pull_request:
+    branches: [ jakartified ]
 
 jobs:
   test:
