@@ -73,24 +73,11 @@
 		<maven.source.excludeResources>true</maven.source.excludeResources>
 
 		<!-- Test versions. -->
-		<test.wildfly.version>22.0.0.Final</test.wildfly.version>
-		<test.payara.version>5.201</test.payara.version> <!-- TODO: JEE9 compatible version -->
-		<test.glassfish.version>6.0.0</test.glassfish.version> <!-- TODO: Java11 compatible version -->
+		<test.wildfly.version>26.1.1.Final</test.wildfly.version> <!-- https://search.maven.org/artifact/org.wildfly.bom/wildfly -->
+		<test.payara.version>6.2022.1.Alpha2</test.payara.version> <!-- https://search.maven.org/artifact/fish.payara.distributions/payara-web -->
+		<test.glassfish.version>6.2.5</test.glassfish.version> <!-- https://search.maven.org/artifact/org.glassfish.main.distributions/glassfish -->
 		<test.h2.version>1.4.200</test.h2.version>
 	</properties>
-
-	<repositories>
-		<repository>
-			<id>jakarta-staging</id>
-			<snapshots />
-			<url>https://jakarta.oss.sonatype.org/content/repositories/staging</url> <!-- Currently only used for jersey-bom:pom:3.0.0-M4 which is required by GlassFish 6.0.0 -->
-		</repository>
-		<repository>
-			<id>redhat-all</id>
-			<snapshots />
-			<url>https://maven.repository.redhat.com/techpreview/all</url> <!-- Currently only used for org.picketbox:picketbox:jar:5.0.3.Final-redhat-00006 which is required by WildFly 22.0.0.Beta1 -->
-		</repository>
-	</repositories>
 
 	<dependencies>
 
@@ -113,7 +100,7 @@
 		<dependency>
 			<groupId>org.hibernate.orm</groupId>
 			<artifactId>hibernate-jpamodelgen</artifactId>
-			<version>6.0.0.Alpha6</version>
+			<version>6.0.2.Final</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -387,9 +374,9 @@
 			<id>payara-eclipselink</id>
 			<dependencies>
 				<dependency>
-					<groupId>org.jboss.arquillian.container</groupId>
-					<artifactId>arquillian-glassfish-managed-3.1</artifactId>
-					<version>1.0.2</version>
+					<groupId>org.omnifaces.arquillian</groupId>
+					<artifactId>arquillian-glassfish-server-managed</artifactId>
+					<version>1.1</version>
 					<scope>test</scope>
 				</dependency>
 			</dependencies>
@@ -435,9 +422,9 @@
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
-							<environmentVariables>
-								<GLASSFISH_HOME>${project.build.directory}/payara5</GLASSFISH_HOME>
-							</environmentVariables>
+							<systemPropertyVariables>
+								<glassfish.home>${project.build.directory}/payara6</glassfish.home>
+							</systemPropertyVariables>
 						</configuration>
 					</plugin>
 				</plugins>
@@ -449,9 +436,9 @@
 			<id>glassfish-eclipselink</id>
 			<dependencies>
 				<dependency>
-					<groupId>org.jboss.arquillian.container</groupId>
-					<artifactId>arquillian-glassfish-managed-6</artifactId>
-					<version>1.0.0.Alpha1</version>
+					<groupId>org.omnifaces.arquillian</groupId>
+					<artifactId>arquillian-glassfish-server-managed</artifactId>
+					<version>1.1</version>
 					<scope>test</scope>
 				</dependency>
 			</dependencies>
@@ -497,9 +484,9 @@
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
-							<environmentVariables>
-								<GLASSFISH_HOME>${project.build.directory}/glassfish6</GLASSFISH_HOME>
-							</environmentVariables>
+							<systemPropertyVariables>
+								<glassfish.home>${project.build.directory}/glassfish6</glassfish.home>
+							</systemPropertyVariables>
 						</configuration>
 					</plugin>
 				</plugins>
