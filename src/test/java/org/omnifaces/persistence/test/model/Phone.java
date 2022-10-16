@@ -21,6 +21,7 @@ import javax.persistence.ManyToOne;
 import javax.persistence.Transient;
 import javax.validation.constraints.NotNull;
 
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 @Entity
@@ -67,6 +68,26 @@ public class Phone extends GeneratedIdEntity<Long> {
 	@Transient
 	public String getEmail() {
 		return getOwner().getEmail();
+	}
+
+	@Override
+	public int hashCode() {
+		return hashCode(Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public boolean equals(Object other) {
+		return equals(other, Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public int compareTo(BaseEntity<Long> other) {
+		return compareTo(other, Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public String toString() {
+		return toString(Phone::getType, Phone::getNumber);
 	}
 
 }

@@ -12,8 +12,16 @@
  */
 package org.omnifaces.persistence.model;
 
+import static java.util.Arrays.stream;
+import static java.util.Comparator.comparing;
+import static java.util.Comparator.naturalOrder;
+import static java.util.Comparator.nullsLast;
+import static java.util.Objects.requireNonNullElseGet;
+import static java.util.stream.Collectors.joining;
+
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.function.Function;
 
 import javax.persistence.EntityListeners;
 import javax.persistence.MappedSuperclass;
@@ -49,9 +57,20 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
 	@Override
     public int hashCode() {
-        return (getId() != null)
-        	? Objects.hash(getId())
-        	: super.hashCode();
+        return hashCode(BaseEntity::getId);
+    }
+
+	/**
+	 * Subclasses can use this convenience method to override the {@link #hashCode()} based on given property getters.
+	 * @param <E> The generic base entity type.
+	 * @param getters The property getters to determine the {@link #hashCode()} for.
+	 * @return The {@link #hashCode()} of the given property getters.
+	 */
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> int hashCode(Function<E, Object>... getters) {
+        Object[] values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
+        return values.length > 0 ? Objects.hash(values) : super.hashCode();
     }
 
 	/**
@@ -59,9 +78,22 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
 	@Override
     public boolean equals(Object other) {
-        return (getId() != null && getClass().isInstance(other) && other.getClass().isInstance(this))
-            ? getId().equals(((BaseEntity<?>) other).getId())
-            : (other == this);
+        return equals(other, BaseEntity::getId);
+    }
+
+	/**
+	 * Subclasses can use this convenience method to override the {@link #equals(Object)} based on given property getters.
+	 * @param <E> The generic base entity type.
+	 * @param other The reference object with which to compare.
+	 * @param getters The property getters to determine the {@link #equals(Object)} for.
+	 * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
+	 */
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> boolean equals(Object other, Function<E, Object>... getters) {
+        return other == this || (getClass().isInstance(other) && other.getClass().isInstance(this) && stream(getters)
+        	.map(getter -> Objects.equals(getter.apply((E) this), getter.apply((E) other)))
+        	.allMatch(b -> b));
     }
 
 	/**
@@ -69,19 +101,50 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
 	@Override
 	public int compareTo(BaseEntity<I> other) {
-		return (other == null)
-			? -1
-			: (getId() == null)
-				? (other.getId() == null ? 0 : 1)
-				: getId().compareTo(other.getId());
+        return compareTo(other, BaseEntity::getId);
 	}
+
+	/**
+	 * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
+	 * @param <E> The generic base entity type.
+	 * @param other The object to be compared.
+	 * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
+	 * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
+	 */
+	@SafeVarargs
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+    protected final <E extends BaseEntity<I>> int compareTo(BaseEntity<I> other, Function<E, Object>... getters) {
+		return other == null ? -1 : stream(getters)
+			.reduce(
+				comparing((Function) getters[0], nullsLast(naturalOrder())),
+				(comparator, getter) -> comparator.thenComparing(getter, nullsLast(naturalOrder())),
+				(l, r) -> l
+			).compare(this, other);
+    }
 
 	/**
 	 * The default format is <code>ClassName[{id}]</code> where <code>{id}</code> defaults to <code>@hashcode</code> when null.
 	 */
-	@Override
-	public String toString() {
-		return String.format("%s[%s]", getClass().getSimpleName(), (getId() != null) ? getId() : ("@" + hashCode()));
-	}
+    @Override
+    public String toString() {
+        return toString(e -> requireNonNullElseGet(e.getId(), () -> ("@" + e.hashCode())));
+    }
+
+    /**
+	 * Subclasses can use this convenience method to override the {@link #toString()} based on given property getters.
+	 * @param <E> The generic base entity type.
+	 * @param getters The property getters to determine the {@link #toString()} for.
+     * @return The {@link Class#getSimpleName()}, then followed by {@code [}, then a comma separated string of the
+     * results of all given getters, and finally followed by {@code ]}.
+     */
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> String toString(Function<E, Object>... getters) {
+        return new StringBuilder(getClass().getSimpleName())
+        	.append("[")
+        	.append(stream(getters).map(getter -> Objects.toString(getter.apply((E) this))).collect(joining(", ")))
+        	.append("]")
+        	.toString();
+    }
 
 }
