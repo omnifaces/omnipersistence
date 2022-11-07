@@ -82,10 +82,10 @@ public class TestBaseEntityIdentity {
 	@Test
 	public void testCustomHashCode() {
 		List<Phone> list1 = createPhones();
-		assertEquals("1,2,3,4,5", getIds(list1));
+		assertEquals("1,2,3,null,4,5", getIds(list1));
 
 		List<Phone> list2 = new ArrayList<>(new HashSet<>(list1));
-		assertEquals("1,2,4,5", getSortedIds(list2));
+		assertEquals("1,2,4,5,null", getSortedIds(list2));
 	}
 
 	@Test
@@ -117,9 +117,10 @@ public class TestBaseEntityIdentity {
 	@Test
 	public void testCustomCompareTo() {
 		List<Phone> list1 = createPhones();
-		list1.sort(Comparator.naturalOrder());
-		assertEquals("2,1,3,5,4", getIds(list1));
+		list1.sort(Comparator.nullsLast(Comparator.naturalOrder()));
+		assertEquals("2,1,3,5,4,null", getIds(list1));
 
+		list1.remove(null);
 		SortedSet<Phone> set1 = new TreeSet<>(list1);
 		assertEquals("2,1,5,4", getIds(set1));
 
@@ -128,11 +129,12 @@ public class TestBaseEntityIdentity {
 
 		List<Phone> list2 = createPhones();
 		list2.add(2, new Phone());
-		assertEquals("1,2,-1,3,4,5", getIds(list2));
+		assertEquals("1,2,-1,3,null,4,5", getIds(list2));
 
 		list2.add(new Phone());
-		assertEquals("1,2,-1,3,4,5,-1", getIds(list2));
+		assertEquals("1,2,-1,3,null,4,5,-1", getIds(list2));
 
+		list2.remove(null);
 		SortedSet<Phone> set2 = new TreeSet<>(list2);
 		assertEquals("2,1,5,4,-1", getIds(set2));
 
@@ -143,7 +145,7 @@ public class TestBaseEntityIdentity {
 	@Test
 	public void testCustomToString() {
 		List<Phone> list = createPhones();
-		assertEquals("[Phone[HOME, 123], Phone[MOBILE, 123], Phone[HOME, 123], Phone[WORK, 123], Phone[HOME, 456]]", list.toString());
+		assertEquals("[Phone[HOME, 123], Phone[MOBILE, 123], Phone[HOME, 123], null, Phone[WORK, 123], Phone[HOME, 456]]", list.toString());
 	}
 
 	private static List<Person> createPersons() {
@@ -175,6 +177,8 @@ public class TestBaseEntityIdentity {
 		phone3.setNumber("123");
 		phones.add(phone3);
 
+		phones.add(null);
+
 		Phone phone4 = new Phone();
 		phone4.setId(4L);
 		phone4.setType(Type.WORK);
@@ -191,11 +195,15 @@ public class TestBaseEntityIdentity {
 	}
 
 	private static <E extends BaseEntity<Long>> String getIds(Collection<E> entities) {
-		return entities.stream().map(e -> Objects.toString(e.getId(), "-1")).collect(joining(","));
+		return entities.stream().map(TestBaseEntityIdentity::getId).collect(joining(","));
 	}
 
 	private static <E extends BaseEntity<Long>> String getSortedIds(List<E> entities) {
-		return entities.stream().map(e -> Objects.toString(e.getId(), "-1")).sorted().collect(joining(","));
+		return entities.stream().map(TestBaseEntityIdentity::getId).sorted().collect(joining(","));
+	}
+
+	private static String getId(BaseEntity<?> entity) {
+		return entity == null ? "null" : Objects.toString(entity.getId(), "-1");
 	}
 
 }

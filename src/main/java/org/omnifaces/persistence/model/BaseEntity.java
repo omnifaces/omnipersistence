@@ -114,7 +114,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	@SafeVarargs
 	@SuppressWarnings({ "unchecked", "rawtypes" })
     protected final <E extends BaseEntity<I>> int compareTo(BaseEntity<I> other, Function<E, Object>... getters) {
-		return other == null ? -1 : stream(getters)
+		return stream(getters)
 			.reduce(
 				comparing((Function) getters[0], nullsLast(naturalOrder())),
 				(comparator, getter) -> comparator.thenComparing(getter, nullsLast(naturalOrder())),
