@@ -17,6 +17,11 @@ import static org.omnifaces.utils.annotation.Annotations.createAnnotationInstanc
 import java.lang.annotation.Annotation;
 import java.util.Optional;
 
+import org.omnifaces.persistence.event.Created;
+import org.omnifaces.persistence.event.Deleted;
+import org.omnifaces.persistence.event.Updated;
+import org.omnifaces.persistence.model.BaseEntity;
+
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
@@ -24,11 +29,6 @@ import jakarta.inject.Inject;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.PostRemove;
 import jakarta.persistence.PostUpdate;
-
-import org.omnifaces.persistence.event.Created;
-import org.omnifaces.persistence.event.Deleted;
-import org.omnifaces.persistence.event.Updated;
-import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
@@ -98,7 +98,10 @@ public class BaseEntityListener {
 	}
 
 	private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
-		getOptionalBeanManager().ifPresent(beanManager -> beanManager.fireEvent(entity, createAnnotationInstance(eventType)));
+		getOptionalBeanManager().ifPresent(beanManager ->
+		    beanManager.getEvent()
+		               .select(createAnnotationInstance(eventType))
+		               .fire(entity));
 	}
 
 }
