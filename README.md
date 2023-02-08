@@ -7,4 +7,4 @@
 
 Utilities for Jakarta Persistence, JDBC and DataSources.
 
-Jakarta Faces based integration tests using [`BaseEntityService`](https://github.com/omnifaces/omnipersistence/blob/develop/src/main/java/org/omnifaces/persistence/service/BaseEntityService.java) can be found in [OptimusFaces](https://github.com/omnifaces/optimusfaces) project.
+Jakarta Faces based integration tests using [`BaseEntityService`](https://github.com/omnifaces/omnipersistence/blob/jakartified/src/main/java/org/omnifaces/persistence/service/BaseEntityService.java) can be found in [OptimusFaces](https://github.com/omnifaces/optimusfaces) project.
