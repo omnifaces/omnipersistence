@@ -63,6 +63,9 @@ public enum Provider {
 
 		@Override
 		public boolean isAggregation(Expression<?> expression) {
+		    if (HIBERNATE_6_0_0_AGGREGATE_FUNCTION.isPresent()) {
+                return HIBERNATE_6_0_0_AGGREGATE_FUNCTION.get().isInstance(expression);
+		    }
 			return (HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation"))
 				|| (HIBERNATE_COMPARISON_PREDICATE.get().isInstance(expression) && (isAggregation(invokeMethod(expression, "getLeftHandOperand")) || isAggregation(invokeMethod(expression, "getRightHandOperand"))));
 		}
@@ -152,6 +155,7 @@ public enum Provider {
 	private static final Optional<Class<Object>> HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
 	private static final Optional<Class<Object>> HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.query.criteria.internal.expression.function.BasicFunctionExpression");
 	private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = Stream.of(HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_3_5_0_BASIC_FUNCTION_EXPRESSION).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
+    private static final Optional<Class<Object>> HIBERNATE_6_0_0_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
 	private static final Optional<Class<Object>> HIBERNATE_3_5_0_COMPARISON_PREDICATE = findClass("org.hibernate.ejb.criteria.predicate.ComparisonPredicate");
 	private static final Optional<Class<Object>> HIBERNATE_4_3_0_COMPARISON_PREDICATE = findClass("org.hibernate.jpa.criteria.predicate.ComparisonPredicate");
 	private static final Optional<Class<Object>> HIBERNATE_5_2_0_COMPARISON_PREDICATE = findClass("org.hibernate.query.criteria.internal.predicate.ComparisonPredicate");
