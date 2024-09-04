@@ -17,7 +17,6 @@ import static java.lang.Math.abs;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.annotation.PostConstruct;
@@ -39,6 +38,7 @@ public class StartupService {
 
 	public static final int TOTAL_RECORDS = 200;
 	public static final int ROWS_PER_PAGE = 10;
+    public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
 
 	@Inject
 	private TextService textService;
@@ -57,18 +57,18 @@ public class StartupService {
 	}
 
 	private void createTestPersons() {
-		Gender[] genders = Gender.values();
-		Phone.Type[] phoneTypes = Phone.Type.values();
-		List<Group> groups = Arrays.asList(Group.values());
-		ThreadLocalRandom random = ThreadLocalRandom.current();
+		var genders = Gender.values();
+		var phoneTypes = Phone.Type.values();
+		var groups = Arrays.asList(Group.values());
+		var random = ThreadLocalRandom.current();
 
-		for (int i = 0; i < TOTAL_RECORDS; i++) {
-			Person person = new Person();
+		for (var i = 0; i < TOTAL_RECORDS; i++) {
+			var person = new Person();
 			person.setEmail("name" + i + "@example.com");
 			person.setGender(genders[random.nextInt(genders.length)]);
 			person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
 
-			Address address = new Address();
+			var address = new Address();
 			address.setStreet("Street" + i);
 			address.setHouseNumber("" + i);
 			address.setPostcode("Postcode" + i);
@@ -76,9 +76,9 @@ public class StartupService {
 			address.setCountry("Country" + i);
 			person.setAddress(address);
 
-			int totalPhones = random.nextInt(1, 6);
-			for (int j = 0; j < totalPhones; j++) {
-				Phone phone = new Phone();
+			var totalPhones = i == 0 ? TOTAL_PHONES_PER_PERSON_0 : random.nextInt(1, 6);
+			for (var j = 0; j < totalPhones; j++) {
+				var phone = new Phone();
 				phone.setType(phoneTypes[random.nextInt(phoneTypes.length)]);
 				phone.setNumber("0" + abs(random.nextInt()));
 				phone.setOwner(person);

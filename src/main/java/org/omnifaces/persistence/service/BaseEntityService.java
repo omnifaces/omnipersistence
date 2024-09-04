@@ -17,7 +17,6 @@ import static jakarta.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
@@ -86,7 +85,6 @@ import jakarta.persistence.CacheRetrieveMode;
 import jakarta.persistence.CacheStoreMode;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EntityGraph;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.GeneratedValue;
@@ -161,7 +159,7 @@ import org.omnifaces.utils.reflect.Getter;
  * <li>{@link VersionedEntity}
  * </ul>
  *
- * <h3>Logging</h3>
+ * <h2>Logging</h2>
  * <p>
  * {@link BaseEntityService} uses JULI {@link Logger} for logging.
  * <ul>
@@ -241,8 +239,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * The <code>I</code> and <code>E</code> will be resolved to a concrete <code>Class&lt;?&gt;</code>.
 	 */
 	@SuppressWarnings("unchecked")
-	public BaseEntityService() {
-		Entry<Class<?>, Class<?>> typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
+	protected BaseEntityService() {
+		var typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
 		identifierType = (Class<I>) typeMapping.getKey();
 		entityType = (Class<E>) typeMapping.getValue();
 		generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
@@ -267,54 +265,54 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	@SuppressWarnings("rawtypes")
 	private static Entry<Class<?>, Class<?>> computeTypeMapping(Class<? extends BaseEntityService> subclass) {
-		List<Class<?>> actualTypeArguments = getActualTypeArguments(subclass, BaseEntityService.class);
-		Class<?> identifierType = actualTypeArguments.get(0);
-		Class<?> entityType = actualTypeArguments.get(1);
+	    var actualTypeArguments = getActualTypeArguments(subclass, BaseEntityService.class);
+	    var identifierType = actualTypeArguments.get(0);
+	    var entityType = actualTypeArguments.get(1);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, subclass, identifierType, entityType));
 		return new SimpleEntry<>(identifierType, entityType);
 	}
 
 	private static boolean computeGeneratedIdMapping(Class<?> entityType) {
-		boolean generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || !listAnnotatedFields(entityType, Id.class, GeneratedValue.class).isEmpty();
+		var generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || !listAnnotatedFields(entityType, Id.class, GeneratedValue.class).isEmpty();
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_GENERATED_ID_MAPPING, entityType, generatedId));
 		return generatedId;
 	}
 
 	private static SoftDeleteData computeSoftDeleteMapping(Class<?> entityType) {
-		SoftDeleteData softDeleteData = new SoftDeleteData(entityType);
+		var softDeleteData = new SoftDeleteData(entityType);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING, entityType, softDeleteData));
 		return softDeleteData;
 	}
 
 	private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isElementCollection);
+		var elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isElementCollection);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
 		return elementCollectionMapping;
 	}
 
 	private Set<String> computeManyOrOneToOneMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isManyOrOneToOne);
+		var manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isManyOrOneToOne);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, manyOrOneToOneMapping));
 		return manyOrOneToOneMapping;
 	}
 
 	private Set<String> computeOneToManyMapping(Class<? extends BaseEntity<?>> entityType) {
-		Set<String> oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isOneToMany);
+		var oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isOneToMany);
 		logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, entityType, oneToManyMapping));
 		return oneToManyMapping;
 	}
 
 	private Set<String> computeEntityMapping(Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate) {
-		Set<String> entityMapping = new HashSet<>(2);
-		EntityType<?> entity = getEntityManager().getMetamodel().entity(type);
+	    var entityMapping = new HashSet<String>(2);
+	    var entity = getEntityManager().getMetamodel().entity(type);
 
-		for (Attribute<?, ?> attribute : entity.getAttributes()) {
+		for (var attribute : entity.getAttributes()) {
 			if (attributePredicate.test(attribute)) {
 				entityMapping.add(basePath + attribute.getName());
 			}
 
-			if (attribute instanceof Bindable) {
-				Class<?> nestedType = ((Bindable<?>) attribute).getBindableJavaType();
+			if (attribute instanceof Bindable<?> bindable) {
+				Class<?> nestedType = bindable.getBindableJavaType();
 
 				if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
 					entityMapping.addAll(computeEntityMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
@@ -712,7 +710,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
 	protected E getById(I id, boolean includeSoftDeleted) {
-		E entity = getEntityManager().find(entityType, id);
+		var entity = getEntityManager().find(entityType, id);
 
 		if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
 			return null;
@@ -728,9 +726,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Found entity, or <code>null</code> if there is none.
 	 */
 	public E getByIdWithLoadGraph(I id, String entityGraphName) {
-		EntityGraph<?> entityGraph = entityManager.getEntityGraph(entityGraphName);
-
-		Map<String, Object> properties = new HashMap<>();
+		var entityGraph = entityManager.getEntityGraph(entityGraphName);
+		var properties = new HashMap<String, Object>();
 		properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
 		properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
 
@@ -745,7 +742,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	public E getSoftDeletedById(I id) {
 		softDeleteData.checkSoftDeletable();
-		E entity = getEntityManager().find(entityType, id);
+		var entity = getEntityManager().find(entityType, id);
 
 		if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
 			return null;
@@ -775,7 +772,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return emptyList();
 		}
 
-		String whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
+		var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
 		return list(select("")
 			+ whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (:ids)"
 			+ " ORDER BY e.id DESC", p -> p.put("ids", ids));
@@ -788,7 +785,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Whether entity with given entity exists.
 	 */
 	protected boolean exists(E entity) {
-		I id = getProvider().getIdentifier(entity);
+		var id = getProvider().getIdentifier(entity);
 		return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id")
 			.setParameter("id", id)
 			.getSingleResult().intValue() > 0;
@@ -913,28 +910,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private TypedQuery<E> createQuery(String jpql, Object... parameters) {
-		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
+		var query = getEntityManager().createQuery(jpql, entityType);
 		setPositionalParameters(query, parameters);
 		return query;
 	}
 
 	private TypedQuery<E> createQuery(String jpql, Consumer<Map<String, Object>> parameters) {
-		TypedQuery<E> query = getEntityManager().createQuery(jpql, entityType);
+	    var query = getEntityManager().createQuery(jpql, entityType);
 		setSuppliedParameters(query, parameters);
 		return query;
 	}
 
 	private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
-		CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
-		CriteriaQuery<E> criteriaQuery = criteriaBuilder.createQuery(entityType);
-		Root<E> root = buildRoot(criteriaQuery);
+		var criteriaBuilder = getEntityManager().getCriteriaBuilder();
+		var criteriaQuery = criteriaBuilder.createQuery(entityType);
+		var root = buildRoot(criteriaQuery);
 
 		queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
-		TypedQuery<E> query = getEntityManager().createQuery(criteriaQuery);
+		var query = getEntityManager().createQuery(criteriaQuery);
 
-		if (root instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<E>) root).runPostponedFetches(query);
+		if (root instanceof EclipseLinkRoot<?> eclipseLinkRoot) {
+		    eclipseLinkRoot.runPostponedFetches(query);
 		}
 
 		setSuppliedParameters(query, parameters);
@@ -1022,17 +1019,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
 	 */
 	protected E updateAndFlush(E entity) {
-		E updatedEntity = update(entity);
+		var updatedEntity = update(entity);
 		getEntityManager().flush();
 		return updatedEntity;
 	}
 
-	private void logConstraintViolations(Set<? extends ConstraintViolation<?>> constraintViolations) {
+	private static void logConstraintViolations(Set<? extends ConstraintViolation<?>> constraintViolations) {
 		constraintViolations.forEach(violation -> {
-			String constraintName = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
-			String beanName = violation.getRootBeanClass().getSimpleName();
-			String propertyName = violation.getPropertyPath().toString();
-			String violationMessage = violation.getMessage();
+			var constraintName = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
+			var beanName = violation.getRootBeanClass().getSimpleName();
+			var propertyName = violation.getPropertyPath().toString();
+			var violationMessage = violation.getMessage();
 			Object beanInstance = violation.getRootBean();
 			logger.severe(format(LOG_SEVERE_CONSTRAINT_VIOLATION, constraintName, beanName, propertyName, violationMessage, beanInstance));
 		});
@@ -1045,7 +1042,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @throws IllegalEntityStateException When at least one entity has no ID.
 	 */
 	public List<E> update(Iterable<E> entities) {
-		return stream(entities).map(this::update).collect(toList());
+		return stream(entities).map(this::update).toList();
 	}
 
 	/**
@@ -1103,13 +1100,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Saved entity.
 	 */
 	public E save(E entity) {
-		if ((generatedId && entity.getId() == null) || (!generatedId && !exists(entity))) {
+		if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
 			persist(entity);
 			return entity;
 		}
 		else {
-			E update = update(entity);
-			return update;
+			return update(entity);
 		}
 	}
 
@@ -1121,7 +1117,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 * @return Saved entity.
 	 */
 	protected E saveAndFlush(E entity) {
-		E savedEntity = save(entity);
+		var savedEntity = save(entity);
 		getEntityManager().flush();
 		return savedEntity;
 	}
@@ -1223,7 +1219,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new NullPointerException("Entity is null.");
 		}
 
-		I id = getProvider().getIdentifier(entity);
+		var id = getProvider().getIdentifier(entity);
 
 		if (id == null) {
 			throw new IllegalEntityStateException(entity, "Entity has no ID.");
@@ -1233,7 +1229,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return entity;
 		}
 
-		E managed = getEntityManager().find(getProvider().getEntityType(entity), id);
+		var managed = getEntityManager().find(getProvider().getEntityType(entity), id);
 
 		if (managed == null) {
 			throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
@@ -1258,14 +1254,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return null;
 		}
 
-		if (!(entity instanceof BaseEntity)) {
+		if (!(entity instanceof BaseEntity<?> baseEntity)) {
 			throw new IllegalArgumentException();
 		}
 
-		BaseEntity<I> baseEntity = (BaseEntity<I>) entity;
-		I id = getProvider().getIdentifier(baseEntity);
+		var id = getProvider().getIdentifier(baseEntity);
 
-		if (id == null || (entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity))) {
+		if (id == null || entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity)) {
 			return entity;
 		}
 
@@ -1287,7 +1282,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
 		}
 
-		E managed = manage(entity);
+		var managed = manage(entity);
 		getMetamodel(entity).getAttributes().stream().map(Attribute::getJavaMember).filter(Field.class::isInstance).forEach(field -> map(field, managed, entity));
 		// Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
 	}
@@ -1403,7 +1398,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
 	private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
 		if (isEmpty(getters)) {
-			for (PluralAttribute<?, ?, ?> a : getMetamodel().getPluralAttributes()) {
+			for (var a : getMetamodel().getPluralAttributes()) {
 				if (ofType.test(a.getCollectionType())) {
 					ofNullable(invokeGetter(entity, a.getName())).ifPresent(c -> invokeMethod(c, "size"));
 				}
@@ -1417,11 +1412,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-		E managed = getById(entity.getId());
+		var managed = getById(entity.getId());
 
-		for (Attribute<?, ?> a : getMetamodel().getSingularAttributes()) {
+		for (var a : getMetamodel().getSingularAttributes()) {
 			if (ofType.test(a.getJavaType())) {
-				String name = capitalize(a.getName());
+				var name = capitalize(a.getName());
 				invokeSetter(entity, name, invokeGetter(managed, name));
 			}
 		}
@@ -1635,10 +1630,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	 */
 	protected PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, String... fetchFields) {
 		return getPage(page, count, cacheable, entityType, (builder, query, root) -> {
-			for (String fetchField : fetchFields) {
+			for (var fetchField : fetchFields) {
 				FetchParent<?, ?> fetchParent = root;
 
-				for (String attribute : fetchField.split("\\.")) {
+				for (var attribute : fetchField.split("\\.")) {
 					fetchParent = fetchParent.fetch(attribute);
 				}
 			}
@@ -1730,10 +1725,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		try {
 			logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
-			PageBuilder<T> pageBuilder = new PageBuilder<>(page, cacheable, resultType, queryBuilder);
-			CriteriaBuilder criteriaBuilder = getEntityManager().getCriteriaBuilder();
+			var pageBuilder = new PageBuilder<>(page, cacheable, resultType, queryBuilder);
+			var criteriaBuilder = getEntityManager().getCriteriaBuilder();
 			TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
-			TypedQuery<Long> countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
+			var countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
 			PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery);
 			logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, resultList, resultList.getEstimatedTotalNumberOfResults()));
 			return resultList;
@@ -1747,84 +1742,68 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Query actions --------------------------------------------------------------------------------------------------
 
 	private <T extends E> TypedQuery<T> buildEntityQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
-		CriteriaQuery<T> entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
-		Root<E> entityQueryRoot = buildRoot(entityQuery);
-		PathResolver pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
+	    var entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
+		var entityQueryRoot = buildRoot(entityQuery);
+		var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
 		buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
-		Map<String, Object> parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
-		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
+		return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver));
 	}
 
 	private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
-		CriteriaQuery<Long> countQuery = criteriaBuilder.createQuery(Long.class);
-		Root<E> countQueryRoot = countQuery.from(entityType);
+	    var countQuery = criteriaBuilder.createQuery(Long.class);
+	    var countQueryRoot = countQuery.from(entityType);
 		countQuery.select(criteriaBuilder.count(countQueryRoot));
-		Map<String, Object> parameters = pageBuilder.shouldBuildCountSubquery() ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder) : emptyMap();
+        var parameters = pageBuilder.shouldBuildCountSubquery() ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder) : Collections.<String, Object>emptyMap();
 		return buildTypedQuery(pageBuilder, countQuery, null, parameters);
 	}
 
 	private <T extends E> Map<String, Object> buildCountSubquery(PageBuilder<T> pageBuilder, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder) {
-		Subquery<T> countSubquery = countQuery.subquery(pageBuilder.getResultType());
-		Root<E> countSubqueryRoot = buildRoot(countSubquery);
-		PathResolver subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
-		Map<String, Object> parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
+	    var countSubquery = countQuery.subquery(pageBuilder.getResultType());
+	    var countSubqueryRoot = buildRoot(countSubquery);
+		var subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
+		var parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
 
-		if (getProvider() == HIBERNATE) {
-			// SELECT COUNT(e) FROM E e WHERE e IN (SELECT t FROM T t WHERE [restrictions])
-			countQuery.where(criteriaBuilder.in(countRoot).value(countSubquery));
-			// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
-			// OpenJPA (tested 2.4.2) fails here as it doesn't interpret root as @Id: org.apache.openjpa.persistence.ArgumentException: Filter invalid. Cannot compare value of type optimusfaces.test.Person to value of type java.lang.Long.
-		}
-		else if (getProvider() == OPENJPA) {
-			// SELECT COUNT(e) FROM E e WHERE e.id IN (SELECT t.id FROM T t WHERE [restrictions])
-			countQuery.where(criteriaBuilder.in(countRoot.get(ID)).value(countSubquery));
-			// Hibernate (tested 5.0.10) fails here when DTO is used as it does not have a mapped ID.
-			// EclipseLink (tested 2.6.4) fails here with an incorrect selection in subquery: SQLException: Database "T1" not found; SQL statement: SELECT COUNT(t0.ID) FROM PERSON t0 WHERE t0.ID IN (SELECT DISTINCT t1.ID.t1.ID FROM PERSON t1 WHERE [...])
-		}
-		else {
-			// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
-			countQuery.where(criteriaBuilder.exists(countSubquery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, countSubquery.getRestriction(), criteriaBuilder.equal(countSubqueryRoot.get(ID), countRoot.get(ID))))));
-			// Hibernate (tested 5.0.10) and OpenJPA (tested 2.4.2) also support this but this is a tad less efficient than IN.
-		}
+		// SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
+		countQuery.where(criteriaBuilder.exists(countSubquery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, countSubquery.getRestriction(), criteriaBuilder.equal(countSubqueryRoot.get(ID), countRoot.get(ID))))));
 
 		return parameters;
 	}
 
 	private <T extends E, Q> TypedQuery<Q> buildTypedQuery(PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, Root<E> root, Map<String, Object> parameters) {
-		TypedQuery<Q> typedQuery = getEntityManager().createQuery(criteriaQuery);
+	    var typedQuery = getEntityManager().createQuery(criteriaQuery);
 		buildRange(pageBuilder, typedQuery, root);
 		setMappedParameters(typedQuery, parameters);
 		onPage(pageBuilder.getResultType(), pageBuilder.isCacheable()).accept(typedQuery);
 		return typedQuery;
 	}
 
-	private <Q> void setPositionalParameters(TypedQuery<Q> typedQuery, Object[] positionalParameters) {
+	private static <Q> void setPositionalParameters(TypedQuery<Q> typedQuery, Object[] positionalParameters) {
 		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, Arrays.toString(positionalParameters)));
 		range(0, positionalParameters.length).forEach(i -> typedQuery.setParameter(i, positionalParameters[i]));
 	}
 
-	private <Q> void setMappedParameters(TypedQuery<Q> typedQuery, Map<String, Object> mappedParameters) {
+	private static <Q> void setMappedParameters(TypedQuery<Q> typedQuery, Map<String, Object> mappedParameters) {
 		logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, mappedParameters));
 		mappedParameters.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
 	}
 
-	private <Q> void setSuppliedParameters(TypedQuery<Q> typedQuery, Consumer<Map<String, Object>> suppliedParameters) {
-		Map<String, Object> mappedParameters = new HashMap<>();
+	private static <Q> void setSuppliedParameters(TypedQuery<Q> typedQuery, Consumer<Map<String, Object>> suppliedParameters) {
+	    var mappedParameters = new HashMap<String, Object>();
 		suppliedParameters.accept(mappedParameters);
 		setMappedParameters(typedQuery, mappedParameters);
 	}
 
 	private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
-		Page page = pageBuilder.getPage();
-		List<T> entities = entityQuery.getResultList();
+		var page = pageBuilder.getPage();
+		var entities = entityQuery.getResultList();
 
 		if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
-			List<T> reversed = new ArrayList<>(entities);
+		    var reversed = new ArrayList<>(entities);
 			Collections.reverse(reversed);
 			entities = reversed;
 		}
 
-		int estimatedTotalNumberOfResults = (countQuery != null) ? countQuery.getSingleResult().intValue() : -1;
+		var estimatedTotalNumberOfResults = countQuery != null ? countQuery.getSingleResult().intValue() : -1;
 		return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
 	}
 
@@ -1832,22 +1811,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Selection actions ----------------------------------------------------------------------------------------------
 
 	private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
-		Root<E> root = query.from(entityType);
-		return (query instanceof Subquery) ? new SubqueryRoot<>(root) : (getProvider() == ECLIPSELINK) ? new EclipseLinkRoot<>(root) : root;
+	    var root = query.from(entityType);
+		return query instanceof Subquery ? new SubqueryRoot<>(root) : getProvider() == ECLIPSELINK ? new EclipseLinkRoot<>(root) : root;
 	}
 
 	private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
-		Map<Getter<T>, Expression<?>> mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
+	    var mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
-		if (query instanceof Subquery) {
-			((Subquery<T>) query).select(root.get(ID));
+		if (query instanceof Subquery<T> subQuery) {
+		    subQuery.select(root.get(ID));
 		}
 
 		if (!isEmpty(mapping)) { // mapping is not empty when getPage(..., MappedQueryBuilder) is used.
-			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), e -> e.getValue(), (l, r) -> l, LinkedHashMap::new));
+			Map<String, Expression<?>> paths = stream(mapping).collect(toMap(e -> e.getKey().getPropertyName(), Entry::getValue, (l, r) -> l, LinkedHashMap::new));
 
-			if (query instanceof CriteriaQuery) {
-				((CriteriaQuery<T>) query).multiselect(stream(paths).map(Alias::as).collect(toList()));
+			if (query instanceof CriteriaQuery<T> criteriaQuery) {
+			    criteriaQuery.multiselect(stream(paths).map(Alias::as).collect(toList()));
 			}
 
 			Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> getProvider().isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
@@ -1856,7 +1835,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 				groupByIfNecessary(query, root);
 			}
 
-			boolean orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
+			var orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
 			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
 			pageBuilder.canBuildValueBasedPagingPredicate(getProvider() != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
 			return new MappedPathResolver(root, paths, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
@@ -1876,8 +1855,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			return;
 		}
 
-		boolean hasJoins = hasJoins(root);
-		Page page = pageBuilder.getPage();
+		var hasJoins = hasJoins(root);
+		var page = pageBuilder.getPage();
 
 		if ((hasJoins || page.getOffset() > 0) && !pageBuilder.canBuildValueBasedPagingPredicate()) {
 			query.setFirstResult(page.getOffset());
@@ -1887,8 +1866,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			query.setMaxResults(page.getLimit());
 		}
 
-		if (hasJoins && root instanceof EclipseLinkRoot) {
-			((EclipseLinkRoot<E>) root).runPostponedFetches(query);
+		if (hasJoins && root instanceof EclipseLinkRoot<E> eclipseLinkRoot) {
+		    eclipseLinkRoot.runPostponedFetches(query);
 		}
 	}
 
@@ -1896,19 +1875,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	// Sorting actions ------------------------------------------------------------------------------------------------
 
 	private <T extends E> void buildOrderBy(PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
-		Page page = pageBuilder.getPage();
-		Map<String, Boolean> ordering = page.getOrdering();
+		var page = pageBuilder.getPage();
+		var ordering = page.getOrdering();
 
 		if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
 			return;
 		}
 
-		boolean reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
+		var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
 		criteriaQuery.orderBy(stream(ordering).map(order -> buildOrder(order, criteriaBuilder, pathResolver, reversed)).collect(toList()));
 	}
 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
-		String field = order.getKey();
+		var field = order.getKey();
 
 		if (oneToManys.test(field) || elementCollections.contains(field)) {
 			if (getProvider() == ECLIPSELINK) {
@@ -1919,18 +1898,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			}
 		}
 
-		Expression<?> path = pathResolver.get(field);
-		return (order.getValue() ^ reversed) ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
+		var path = pathResolver.get(field);
+		return order.getValue() ^ reversed ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
 	}
 
 
 	// Searching actions -----------------------------------------------------------------------------------------------
 
 	private <T extends E> Map<String, Object> buildRestrictions(PageBuilder<T> pageBuilder, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver) {
-		Page page = pageBuilder.getPage();
-		Map<String, Object> parameters = new HashMap<>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
-		List<Predicate> requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameters);
-		List<Predicate> optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameters);
+		var page = pageBuilder.getPage();
+		var parameters = new HashMap<String, Object>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
+		var requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameters);
+		var optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameters);
 		Predicate restriction = null;
 
 		if (!optionalPredicates.isEmpty()) {
@@ -1940,23 +1919,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 		if (!requiredPredicates.isEmpty()) {
 			pageBuilder.shouldBuildCountSubquery(true);
-			List<Predicate> wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).collect(toList());
+			var wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).collect(toList());
 
 			if (!wherePredicates.isEmpty()) {
 				restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
 			}
 
-			List<Predicate> inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
+			var inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
 
-			for (Predicate inPredicate : inPredicates) {
-				Predicate countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, query, pathResolver);
+			for (var inPredicate : inPredicates) {
+				var countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, query, pathResolver);
 
 				if (countPredicate != null) {
 					requiredPredicates.add(countPredicate);
 				}
 			}
 
-			List<Predicate> havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
+			var havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
 
 			if (!havingPredicates.isEmpty()) {
 				groupByIfNecessary(query, pathResolver.get(null));
@@ -1969,7 +1948,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		if (restriction != null) {
-			boolean distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null));
+			var distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null));
 			query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
 		}
 
@@ -1981,24 +1960,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		// Value based paging https://blog.novatec-gmbh.de/art-pagination-offset-vs-value-based-paging/ is on large offsets much faster than offset based paging.
 		// (orderByField1 > ?1) OR (orderByField1 = ?1 AND orderByField2 > ?2) OR (orderByField1 = ?1 AND orderByField2 = ?2 AND orderByField3 > ?3) [...]
 
-		List<Predicate> predicates = new ArrayList<>(page.getOrdering().size());
-		Map<Expression<V>, ParameterExpression<V>> orderByFields = new HashMap<>();
-		T last = (T) page.getLast();
+		var predicates = new ArrayList<Predicate>(page.getOrdering().size());
+		var orderByFields = new HashMap<Expression<V>, ParameterExpression<V>>();
+		var last = (T) page.getLast();
 
-		for (Entry<String, Boolean> order : page.getOrdering().entrySet()) {
-			String field = order.getKey();
-			V value = invokeGetter(last, field);
-			Expression<V> path = (Expression<V>) pathResolver.get(field);
+		for (var order : page.getOrdering().entrySet()) {
+			var field = order.getKey();
+			var value = invokeGetter(last, field);
+			var path = (Expression<V>) pathResolver.get(field);
 			ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameters).create(value);
-			Predicate predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
+			var predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
 
-			for (Entry<Expression<V>, ParameterExpression<V>> previousOrderByField : orderByFields.entrySet()) {
-				Expression<V> previousPath = previousOrderByField.getKey();
-				ParameterExpression<V> previousParameter = previousOrderByField.getValue();
-				predicate = criteriaBuilder.and(predicate, (previousParameter == null) ? criteriaBuilder.isNull(previousPath) : criteriaBuilder.equal(previousPath, previousParameter));
+			for (var previousOrderByField : orderByFields.entrySet()) {
+				var previousPath = previousOrderByField.getKey();
+				var previousParameter = previousOrderByField.getValue();
+				predicate = criteriaBuilder.and(predicate, previousParameter == null ? criteriaBuilder.isNull(previousPath) : criteriaBuilder.equal(previousPath, previousParameter));
 			}
 
-			orderByFields.put(path, (value == null) ? null : parameter);
+			orderByFields.put(path, value == null ? null : parameter);
 			predicates.add(predicate);
 		}
 
@@ -2013,17 +1992,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
-		String field = parameter.getKey();
-		Expression<?> path = pathResolver.get(elementCollections.contains(field) ? pathResolver.join(field) : field);
-		Class<?> type = ID.equals(field) ? identifierType : path.getJavaType();
+		var field = parameter.getKey();
+		var path = pathResolver.get(elementCollections.contains(field) ? pathResolver.join(field) : field);
+		var type = ID.equals(field) ? identifierType : path.getJavaType();
 		return buildTypedPredicate(path, type, field,  parameter.getValue(), query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
 	}
 
 	@SuppressWarnings("unchecked")
 	private <T extends E> Predicate buildTypedPredicate(Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		Alias alias = Alias.create(getProvider(), path, field);
-		Object value = criteria;
-		boolean negated = value instanceof Not;
+		var alias = Alias.create(getProvider(), path, field);
+		var value = criteria;
+		var negated = value instanceof Not;
 		Predicate predicate;
 
 		if (negated) {
@@ -2031,11 +2010,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 
 		try {
-			if (value == null || (value instanceof Criteria && ((Criteria<?>) value).getValue() == null)) {
+			if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
 				predicate = criteriaBuilder.isNull(path);
 			}
-			else if (value instanceof Criteria) {
-				predicate = ((Criteria<?>) value).build(path, criteriaBuilder, parameterBuilder);
+			else if (value instanceof Criteria<?> criteriaObject) {
+				predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
 			}
 			else if (elementCollections.contains(field)) {
 				predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -2076,7 +2055,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		if (getProvider() == ECLIPSELINK || (getProvider() == HIBERNATE && getDatabase() == POSTGRESQL)) {
+		if (getProvider() == ECLIPSELINK || getProvider() == HIBERNATE && getDatabase() == POSTGRESQL) {
 			// EclipseLink refuses to perform GROUP BY on IN clause on @ElementCollection, causing a cartesian product.
 			// Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
 			return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -2087,8 +2066,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 		}
 	}
 
-	private Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
-		List<Expression<?>> in = stream(value)
+	private static Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+	    var in = stream(value)
 			.map(item -> createElementCollectionCriteria(type, item).getValue())
 			.filter(Objects::nonNull)
 			.map(parameterBuilder::create)
@@ -2103,13 +2082,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private <T extends E> Predicate buildArrayPredicate(Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-		boolean oneToManyField = oneToManys.test(field);
+		var oneToManyField = oneToManys.test(field);
 
 		if (oneToManyField && getProvider() == ECLIPSELINK) {
 			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 		}
 
-		boolean elementCollectionField = elementCollections.contains(field);
+		var elementCollectionField = elementCollections.contains(field);
 		Subquery<Long> subquery = null;
 		Expression<?> fieldPath;
 
@@ -2125,7 +2104,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			fieldPath = path;
 		}
 
-		List<Predicate> predicates = stream(value)
+		var predicates = stream(value)
 			.map(item -> elementCollectionField
 					? createElementCollectionCriteria(type, item).build(fieldPath, criteriaBuilder, parameterBuilder)
 					: buildTypedPredicate(fieldPath, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
@@ -2136,7 +2115,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new IllegalArgumentException(value.toString());
 		}
 
-		Predicate predicate = criteriaBuilder.or(toArray(predicates));
+		var predicate = criteriaBuilder.or(toArray(predicates));
 
 		if (subquery != null) {
 			// SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
@@ -2148,7 +2127,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	@SuppressWarnings("unchecked")
-	private Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
+	private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
 		return type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type) : IgnoreCase.value(value.toString());
 	}
 
@@ -2164,7 +2143,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	@SuppressWarnings("unchecked")
 	public static BaseEntityService<?, ?> getCurrentInstance() {
 		try {
-			SessionContext ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
+			var ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
 			return (BaseEntityService<?, ?>) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
 		}
 		catch (Exception e) {
@@ -2185,11 +2164,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static Predicate buildCountPredicateIfNecessary(Predicate inPredicate, CriteriaBuilder criteriaBuilder, AbstractQuery<?> query, PathResolver pathResolver) {
-		Entry<String, Long> fieldAndCount = Alias.getFieldAndCount(inPredicate);
+		var fieldAndCount = Alias.getFieldAndCount(inPredicate);
 
 		if (fieldAndCount.getValue() > 1) {
 			Expression<?> join = pathResolver.get(pathResolver.join(fieldAndCount.getKey()));
-			Predicate countPredicate = criteriaBuilder.equal(criteriaBuilder.countDistinct(join), fieldAndCount.getValue());
+			var countPredicate = criteriaBuilder.equal(criteriaBuilder.countDistinct(join), fieldAndCount.getValue());
 			Alias.setHaving(inPredicate, countPredicate);
 			groupByIfNecessary(query, pathResolver.get(fieldAndCount.getKey()));
 			return countPredicate;
@@ -2199,10 +2178,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static void groupByIfNecessary(AbstractQuery<?> query, Expression<?> path) {
-		Expression<?> groupByPath = (path instanceof RootWrapper) ? ((RootWrapper<?>) path).getWrapped() : path;
+		var groupByPath = path instanceof RootWrapper<?> rootWrapper ? rootWrapper.getWrapped() : path;
 
 		if (!query.getGroupList().contains(groupByPath)) {
-			List<Expression<?>> groupList = new ArrayList<>(query.getGroupList());
+			var groupList = new ArrayList<>(query.getGroupList());
 			groupList.add(groupByPath);
 			query.groupBy(groupList);
 		}
@@ -2213,8 +2192,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	}
 
 	private static boolean hasFetches(From<?, ?> from) {
-		return from.getFetches().stream().anyMatch(fetch -> fetch instanceof Path)
-			|| (from instanceof EclipseLinkRoot && ((EclipseLinkRoot<?>) from).hasPostponedFetches());
+		return from.getFetches().stream().anyMatch(Path.class::isInstance)
+			|| from instanceof EclipseLinkRoot<?> eclipseLinkRoot && eclipseLinkRoot.hasPostponedFetches();
 	}
 
 	private static <T> T noop() {

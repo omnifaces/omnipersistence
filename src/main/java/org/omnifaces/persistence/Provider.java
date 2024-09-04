@@ -24,7 +24,6 @@ import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -50,7 +49,7 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+			var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
 
 			if (HIBERNATE_SESSION_FACTORY.get().isInstance(unwrappedEntityManagerFactory)) {
 				// 5.2+ has merged hibernate-entitymanager into hibernate-core, and made EntityManagerFactory impl an instance of SessionFactory, and removed getDialect() shortcut method.
@@ -66,8 +65,10 @@ public enum Provider {
 		    if (HIBERNATE_6_0_0_AGGREGATE_FUNCTION.isPresent()) {
                 return HIBERNATE_6_0_0_AGGREGATE_FUNCTION.get().isInstance(expression);
 		    }
-			return (HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation"))
-				|| (HIBERNATE_COMPARISON_PREDICATE.get().isInstance(expression) && (isAggregation(invokeMethod(expression, "getLeftHandOperand")) || isAggregation(invokeMethod(expression, "getRightHandOperand"))));
+		    else {
+		        return HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation")
+	                || HIBERNATE_COMPARISON_PREDICATE.get().isInstance(expression) && (isAggregation(invokeMethod(expression, "getLeftHandOperand")) || isAggregation(invokeMethod(expression, "getRightHandOperand")));
+		    }
 		}
 
 		@Override
@@ -105,7 +106,7 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+			var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
 			return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getDatabaseSession"), "getDatasourcePlatform").getClass().getSimpleName();
 		}
 
@@ -119,7 +120,7 @@ public enum Provider {
 
 		@Override
 		public String getDialectName(EntityManagerFactory entityManagerFactory) {
-			Object unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
+			var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
 			return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getConfiguration"), "getDBDictionaryInstance").getClass().getSimpleName();
 		}
 
@@ -164,10 +165,10 @@ public enum Provider {
 	private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
 	private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
-		String packageName = entityManagerFactory.getClass().getPackage().getName();
+		var packageName = entityManagerFactory.getClass().getPackage().getName();
 
 		if (packageName.startsWith("org.apache.openejb.")) {
-			Optional<Method> getDelegate = findMethod(entityManagerFactory, "getDelegate");
+			var getDelegate = findMethod(entityManagerFactory, "getDelegate");
 			return getDelegate.isPresent() ? invokeMethod(entityManagerFactory, getDelegate.get()) : entityManagerFactory;
 		}
 
@@ -175,7 +176,7 @@ public enum Provider {
 	}
 
 	public static Provider of(EntityManager entityManager) {
-		String packageName = entityManager.getDelegate().getClass().getPackage().getName();
+		var packageName = entityManager.getDelegate().getClass().getPackage().getName();
 
 		if (packageName.startsWith("org.hibernate.")) {
 			return HIBERNATE;
@@ -253,7 +254,7 @@ public enum Provider {
 		}
 
 		Class<E> entityType = getEntityType(entity);
-		Table table = entityType.getAnnotation(Table.class);
+		var table = entityType.getAnnotation(Table.class);
 		return table != null ? table.name() : entityType.getSimpleName().toUpperCase();
 	}
 
