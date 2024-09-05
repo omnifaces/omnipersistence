@@ -17,7 +17,6 @@ import static jakarta.persistence.metamodel.PluralAttribute.CollectionType.MAP;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
@@ -72,6 +71,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -223,9 +223,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private Provider provider = Provider.UNKNOWN;
 	private Database database = Database.UNKNOWN;
-	private Set<String> elementCollections = emptySet();
-	private Set<String> manyOrOneToOnes = emptySet();
-	private java.util.function.Predicate<String> oneToManys = field -> false;
+	private Supplier<Set<String>> elementCollections = Collections::emptySet;
+	private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
+    private java.util.function.Predicate<String> oneToManys = field -> false;
 	private Validator validator;
 
 	@PersistenceContext
@@ -254,8 +254,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	protected void initWithEntityManager() {
 		provider = Provider.of(getEntityManager());
 		database = Database.of(getEntityManager());
-		elementCollections = ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
-		manyOrOneToOnes = MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
+		elementCollections = () -> ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
+		manyOrOneToOnes = () -> MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
 		oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping).stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
 
 		if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
@@ -1838,12 +1838,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			var orderingContainsAggregatedFields = aggregatedFields.removeAll(pageBuilder.getPage().getOrdering().keySet());
 			pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping, we cannot reliably determine if custom criteria is used, so count subquery building cannot be reliably skipped.
 			pageBuilder.canBuildValueBasedPagingPredicate(getProvider() != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used in Hibernate if ordering contains aggregated fields, because Hibernate may return a cartesian product and apply firstResult/maxResults in memory.
-			return new MappedPathResolver(root, paths, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
+			return new MappedPathResolver(root, paths, elementCollections.get(), manyOrOneToOnes.get());
 		}
 		else if (pageBuilder.getResultType() == entityType) {
 			pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
 			pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains aggregated fields, so value based paging cannot be reliably used.
-			return new RootPathResolver(root, ELEMENT_COLLECTION_MAPPINGS.get(entityType), MANY_OR_ONE_TO_ONE_MAPPINGS.get(entityType));
+			return new RootPathResolver(root, elementCollections.get(), manyOrOneToOnes.get());
 		}
 		else {
 			throw new IllegalArgumentException(ERROR_ILLEGAL_MAPPING);
@@ -1889,7 +1889,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 	private Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
 		var field = order.getKey();
 
-		if (oneToManys.test(field) || elementCollections.contains(field)) {
+		if (oneToManys.test(field) || elementCollections.get().contains(field)) {
 			if (getProvider() == ECLIPSELINK) {
 				throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_ORDERBY_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 			}
@@ -1993,7 +1993,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 	private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
 		var field = parameter.getKey();
-		var path = pathResolver.get(elementCollections.contains(field) ? pathResolver.join(field) : field);
+		var path = pathResolver.get(elementCollections.get().contains(field) ? pathResolver.join(field) : field);
 		var type = ID.equals(field) ? identifierType : path.getJavaType();
 		return buildTypedPredicate(path, type, field,  parameter.getValue(), query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
 	}
@@ -2016,7 +2016,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			else if (value instanceof Criteria<?> criteriaObject) {
 				predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
 			}
-			else if (elementCollections.contains(field)) {
+			else if (elementCollections.get().contains(field)) {
 				predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
 			}
 			else if (value instanceof Iterable || value.getClass().isArray()) {
@@ -2088,7 +2088,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			throw new UnsupportedOperationException(ERROR_UNSUPPORTED_ONETOMANY_CRITERIA_ECLIPSELINK); // EclipseLink refuses to perform a JOIN when setFirstResult/setMaxResults is used.
 		}
 
-		var elementCollectionField = elementCollections.contains(field);
+		var elementCollectionField = elementCollections.get().contains(field);
 		Subquery<Long> subquery = null;
 		Expression<?> fieldPath;
 
@@ -2097,7 +2097,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 			// Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
 			subquery = query.subquery(Long.class);
 			Root<E> subqueryRoot = subquery.from(entityType);
-			fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
+			fieldPath = new RootPathResolver(subqueryRoot, elementCollections.get(), manyOrOneToOnes.get()).get(pathResolver.join(field));
 			subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
 		}
 		else {
