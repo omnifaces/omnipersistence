@@ -16,10 +16,10 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 public class NonSoftDeletableEntityException extends BaseEntityException {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	public NonSoftDeletableEntityException(BaseEntity<?> entity, String message) {
-		super(entity, message);
-	}
+    public NonSoftDeletableEntityException(BaseEntity<?> entity, String message) {
+        super(entity, message);
+    }
 
 }

@@ -30,77 +30,77 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 class SubqueryRoot<X> extends RootWrapper<X> {
 
-	public SubqueryRoot(Root<X> wrapped) {
-		super(wrapped);
-	}
+    public SubqueryRoot(Root<X> wrapped) {
+        super(wrapped);
+    }
 
-	@Override
-	@SuppressWarnings({ "hiding" })
-	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return new JoinFetchAdapter<>(join(attributeName));
-	}
+    @Override
+    @SuppressWarnings({ "hiding" })
+    public <X, Y> Fetch<X, Y> fetch(String attributeName) {
+        return new JoinFetchAdapter<>(join(attributeName));
+    }
 
-	@Override
-	@SuppressWarnings({ "hiding" })
-	public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType joinType) {
-		return new JoinFetchAdapter<>(join(attributeName, joinType));
-	}
+    @Override
+    @SuppressWarnings({ "hiding" })
+    public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType joinType) {
+        return new JoinFetchAdapter<>(join(attributeName, joinType));
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
-		return new JoinFetchAdapter<>(join(attribute));
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
+        return new JoinFetchAdapter<>(join(attribute));
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType joinType) {
-		return new JoinFetchAdapter<>(join(attribute, joinType));
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType joinType) {
+        return new JoinFetchAdapter<>(join(attribute, joinType));
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
-		Join<X, Y> join;
+    @Override
+    @SuppressWarnings("unchecked")
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
+        Join<X, Y> join;
 
-		if (attribute instanceof ListAttribute) {
-			join = join((ListAttribute<X, Y>) attribute);
-		}
-		else if (attribute instanceof SetAttribute) {
-			join = join((SetAttribute<X, Y>) attribute);
-		}
-		else if (attribute instanceof MapAttribute) {
-			join = join((MapAttribute<X, ?, Y>) attribute);
-		}
-		else if (attribute instanceof CollectionAttribute) {
-			join = join((CollectionAttribute<X, Y>) attribute);
-		}
-		else {
-			throw new UnsupportedOperationException();
-		}
+        if (attribute instanceof ListAttribute) {
+            join = join((ListAttribute<X, Y>) attribute);
+        }
+        else if (attribute instanceof SetAttribute) {
+            join = join((SetAttribute<X, Y>) attribute);
+        }
+        else if (attribute instanceof MapAttribute) {
+            join = join((MapAttribute<X, ?, Y>) attribute);
+        }
+        else if (attribute instanceof CollectionAttribute) {
+            join = join((CollectionAttribute<X, Y>) attribute);
+        }
+        else {
+            throw new UnsupportedOperationException();
+        }
 
-		return new JoinFetchAdapter<>(join);
-	}
+        return new JoinFetchAdapter<>(join);
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType joinType) {
-		Join<X, Y> join;
+    @Override
+    @SuppressWarnings("unchecked")
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType joinType) {
+        Join<X, Y> join;
 
-		if (attribute instanceof ListAttribute) {
-			join = join((ListAttribute<X, Y>) attribute, joinType);
-		}
-		else if (attribute instanceof SetAttribute) {
-			join = join((SetAttribute<X, Y>) attribute, joinType);
-		}
-		else if (attribute instanceof MapAttribute) {
-			join = join((MapAttribute<X, ?, Y>) attribute, joinType);
-		}
-		else if (attribute instanceof CollectionAttribute) {
-			join = join((CollectionAttribute<X, Y>) attribute, joinType);
-		}
-		else {
-			throw new UnsupportedOperationException();
-		}
+        if (attribute instanceof ListAttribute) {
+            join = join((ListAttribute<X, Y>) attribute, joinType);
+        }
+        else if (attribute instanceof SetAttribute) {
+            join = join((SetAttribute<X, Y>) attribute, joinType);
+        }
+        else if (attribute instanceof MapAttribute) {
+            join = join((MapAttribute<X, ?, Y>) attribute, joinType);
+        }
+        else if (attribute instanceof CollectionAttribute) {
+            join = join((CollectionAttribute<X, Y>) attribute, joinType);
+        }
+        else {
+            throw new UnsupportedOperationException();
+        }
 
-		return new JoinFetchAdapter<>(join);
-	}
+        return new JoinFetchAdapter<>(join);
+    }
 }

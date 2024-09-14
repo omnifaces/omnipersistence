@@ -40,281 +40,281 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 public final class Page { // This class MAY NOT be mutable!
 
-	// Constants ------------------------------------------------------------------------------------------------------
+    // Constants ------------------------------------------------------------------------------------------------------
 
-	public final static Page ALL = Page.of(0, MAX_VALUE);
-	public final static Page ONE = Page.of(0, 1);
-
-
-	// Properties -----------------------------------------------------------------------------------------------------
-
-	private final int offset;
-	private final int limit;
-	private final Identifiable<?> last;
-	private final boolean reversed;
-	private final Map<String, Boolean> ordering;
-	private final Map<String, Object> requiredCriteria;
-	private final Map<String, Object> optionalCriteria;
+    public final static Page ALL = Page.of(0, MAX_VALUE);
+    public final static Page ONE = Page.of(0, 1);
 
 
-	// Constructors ---------------------------------------------------------------------------------------------------
+    // Properties -----------------------------------------------------------------------------------------------------
 
-	/**
-	 * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
-	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
-	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-	 * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-	 */
-	public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
-		this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
-	}
-
-	/**
-	 * Creates a new Page whereby value based paging will be performed instead of offset based paging when applicable.
-	 * Value based paging is not applicable when the result type is a DTO, or when the ordering contains an aggregated field.
-	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
-	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
-	 * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code>.
-	 * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-	 * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-	 */
-	public Page(Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
-		this.offset = validateIntegerArgument("offset", offset, 0, 0);
-		this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
-		this.last = last;
-		this.reversed = (last != null) && (reversed == TRUE);
-		this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
-		this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
-		this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
-	}
-
-	private static int validateIntegerArgument(String argumentName, Integer argumentValue, int minValue, int defaultValue) {
-		if (argumentValue == null) {
-			return defaultValue;
-		}
-
-		if (argumentValue < minValue) {
-			throw new IllegalArgumentException("Argument '" + argumentName + "' may not be less than " + minValue);
-		}
-
-		return argumentValue;
-	}
+    private final int offset;
+    private final int limit;
+    private final Identifiable<?> last;
+    private final boolean reversed;
+    private final Map<String, Boolean> ordering;
+    private final Map<String, Object> requiredCriteria;
+    private final Map<String, Object> optionalCriteria;
 
 
-	// Getters --------------------------------------------------------------------------------------------------------
+    // Constructors ---------------------------------------------------------------------------------------------------
 
-	/**
-	 * Returns the offset. Defaults to 0.
-	 * @return The offset.
-	 */
-	public int getOffset() {
-		return offset;
-	}
+    /**
+     * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
+     * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+     * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+     * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+     * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+     * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+     */
+    public Page(Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
+        this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
+    }
 
-	/**
-	 * Returns the limit. Defaults to {@link Integer#MAX_VALUE}.
-	 * @return The limit.
-	 */
-	public int getLimit() {
-		return limit;
-	}
+    /**
+     * Creates a new Page whereby value based paging will be performed instead of offset based paging when applicable.
+     * Value based paging is not applicable when the result type is a DTO, or when the ordering contains an aggregated field.
+     * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+     * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+     * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
+     * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code>.
+     * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+     * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+     * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+     */
+    public Page(Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
+        this.offset = validateIntegerArgument("offset", offset, 0, 0);
+        this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
+        this.last = last;
+        this.reversed = (last != null) && (reversed == TRUE);
+        this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
+        this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
+        this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
+    }
 
-	/**
-	 * Returns the last entity of the previous page, if any.
-	 * If not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
-	 * @return The last entity of the previous page, if any.
-	 */
-	public Identifiable<?> getLast() {
-		return last;
-	}
+    private static int validateIntegerArgument(String argumentName, Integer argumentValue, int minValue, int defaultValue) {
+        if (argumentValue == null) {
+            return defaultValue;
+        }
 
-	/**
-	 * Returns whether the value based paging is reversed.
-	 * This is only used when {@link #getLast()} is not <code>null</code>.
-	 * @return Whether the value based paging is reversed.
-	 */
-	public boolean isReversed() {
-		return reversed;
-	}
+        if (argumentValue < minValue) {
+            throw new IllegalArgumentException("Argument '" + argumentName + "' may not be less than " + minValue);
+        }
 
-	/**
-	 * Returns the ordering. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-	 * @return The ordering.
-	 */
-	public Map<String, Boolean> getOrdering() {
-		return ordering;
-	}
-
-	/**
-	 * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-	 * @return The required criteria.
-	 */
-	public Map<String, Object> getRequiredCriteria() {
-		return requiredCriteria;
-	}
-
-	/**
-	 * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-	 * @return The optional criteria.
-	 */
-	public Map<String, Object> getOptionalCriteria() {
-		return optionalCriteria;
-	}
+        return argumentValue;
+    }
 
 
-	// Object overrides -----------------------------------------------------------------------------------------------
+    // Getters --------------------------------------------------------------------------------------------------------
 
-	@Override
-	public boolean equals(Object object) {
-		if (!(object instanceof Page)) {
-			return false;
-		}
+    /**
+     * Returns the offset. Defaults to 0.
+     * @return The offset.
+     */
+    public int getOffset() {
+        return offset;
+    }
 
-		if (object == this) {
-			return true;
-		}
+    /**
+     * Returns the limit. Defaults to {@link Integer#MAX_VALUE}.
+     * @return The limit.
+     */
+    public int getLimit() {
+        return limit;
+    }
 
-		Page other = (Page) object;
+    /**
+     * Returns the last entity of the previous page, if any.
+     * If not <code>null</code>, then value based paging will be performed instead of offset based paging when applicable.
+     * @return The last entity of the previous page, if any.
+     */
+    public Identifiable<?> getLast() {
+        return last;
+    }
 
-		return Objects.equals(offset, other.offset)
-			&& Objects.equals(limit, other.limit)
-			&& Objects.equals(last, other.last)
-			&& Objects.equals(reversed, other.reversed)
-			&& Objects.equals(ordering, other.ordering)
-			&& Objects.equals(requiredCriteria, other.requiredCriteria)
-			&& Objects.equals(optionalCriteria, other.optionalCriteria);
-	}
+    /**
+     * Returns whether the value based paging is reversed.
+     * This is only used when {@link #getLast()} is not <code>null</code>.
+     * @return Whether the value based paging is reversed.
+     */
+    public boolean isReversed() {
+        return reversed;
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(Page.class, offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
-	}
+    /**
+     * Returns the ordering. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
+     * @return The ordering.
+     */
+    public Map<String, Boolean> getOrdering() {
+        return ordering;
+    }
 
-	@Override
-	public String toString() {
-		return new StringBuilder("Page[")
-			.append(offset).append(",")
-			.append(limit).append(",")
-			.append(last).append(",")
-			.append(reversed).append(",")
-			.append(ordering).append(",")
-			.append(new TreeMap<>(requiredCriteria)).append(",")
-			.append(new TreeMap<>(optionalCriteria)).append("]").toString();
-	}
+    /**
+     * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+     * @return The required criteria.
+     */
+    public Map<String, Object> getRequiredCriteria() {
+        return requiredCriteria;
+    }
+
+    /**
+     * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+     * @return The optional criteria.
+     */
+    public Map<String, Object> getOptionalCriteria() {
+        return optionalCriteria;
+    }
 
 
-	// Builder --------------------------------------------------------------------------------------------------------
+    // Object overrides -----------------------------------------------------------------------------------------------
 
-	/**
-	 * Returns a clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
-	 * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
-	 */
-	public Page all() {
-		return new Page(null, null, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
-	}
+    @Override
+    public boolean equals(Object object) {
+        if (!(object instanceof Page)) {
+            return false;
+        }
 
-	/**
-	 * Use this if you want to build a new page.
-	 * @return A new page builder.
-	 */
-	public static Builder with() {
-		return new Builder();
-	}
+        if (object == this) {
+            return true;
+        }
 
-	/**
-	 * Use this if you want a page of given offset and limit.
-	 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
-	 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-	 * @return A new page of given offset and limit.
-	 */
-	public static Page of(int offset, int limit) {
-		return with().range(offset, limit).build();
-	}
+        Page other = (Page) object;
 
-	/**
-	 * The page builder. Use {@link Page#with()} to get started.
-	 * @author Bauke Scholtz
-	 */
-	public static class Builder {
+        return Objects.equals(offset, other.offset)
+            && Objects.equals(limit, other.limit)
+            && Objects.equals(last, other.last)
+            && Objects.equals(reversed, other.reversed)
+            && Objects.equals(ordering, other.ordering)
+            && Objects.equals(requiredCriteria, other.requiredCriteria)
+            && Objects.equals(optionalCriteria, other.optionalCriteria);
+    }
 
-		private Integer offset;
-		private Integer limit;
-		private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
-		private Map<String, Object> requiredCriteria;
-		private Map<String, Object> optionalCriteria;
+    @Override
+    public int hashCode() {
+        return Objects.hash(Page.class, offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
+    }
 
-		/**
-		 * Set the range.
-		 * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
-		 * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-		 * @throws IllegalStateException When another offset and limit is already set in this builder.
-		 * @return This builder.
-		 */
-		public Builder range(int offset, int limit) {
-			if (this.offset != null) {
-				throw new IllegalStateException("Offset and limit are already set");
-			}
+    @Override
+    public String toString() {
+        return new StringBuilder("Page[")
+            .append(offset).append(",")
+            .append(limit).append(",")
+            .append(last).append(",")
+            .append(reversed).append(",")
+            .append(ordering).append(",")
+            .append(new TreeMap<>(requiredCriteria)).append(",")
+            .append(new TreeMap<>(optionalCriteria)).append("]").toString();
+    }
 
-			this.offset = offset;
-			this.limit = limit;
-			return this;
-		}
 
-		/**
-		 * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
-		 * @param field The field.
-		 * @param ascending Whether to sort ascending.
-		 * @return This builder.
-		 */
-		public Builder orderBy(String field, boolean ascending) {
-			ordering.put(field, ascending);
-			return this;
-		}
+    // Builder --------------------------------------------------------------------------------------------------------
 
-		/**
-		 * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-		 * @param requiredCriteria Required criteria.
-		 * @return This builder.
-		 * @throws IllegalStateException When another required criteria is already set in this builder.
-		 * @see Criteria
-		 */
-		public Builder allMatch(Map<String, Object> requiredCriteria) {
-			if (this.requiredCriteria != null) {
-				throw new IllegalStateException("Required criteria is already set");
-			}
+    /**
+     * Returns a clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
+     * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
+     */
+    public Page all() {
+        return new Page(null, null, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
+    }
 
-			this.requiredCriteria = requiredCriteria;
-			return this;
-		}
+    /**
+     * Use this if you want to build a new page.
+     * @return A new page builder.
+     */
+    public static Builder with() {
+        return new Builder();
+    }
 
-		/**
-		 * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-		 * @param optionalCriteria Optional criteria.
-		 * @return This builder.
-		 * @throws IllegalStateException When another optional criteria is already set in this builder.
-		 * @see Criteria
-		 */
-		public Builder anyMatch(Map<String, Object> optionalCriteria) {
-			if (this.optionalCriteria != null) {
-				throw new IllegalStateException("Optional criteria is already set");
-			}
+    /**
+     * Use this if you want a page of given offset and limit.
+     * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+     * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+     * @return A new page of given offset and limit.
+     */
+    public static Page of(int offset, int limit) {
+        return with().range(offset, limit).build();
+    }
 
-			this.optionalCriteria = optionalCriteria;
-			return this;
-		}
+    /**
+     * The page builder. Use {@link Page#with()} to get started.
+     * @author Bauke Scholtz
+     */
+    public static class Builder {
 
-		/**
-		 * Build the page.
-		 * @return The built page.
-		 */
-		public Page build() {
-			return new Page(offset, limit, ordering, requiredCriteria, optionalCriteria);
-		}
+        private Integer offset;
+        private Integer limit;
+        private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
+        private Map<String, Object> requiredCriteria;
+        private Map<String, Object> optionalCriteria;
 
-	}
+        /**
+         * Set the range.
+         * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
+         * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+         * @throws IllegalStateException When another offset and limit is already set in this builder.
+         * @return This builder.
+         */
+        public Builder range(int offset, int limit) {
+            if (this.offset != null) {
+                throw new IllegalStateException("Offset and limit are already set");
+            }
+
+            this.offset = offset;
+            this.limit = limit;
+            return this;
+        }
+
+        /**
+         * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
+         * @param field The field.
+         * @param ascending Whether to sort ascending.
+         * @return This builder.
+         */
+        public Builder orderBy(String field, boolean ascending) {
+            ordering.put(field, ascending);
+            return this;
+        }
+
+        /**
+         * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+         * @param requiredCriteria Required criteria.
+         * @return This builder.
+         * @throws IllegalStateException When another required criteria is already set in this builder.
+         * @see Criteria
+         */
+        public Builder allMatch(Map<String, Object> requiredCriteria) {
+            if (this.requiredCriteria != null) {
+                throw new IllegalStateException("Required criteria is already set");
+            }
+
+            this.requiredCriteria = requiredCriteria;
+            return this;
+        }
+
+        /**
+         * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+         * @param optionalCriteria Optional criteria.
+         * @return This builder.
+         * @throws IllegalStateException When another optional criteria is already set in this builder.
+         * @see Criteria
+         */
+        public Builder anyMatch(Map<String, Object> optionalCriteria) {
+            if (this.optionalCriteria != null) {
+                throw new IllegalStateException("Optional criteria is already set");
+            }
+
+            this.optionalCriteria = optionalCriteria;
+            return this;
+        }
+
+        /**
+         * Build the page.
+         * @return The built page.
+         */
+        public Page build() {
+            return new Page(offset, limit, ordering, requiredCriteria, optionalCriteria);
+        }
+
+    }
 
 }

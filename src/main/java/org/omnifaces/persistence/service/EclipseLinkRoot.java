@@ -29,37 +29,37 @@ import jakarta.persistence.criteria.Root;
  */
 class EclipseLinkRoot<X> extends RootWrapper<X> {
 
-	private Set<String> postponedFetches;
+    private Set<String> postponedFetches;
 
-	public EclipseLinkRoot(Root<X> wrapped) {
-		super(wrapped);
-		postponedFetches = new HashSet<>(2);
-	}
+    public EclipseLinkRoot(Root<X> wrapped) {
+        super(wrapped);
+        postponedFetches = new HashSet<>(2);
+    }
 
-	@Override
-	@SuppressWarnings("hiding")
-	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return new PostponedFetch<>(postponedFetches, attributeName);
-	}
+    @Override
+    @SuppressWarnings("hiding")
+    public <X, Y> Fetch<X, Y> fetch(String attributeName) {
+        return new PostponedFetch<>(postponedFetches, attributeName);
+    }
 
-	public boolean hasPostponedFetches() {
-		return !postponedFetches.isEmpty();
-	}
+    public boolean hasPostponedFetches() {
+        return !postponedFetches.isEmpty();
+    }
 
-	public void runPostponedFetches(Query query) {
-		postponedFetches.forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
-	}
+    public void runPostponedFetches(Query query) {
+        postponedFetches.forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
+    }
 
-	public void collectPostponedFetches(Map<String, Path<?>> paths) {
-		postponedFetches.forEach(fetch -> {
-			Path<?> path = this;
+    public void collectPostponedFetches(Map<String, Path<?>> paths) {
+        postponedFetches.forEach(fetch -> {
+            Path<?> path = this;
 
-			for (String attribute : fetch.split("\\.")) {
-				path = path.get(attribute);
-			}
+            for (String attribute : fetch.split("\\.")) {
+                path = path.get(attribute);
+            }
 
-			paths.put(fetch, path);
-		});
-	}
+            paths.put(fetch, path);
+        });
+    }
 
 }

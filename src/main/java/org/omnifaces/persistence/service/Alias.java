@@ -26,56 +26,56 @@ import org.omnifaces.persistence.Provider;
  */
 class Alias {
 
-	private static final String AS = "as_";
-	private static final String WHERE = "where_";
-	private static final String HAVING = "having_";
-	private static final String IN = "_in";
+    private static final String AS = "as_";
+    private static final String WHERE = "where_";
+    private static final String HAVING = "having_";
+    private static final String IN = "_in";
 
-	private String value;
+    private String value;
 
-	private Alias(String alias) {
-		this.value = alias;
-	}
+    private Alias(String alias) {
+        this.value = alias;
+    }
 
-	public static Selection<?> as(Entry<String, Expression<?>> mappingEntry) {
-		Selection<?> selection = mappingEntry.getValue();
-		return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace('.', '$'));
-	}
+    public static Selection<?> as(Entry<String, Expression<?>> mappingEntry) {
+        Selection<?> selection = mappingEntry.getValue();
+        return selection.getAlias() != null ? selection : selection.alias(AS + mappingEntry.getKey().replace('.', '$'));
+    }
 
-	public static Alias create(Provider provider, Expression<?> expression, String field) {
-		return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace('.', '$'));
-	}
+    public static Alias create(Provider provider, Expression<?> expression, String field) {
+        return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace('.', '$'));
+    }
 
-	public void in(int count) {
-		value += "_" + count + IN;
-	}
+    public void in(int count) {
+        value += "_" + count + IN;
+    }
 
-	public void set(Predicate predicate) {
-		predicate.alias(value);
-	}
+    public void set(Predicate predicate) {
+        predicate.alias(value);
+    }
 
-	public static boolean isWhere(Predicate predicate) {
-		return predicate.getAlias().startsWith(WHERE);
-	}
+    public static boolean isWhere(Predicate predicate) {
+        return predicate.getAlias().startsWith(WHERE);
+    }
 
-	public static boolean isIn(Predicate predicate) {
-		return predicate.getAlias().endsWith(IN);
-	}
+    public static boolean isIn(Predicate predicate) {
+        return predicate.getAlias().endsWith(IN);
+    }
 
-	public static boolean isHaving(Predicate predicate) {
-		return predicate.getAlias().startsWith(HAVING);
-	}
+    public static boolean isHaving(Predicate predicate) {
+        return predicate.getAlias().startsWith(HAVING);
+    }
 
-	public static Entry<String, Long> getFieldAndCount(Predicate inPredicate) {
-		String alias = inPredicate.getAlias();
-		String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
-		String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_')).replace('$', '.');
-		long count = Long.valueOf(fieldAndCount.substring(field.length() + 1));
-		return new SimpleEntry<>(field, count);
-	}
+    public static Entry<String, Long> getFieldAndCount(Predicate inPredicate) {
+        String alias = inPredicate.getAlias();
+        String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
+        String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_')).replace('$', '.');
+        long count = Long.valueOf(fieldAndCount.substring(field.length() + 1));
+        return new SimpleEntry<>(field, count);
+    }
 
-	public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
-		countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf('_') + 1));
-	}
+    public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
+        countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf('_') + 1));
+    }
 
 }

@@ -25,34 +25,34 @@ import org.omnifaces.utils.data.Range;
  */
 public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
-	private Between(Range<T> value) {
-		super(value);
-	}
+    private Between(Range<T> value) {
+        super(value);
+    }
 
-	public static <T extends Comparable<T>> Between<T> value(Range<T> value) {
-		return new Between<>(value);
-	}
+    public static <T extends Comparable<T>> Between<T> value(Range<T> value) {
+        return new Between<>(value);
+    }
 
-	public static <T extends Comparable<T>> Between<T> range(T min, T max) {
-		return new Between<>(Range.ofClosed(min, max));
-	}
+    public static <T extends Comparable<T>> Between<T> range(T min, T max) {
+        return new Between<>(Range.ofClosed(min, max));
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		return criteriaBuilder.between((Expression<T>) path, parameterBuilder.create(getValue().getMin()), parameterBuilder.create(getValue().getMax()));
-	}
+    @Override
+    @SuppressWarnings("unchecked")
+    public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        return criteriaBuilder.between((Expression<T>) path, parameterBuilder.create(getValue().getMin()), parameterBuilder.create(getValue().getMax()));
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public boolean applies(Object modelValue) {
-		return modelValue instanceof Comparable && getValue().contains((T) modelValue);
-	}
+    @Override
+    @SuppressWarnings("unchecked")
+    public boolean applies(Object modelValue) {
+        return modelValue instanceof Comparable && getValue().contains((T) modelValue);
+    }
 
-	@Override
-	public String toString() {
-		Range<? extends Comparable<?>> range = getValue();
-		return "BETWEEN " + range.getMin() + " AND " + range.getMax();
-	}
+    @Override
+    public String toString() {
+        Range<? extends Comparable<?>> range = getValue();
+        return "BETWEEN " + range.getMin() + " AND " + range.getMax();
+    }
 
 }

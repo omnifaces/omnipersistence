@@ -14,9 +14,9 @@ package org.omnifaces.persistence.test.model;
 
 public enum Gender {
 
-	MALE,
-	FEMALE,
-	TRANS,
-	OTHER;
+    MALE,
+    FEMALE,
+    TRANS,
+    OTHER;
 
 }

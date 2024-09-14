@@ -14,18 +14,18 @@
 
 -->
 <web-app
-	xmlns="https://jakarta.ee/xml/ns/jakartaee"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd"
-	version="5.0"
+    xmlns="https://jakarta.ee/xml/ns/jakartaee"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd"
+    version="5.0"
 >
-	<display-name>OmniPersistenceTest</display-name>
+    <display-name>OmniPersistenceTest</display-name>
 
-	<data-source>
-		<name>java:app/OmniPersistenceTest</name>
-		<class-name>org.h2.jdbcx.JdbcDataSource</class-name>
-		<url>jdbc:h2:mem:test</url>
-		<transactional>true</transactional>
-		<isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
-	</data-source>
+    <data-source>
+        <name>java:app/OmniPersistenceTest</name>
+        <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
+        <url>jdbc:h2:mem:test</url>
+        <transactional>true</transactional>
+        <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
+    </data-source>
 </web-app>

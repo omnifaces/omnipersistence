@@ -33,19 +33,19 @@ import jakarta.persistence.MappedSuperclass;
 @MappedSuperclass
 public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@Id @GeneratedValue(strategy = IDENTITY)
-	private I id;
+    @Id @GeneratedValue(strategy = IDENTITY)
+    private I id;
 
-	@Override
-	public I getId() {
-		return id;
-	}
+    @Override
+    public I getId() {
+        return id;
+    }
 
-	@Override
-	public void setId(I id) {
-		this.id = id;
-	}
+    @Override
+    public void setId(I id) {
+        this.id = id;
+    }
 
 }

@@ -56,52 +56,52 @@ import jakarta.persistence.PostUpdate;
  */
 public class BaseEntityListener {
 
-	@Inject
-	private BeanManager beanManager;
+    @Inject
+    private BeanManager beanManager;
 
-	private Optional<BeanManager> optionalBeanManager;
+    private Optional<BeanManager> optionalBeanManager;
 
-	@PostPersist
-	public void onPostPersist(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Created.class);
-	}
+    @PostPersist
+    public void onPostPersist(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Created.class);
+    }
 
-	@PostUpdate
-	public void onPostUpdate(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Updated.class);
-	}
+    @PostUpdate
+    public void onPostUpdate(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Updated.class);
+    }
 
-	@PostRemove
-	public void onPostRemove(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Deleted.class);
-	}
+    @PostRemove
+    public void onPostRemove(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Deleted.class);
+    }
 
-	private BeanManager getBeanManager() {
-		if (beanManager == null) {
-			try {
-				beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
-			}
-			catch (IllegalStateException ignore) {
-				beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
-			}
-		}
+    private BeanManager getBeanManager() {
+        if (beanManager == null) {
+            try {
+                beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
+            }
+            catch (IllegalStateException ignore) {
+                beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
+            }
+        }
 
-		return beanManager;
-	}
+        return beanManager;
+    }
 
-	private Optional<BeanManager> getOptionalBeanManager() {
-		if (optionalBeanManager == null) {
-			optionalBeanManager = Optional.ofNullable(getBeanManager());
-		}
+    private Optional<BeanManager> getOptionalBeanManager() {
+        if (optionalBeanManager == null) {
+            optionalBeanManager = Optional.ofNullable(getBeanManager());
+        }
 
-		return optionalBeanManager;
-	}
+        return optionalBeanManager;
+    }
 
-	private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
-		getOptionalBeanManager().ifPresent(beanManager ->
-		    beanManager.getEvent()
-		               .select(createAnnotationInstance(eventType))
-		               .fire(entity));
-	}
+    private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
+        getOptionalBeanManager().ifPresent(beanManager ->
+            beanManager.getEvent()
+                       .select(createAnnotationInstance(eventType))
+                       .fire(entity));
+    }
 
 }

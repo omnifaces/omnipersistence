@@ -25,27 +25,27 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Not extends Criteria<Object> {
 
-	private Not(Object value) {
-		super(value, true);
-	}
+    private Not(Object value) {
+        super(value, true);
+    }
 
-	public static Not value(Object value) {
-		return new Not(value);
-	}
+    public static Not value(Object value) {
+        return new Not(value);
+    }
 
-	@Override
-	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		throw new UnsupportedOperationException();
-	}
+    @Override
+    public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        throw new UnsupportedOperationException();
+    }
 
-	@Override
-	public boolean applies(Object modelValue) {
-		if (modelValue instanceof Criteria) {
-			return !((Criteria<?>) modelValue).applies(getValue());
-		}
-		else {
-			return !Objects.equals(modelValue, getValue());
-		}
-	}
+    @Override
+    public boolean applies(Object modelValue) {
+        if (modelValue instanceof Criteria) {
+            return !((Criteria<?>) modelValue).applies(getValue());
+        }
+        else {
+            return !Objects.equals(modelValue, getValue());
+        }
+    }
 
 }

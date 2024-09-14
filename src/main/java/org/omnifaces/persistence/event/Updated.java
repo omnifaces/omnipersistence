@@ -30,5 +30,5 @@ import org.omnifaces.persistence.listener.BaseEntityListener;
 @Retention(RUNTIME)
 @Target(PARAMETER)
 public @interface Updated {
-	//
+    //
 }

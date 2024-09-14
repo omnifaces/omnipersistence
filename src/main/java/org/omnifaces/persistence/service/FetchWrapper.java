@@ -31,66 +31,66 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 public abstract class FetchWrapper<Z, X> implements Fetch<Z, X> {
 
-	private Fetch<Z, X> wrapped;
+    private Fetch<Z, X> wrapped;
 
-	public FetchWrapper(Fetch<Z, X> wrapped) {
-		this.wrapped = wrapped;
-	}
+    public FetchWrapper(Fetch<Z, X> wrapped) {
+        this.wrapped = wrapped;
+    }
 
-	public Fetch<Z, X> getWrapped() {
-		return wrapped;
-	}
+    public Fetch<Z, X> getWrapped() {
+        return wrapped;
+    }
 
-	@Override
-	public Attribute<? super Z, ?> getAttribute() {
-		return getWrapped().getAttribute();
-	}
+    @Override
+    public Attribute<? super Z, ?> getAttribute() {
+        return getWrapped().getAttribute();
+    }
 
-	@Override
-	public Set<Fetch<X, ?>> getFetches() {
-		return getWrapped().getFetches();
-	}
+    @Override
+    public Set<Fetch<X, ?>> getFetches() {
+        return getWrapped().getFetches();
+    }
 
-	@Override
-	public FetchParent<?, Z> getParent() {
-		return getWrapped().getParent();
-	}
+    @Override
+    public FetchParent<?, Z> getParent() {
+        return getWrapped().getParent();
+    }
 
-	@Override
-	public JoinType getJoinType() {
-		return getWrapped().getJoinType();
-	}
+    @Override
+    public JoinType getJoinType() {
+        return getWrapped().getJoinType();
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
-		return getWrapped().fetch(attribute);
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
+        return getWrapped().fetch(attribute);
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType jt) {
-		return getWrapped().fetch(attribute, jt);
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType jt) {
+        return getWrapped().fetch(attribute, jt);
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
-		return getWrapped().fetch(attribute);
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
+        return getWrapped().fetch(attribute);
+    }
 
-	@Override
-	public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType jt) {
-		return getWrapped().fetch(attribute, jt);
-	}
+    @Override
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType jt) {
+        return getWrapped().fetch(attribute, jt);
+    }
 
-	@Override
-	@SuppressWarnings("hiding")
-	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return getWrapped().fetch(attributeName);
-	}
+    @Override
+    @SuppressWarnings("hiding")
+    public <X, Y> Fetch<X, Y> fetch(String attributeName) {
+        return getWrapped().fetch(attributeName);
+    }
 
-	@Override
-	@SuppressWarnings("hiding")
-	public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
-		return getWrapped().fetch(attributeName, jt);
-	}
+    @Override
+    @SuppressWarnings("hiding")
+    public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
+        return getWrapped().fetch(attributeName, jt);
+    }
 
 }

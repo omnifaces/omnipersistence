@@ -31,44 +31,44 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 public enum Database {
 
-	H2,
+    H2,
 
-	MYSQL("MARIA"),
+    MYSQL("MARIA"),
 
-	POSTGRESQL("POSTGRES"),
+    POSTGRESQL("POSTGRES"),
 
-	UNKNOWN;
+    UNKNOWN;
 
-	private static final Logger logger = Logger.getLogger(Database.class.getName());
+    private static final Logger logger = Logger.getLogger(Database.class.getName());
 
-	private String[] names;
+    private String[] names;
 
-	private Database(String... aliases) {
-		this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
-	}
+    private Database(String... aliases) {
+        this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
+    }
 
-	public static Database of(EntityManager entityManager) {
-		Provider provider = Provider.of(entityManager);
-		EntityManagerFactory entityManagerFactory = entityManager.getEntityManagerFactory();
+    public static Database of(EntityManager entityManager) {
+        Provider provider = Provider.of(entityManager);
+        EntityManagerFactory entityManagerFactory = entityManager.getEntityManagerFactory();
 
-		try {
-			String uppercasedDialectName = provider.getDialectName(entityManagerFactory).toUpperCase();
+        try {
+            String uppercasedDialectName = provider.getDialectName(entityManagerFactory).toUpperCase();
 
-			for (Database database : values()) {
-				if (startsWithOneOf(uppercasedDialectName, database.names)) {
-					return database;
-				}
-			}
-		}
-		catch (Exception e) {
-			logger.log(WARNING, "Cannot to determine configured Database for " + provider + " by " + entityManagerFactory, e);
-		}
+            for (Database database : values()) {
+                if (startsWithOneOf(uppercasedDialectName, database.names)) {
+                    return database;
+                }
+            }
+        }
+        catch (Exception e) {
+            logger.log(WARNING, "Cannot to determine configured Database for " + provider + " by " + entityManagerFactory, e);
+        }
 
-		return UNKNOWN;
-	}
+        return UNKNOWN;
+    }
 
-	public static boolean is(Database database) {
-		return BaseEntityService.getCurrentInstance().getDatabase() == database;
-	}
+    public static boolean is(Database database) {
+        return BaseEntityService.getCurrentInstance().getDatabase() == database;
+    }
 
 }

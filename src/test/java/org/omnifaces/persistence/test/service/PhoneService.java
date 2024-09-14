@@ -22,12 +22,12 @@ import org.omnifaces.utils.collection.PartialResultList;
 @Stateless
 public class PhoneService extends BaseEntityService<Long, Phone> {
 
-	public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
-		return getPage(page, count, "owner");
-	}
+    public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
+        return getPage(page, count, "owner");
+    }
 
-	public PartialResultList<Phone> getAllWithOwners() {
-		return getPageWithOwners(Page.ALL, false);
-	}
+    public PartialResultList<Phone> getAllWithOwners() {
+        return getPageWithOwners(Page.ALL, false);
+    }
 
 }

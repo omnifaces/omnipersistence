@@ -32,16 +32,16 @@ import jakarta.persistence.Version;
 @MappedSuperclass
 public abstract class VersionedEntity<I extends Comparable<I> & Serializable> extends TimestampedEntity<I> implements Versioned {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@Version
-	@Column(nullable = false)
-	private Long version;
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
-	@Override
-	public Long getVersion() {
-		return version;
-	}
+    @Override
+    public Long getVersion() {
+        return version;
+    }
 
-	// No setter! JPA takes care of this.
+    // No setter! JPA takes care of this.
 }

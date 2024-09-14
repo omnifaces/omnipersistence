@@ -24,39 +24,39 @@ import org.omnifaces.persistence.model.SoftDeletable;
 @Entity
 public class Lookup extends BaseEntity<String> {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@Id
-	@Column(length = 2, nullable = false, unique = true, name = "code")
-	private String id;
+    @Id
+    @Column(length = 2, nullable = false, unique = true, name = "code")
+    private String id;
 
-	@SoftDeletable(type = ACTIVE)
-	private boolean active = true;
+    @SoftDeletable(type = ACTIVE)
+    private boolean active = true;
 
-	public Lookup() {
-		//
-	}
+    public Lookup() {
+        //
+    }
 
-	public Lookup(String id) {
-		this.id = id;
-	}
+    public Lookup(String id) {
+        this.id = id;
+    }
 
-	@Override
-	public String getId() {
-		return id;
-	}
+    @Override
+    public String getId() {
+        return id;
+    }
 
-	@Override
-	public void setId(String id) {
-		this.id = id;
-	}
+    @Override
+    public void setId(String id) {
+        this.id = id;
+    }
 
-	public boolean isActive() {
-		return active;
-	}
+    public boolean isActive() {
+        return active;
+    }
 
-	public void setActive(boolean active) {
-		this.active = active;
-	}
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 
 }
