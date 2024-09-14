@@ -74,7 +74,7 @@
 		<!-- Test versions. -->
 		<test.wildfly.version>33.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly.bom/wildfly -->
 		<test.glassfish.version>7.0.17</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish -->
-		<test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it -->
+		<test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it https://github.com/eclipse-ee4j/eclipselink/issues/1393 -->
 	</properties>
 
 	<dependencies>
