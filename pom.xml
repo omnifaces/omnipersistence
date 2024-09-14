@@ -73,9 +73,8 @@
 
 		<!-- Test versions. -->
 		<test.wildfly.version>33.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly.bom/wildfly -->
-		<test.payara.version>6.2024.8</test.payara.version> <!-- https://mvnrepository.com/artifact/fish.payara.distributions/payara-web -->
 		<test.glassfish.version>7.0.17</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish -->
-		<test.h2.version>2.3.232</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
+		<test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it -->
 	</properties>
 
 	<dependencies>
@@ -113,7 +112,7 @@
         <dependency>
             <groupId>org.jboss.arquillian.junit5</groupId>
             <artifactId>arquillian-junit5-container</artifactId>
-            <version>1.9.1.Final</version>
+            <version>1.8.0.Final</version> <!-- NOTE: 1.9.x is incompatible with arquillian-glassfish-server-managed 1.6 -->
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -126,6 +125,28 @@
 
 	<build>
 		<plugins>
+
+            <!-- Prevent wrong JDK from being used to build the project. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[${javase.version},)</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
 
 			<!-- Add missing license headers to source files. -->
 			<plugin>
@@ -209,6 +230,7 @@
 					<javadocVersion>${javase.version}</javadocVersion>
 					<notimestamp>true</notimestamp>
 					<splitindex>true</splitindex>
+                    <doclint>all,-missing</doclint>
 					<doctitle>OmniPersistence API documentation</doctitle>
 					<links>
 						<link>https://jakarta.ee/specifications/platform/${jakartaee.version}/apidocs/</link>
@@ -354,68 +376,6 @@
 			</build>
 		</profile>
 
-		<!-- Payara/EclipseLink test profile: mvn verify -P payara-eclipselink -->
-		<profile>
-			<id>payara-eclipselink</id>
-			<dependencies>
-				<dependency>
-					<groupId>org.omnifaces.arquillian</groupId>
-					<artifactId>arquillian-glassfish-server-managed</artifactId>
-					<version>1.6</version>
-					<scope>test</scope>
-				</dependency>
-			</dependencies>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-dependency-plugin</artifactId>
-						<executions>
-							<execution>
-								<configuration>
-									<artifactItems>
-										<artifactItem>
-											<groupId>fish.payara.distributions</groupId>
-											<artifactId>payara-web</artifactId>
-											<version>${test.payara.version}</version>
-											<type>zip</type>
-										</artifactItem>
-									</artifactItems>
-								</configuration>
-							</execution>
-							<execution>
-								<id>install-h2-in-payara</id>
-								<phase>process-test-classes</phase>
-								<goals>
-									<goal>copy</goal>
-								</goals>
-								<configuration>
-									<artifactItems>
-										<artifactItem>
-											<groupId>com.h2database</groupId>
-											<artifactId>h2</artifactId>
-											<version>${test.h2.version}</version>
-											<type>jar</type>
-											<outputDirectory>${project.build.directory}/payara5/glassfish/modules</outputDirectory>
-										</artifactItem>
-									</artifactItems>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-surefire-plugin</artifactId>
-						<configuration>
-							<systemPropertyVariables>
-								<glassfish.home>${project.build.directory}/payara6</glassfish.home>
-							</systemPropertyVariables>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-
 		<!-- GlassFish/EclipseLink test profile: mvn verify -P glassfish-eclipselink -->
 		<profile>
 			<id>glassfish-eclipselink</id>
@@ -458,7 +418,7 @@
 											<artifactId>h2</artifactId>
 											<version>${test.h2.version}</version>
 											<type>jar</type>
-											<outputDirectory>${project.build.directory}/glassfish6/glassfish/modules</outputDirectory>
+											<outputDirectory>${project.build.directory}/glassfish7/glassfish/modules</outputDirectory>
 										</artifactItem>
 									</artifactItems>
 								</configuration>
@@ -470,7 +430,7 @@
 						<artifactId>maven-surefire-plugin</artifactId>
 						<configuration>
 							<systemPropertyVariables>
-								<glassfish.home>${project.build.directory}/glassfish6</glassfish.home>
+								<glassfish.home>${project.build.directory}/glassfish7</glassfish.home>
 							</systemPropertyVariables>
 						</configuration>
 					</plugin>

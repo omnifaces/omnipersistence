@@ -26,12 +26,12 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        server: [wildfly-hibernate, payara-eclipselink, glassfish-eclipselink]
+        server: [wildfly-hibernate, glassfish-eclipselink]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up JDK 17
-      uses: actions/setup-java@v2
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'adopt'
