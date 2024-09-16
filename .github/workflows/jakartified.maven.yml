@@ -37,4 +37,4 @@ jobs:
         distribution: 'adopt'
         cache: maven
     - name: Test with Maven
-      run: mvn verify -Dmaven.javadoc.skip=true -P ${{matrix.server}}
+      run: mvn -B verify -Dmaven.javadoc.skip=true -P ${{matrix.server}}

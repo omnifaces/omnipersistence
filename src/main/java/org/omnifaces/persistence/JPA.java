@@ -20,7 +20,6 @@ import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.lang.reflect.AnnotatedElement;
-import java.lang.reflect.Member;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -33,6 +32,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.naming.InitialContext;
+
+import jakarta.ejb.SessionContext;
 import jakarta.enterprise.inject.Typed;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
@@ -54,12 +56,12 @@ import jakarta.persistence.metamodel.CollectionAttribute;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.ListAttribute;
 import jakarta.persistence.metamodel.MapAttribute;
-import jakarta.persistence.metamodel.Metamodel;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SetAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Numeric;
+import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * JPA utilities.
@@ -92,7 +94,7 @@ public final class JPA {
      * @return The currently configured bean validation mode.
      */
     public static ValidationMode getValidationMode(EntityManager entityManager) {
-        Object validationMode = entityManager.getEntityManagerFactory().getProperties().get(PROPERTY_VALIDATION_MODE);
+        var validationMode = entityManager.getEntityManagerFactory().getProperties().get(PROPERTY_VALIDATION_MODE);
         return validationMode != null ? ValidationMode.valueOf(validationMode.toString().toUpperCase()) : ValidationMode.AUTO;
     }
 
@@ -236,6 +238,23 @@ public final class JPA {
     // Entity utils -----------------------------------------------------------------------------------------------------------------------
 
     /**
+     * Returns the currently active {@link BaseEntityService} from the {@link SessionContext}.
+     * @return The currently active {@link BaseEntityService} from the {@link SessionContext}.
+     * @throws IllegalStateException if there is none, which can happen if this method is called outside EJB context,
+     * or when currently invoked EJB service is not an instance of {@link BaseEntityService}.
+     */
+    @SuppressWarnings("unchecked")
+    public static BaseEntityService<?, ?> getCurrentBaseEntityService() {
+        try {
+            var ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
+            return (BaseEntityService<?, ?>) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
+        }
+        catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
      * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type.
      * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
      * @param <T> The generic result type.
@@ -247,7 +266,7 @@ public final class JPA {
      * @return Count of all foreign key references to entity of given entity type with given ID of given identifier type.
      */
     public static <T, I> long countForeignKeyReferences(EntityManager entityManager, Class<T> entityType, Class<I> identifierType, I id) {
-        Metamodel metamodel = entityManager.getMetamodel();
+        var metamodel = entityManager.getMetamodel();
         SingularAttribute<? super T, I> idAttribute = metamodel.entity(entityType).getId(identifierType);
         return metamodel.getEntities().stream()
             .flatMap(entity -> getAttributesOfType(entity, entityType))
@@ -263,14 +282,14 @@ public final class JPA {
     }
 
     private static <E> Class<?> getJavaType(Attribute<? super E, ?> attribute) {
-        return (attribute instanceof PluralAttribute)
+        return attribute instanceof PluralAttribute
             ? ((PluralAttribute<?, ?, ?>) attribute).getElementType().getJavaType()
             : attribute.getJavaType();
     }
 
     @SuppressWarnings("unchecked")
     private static <E, T, I> Long countReferencesTo(EntityManager entityManager, Attribute<E, ?> attribute, SingularAttribute<? super T, I> idAttribute, I id) {
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        var criteriaBuilder = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> query = criteriaBuilder.createQuery(Long.class);
         Root<E> root = query.from(attribute.getDeclaringType().getJavaType());
         Join<E, T> join;
@@ -381,10 +400,10 @@ public final class JPA {
         Bindable<?> model = path.getModel();
 
         if (model instanceof Attribute) {
-            Member member = ((Attribute<?, ?>) model).getJavaMember();
+            var member = ((Attribute<?, ?>) model).getJavaMember();
 
             if (member instanceof AnnotatedElement) {
-                Enumerated enumerated = ((AnnotatedElement) member).getAnnotation(Enumerated.class);
+                var enumerated = ((AnnotatedElement) member).getAnnotation(Enumerated.class);
 
                 if (enumerated != null) {
                     return enumerated.value() == EnumType.ORDINAL;

@@ -16,6 +16,7 @@ import static java.beans.Introspector.getBeanInfo;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toConcurrentMap;
 import static java.util.stream.Collectors.toSet;
+import static org.omnifaces.persistence.JPA.getCurrentBaseEntityService;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Streams.stream;
 
@@ -70,7 +71,7 @@ public abstract class AuditListener<I extends Comparable<I> & Serializable> {
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private Map<PropertyDescriptor, Map<I, Object>> getAuditableProperties(BaseEntity<I> entity) {
         Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
-            BaseEntityService<?, ?> baseEntityService = BaseEntityService.getCurrentInstance();
+            BaseEntityService<?, ?> baseEntityService = getCurrentBaseEntityService();
             Set<String> auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
                 .filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).isAnnotationPresent(Audit.class))
                 .map(Attribute::getName)

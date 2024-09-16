@@ -8,7 +8,7 @@
 
     <groupId>org.omnifaces</groupId>
     <artifactId>omnipersistence</artifactId>
-    <version>0.21.J1</version>
+    <version>0.21.J2-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>OmniPersistence</name>

@@ -16,6 +16,7 @@ import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.EL
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
+import static org.omnifaces.persistence.JPA.getCurrentBaseEntityService;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.Lang.isOneOf;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
@@ -38,7 +39,6 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * Enumeration of all supported JPA providers.
@@ -193,7 +193,7 @@ public enum Provider {
     }
 
     public static boolean is(Provider provider) {
-        return BaseEntityService.getCurrentInstance().getProvider() == provider;
+        return getCurrentBaseEntityService().getProvider() == provider;
     }
 
     public String getDialectName(EntityManagerFactory entityManagerFactory) {

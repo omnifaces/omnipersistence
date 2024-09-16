@@ -75,10 +75,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.naming.InitialContext;
-
 import jakarta.annotation.PostConstruct;
-import jakarta.ejb.SessionContext;
 import jakarta.ejb.Stateless;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.CacheRetrieveMode;
@@ -2133,23 +2130,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
 
     // Helpers --------------------------------------------------------------------------------------------------------
-
-    /**
-     * Returns the currently active {@link BaseEntityService} from the {@link SessionContext}.
-     * @return The currently active {@link BaseEntityService} from the {@link SessionContext}.
-     * @throws IllegalStateException if there is none, which can happen if this method is called outside EJB context,
-     * or when currently invoked EJB service is not an instance of {@link BaseEntityService}.
-     */
-    @SuppressWarnings("unchecked")
-    public static BaseEntityService<?, ?> getCurrentInstance() {
-        try {
-            var ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
-            return (BaseEntityService<?, ?>) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
-        }
-        catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
 
     private static Predicate[] toArray(List<Predicate> predicates) {
         return predicates.toArray(new Predicate[predicates.size()]);
