@@ -12,8 +12,16 @@
  */
 package org.omnifaces.persistence.model;
 
+import static java.util.Arrays.stream;
+import static java.util.Comparator.comparing;
+import static java.util.Comparator.naturalOrder;
+import static java.util.Comparator.nullsLast;
+import static java.util.Objects.requireNonNullElseGet;
+
 import java.io.Serializable;
+import java.util.Comparator;
 import java.util.Objects;
+import java.util.function.Function;
 
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
@@ -49,31 +57,65 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @Override
     public int hashCode() {
-        return (getId() != null)
-            ? Objects.hash(getId())
-            : super.hashCode();
+        return hashCode(BaseEntity::getId);
+    }
+
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> int hashCode(final Function<E, Object>... getters) {
+        final var values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
+        return values.length > 0 ? Objects.hash(values) : super.hashCode();
     }
 
     /**
      * Compares by default by entity class (proxies taken into account) and ID.
      */
     @Override
-    public boolean equals(Object other) {
-        return (getId() != null && getClass().isInstance(other) && other.getClass().isInstance(this))
-            ? getId().equals(((BaseEntity<?>) other).getId())
-            : (other == this);
+    public boolean equals(final Object other) {
+        return equals(other, BaseEntity::getId);
+    }
+
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
+        if (other == this) {
+            return true;
+        }
+
+        if (!getClass().isInstance(other) && !other.getClass().isInstance(this)) {
+            return false;
+        }
+
+        return stream(getters).map(getter -> Objects.equals(getters[0].apply((E) this), getters[0].apply((E) other))).allMatch(b -> b);
     }
 
     /**
      * Orders by default with "nulls last".
      */
     @Override
-    public int compareTo(BaseEntity<I> other) {
-        return (other == null)
-            ? -1
-            : (getId() == null)
-                ? (other.getId() == null ? 0 : 1)
-                : getId().compareTo(other.getId());
+    public int compareTo(final BaseEntity<I> other) {
+        return compareTo(other, BaseEntity::getId);
+    }
+
+    @SafeVarargs
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    protected final <E extends BaseEntity<I>> int compareTo(final Object other, final Function<E, Object>... getters) {
+        if (other == null) {
+            return -1;
+        }
+
+        Comparator<Object> comparator = null;
+
+        for (final Function getter : getters) {
+            if (comparator == null) {
+                comparator = comparing(getter, nullsLast(naturalOrder()));
+            }
+            else {
+                comparator = comparator.thenComparing(getter, nullsLast(naturalOrder()));
+            }
+        }
+
+        return comparator.compare(this, other);
     }
 
     /**
@@ -81,7 +123,22 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @Override
     public String toString() {
-        return String.format("%s[%s]", getClass().getSimpleName(), (getId() != null) ? getId() : ("@" + hashCode()));
+        return toString(e -> requireNonNullElseGet(e.getId(), () -> ("@" + e.hashCode())));
     }
 
+    @SafeVarargs
+    @SuppressWarnings("unchecked")
+    protected final <E extends BaseEntity<I>> String toString(final Function<E, Object>... getters) {
+        final var builder = new StringBuilder(getClass().getSimpleName()).append("[");
+
+        for (var i = 0; i < getters.length; i++) {
+            builder.append(getters[i].apply((E) this));
+
+            if (i + 1 < getters.length) {
+                builder.append(", ");
+            }
+        }
+
+        return builder.append("]").toString();
+    }
 }
