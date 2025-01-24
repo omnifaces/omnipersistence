@@ -8,7 +8,7 @@
 
     <groupId>org.omnifaces</groupId>
     <artifactId>omnipersistence</artifactId>
-    <version>0.22.J2</version>
+    <version>0.22.J2-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>OmniPersistence</name>
@@ -91,7 +91,7 @@
         <dependency>
             <groupId>org.omnifaces</groupId>
             <artifactId>omniutils</artifactId>
-            <version>0.15</version>
+            <version>0.16</version>
         </dependency>
 
         <!-- Hibernate Metamodel generator. -->
