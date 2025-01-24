@@ -16,7 +16,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toList;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
-import static org.omnifaces.utils.reflect.Reflections.findClass;
+import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
 import static org.omnifaces.utils.stream.Streams.stream;
@@ -78,10 +78,6 @@ public final class JPA {
     public static final String QUERY_HINT_CACHE_STORE_MODE = "jakarta.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
     public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "jakarta.persistence.cache.retrieveMode"; // USE | BYPASS
     public static final String PROPERTY_VALIDATION_MODE = "jakarta.persistence.validation.mode"; // AUTO | CALLBACK | NONE
-
-    // Private constants ------------------------------------------------------------------------------------------------------------------
-
-    private static final Optional<Class<Object>> HIBERNATE_6_6_0_JPA_EXPRESSION = findClass("org.hibernate.query.criteria.JpaExpression");
 
     // Constructors -----------------------------------------------------------------------------------------------------------------------
 
@@ -362,8 +358,10 @@ public final class JPA {
         // NOTE: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
 
         if (Provider.is(HIBERNATE)) {
-            if (HIBERNATE_6_6_0_JPA_EXPRESSION.isPresent() && HIBERNATE_6_6_0_JPA_EXPRESSION.get().isInstance(expression)) {
-                return invokeMethod(expression, "cast", String.class); // https://hibernate.atlassian.net/browse/HHH-18710
+            var cast = findMethod(expression, "cast", Class.class);
+
+            if (cast.isPresent()) { // Hibernate 6.6.0.
+                return invokeMethod(expression, cast.get(), String.class); // https://hibernate.atlassian.net/browse/HHH-18710
             }
             else {
                 return expression.as(String.class);
