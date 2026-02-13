@@ -36,7 +36,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
     private CommonDataSource commonDataSource;
     private Map<String, PropertyDescriptor> dataSourceProperties;
     private Set<String> commonProperties  = new HashSet<>(asList(
-            "serverName", "databaseName", "portNumber", 
+            "serverName", "databaseName", "portNumber",
             "user", "password", "compatible", "logLevel",
             "protocolVersion", "prepareThreshold", "receiveBufferSize",
             "unknownLength", "socketTimeout", "ssl", "sslfactory",
@@ -62,14 +62,14 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     @SuppressWarnings("unchecked")
     public <T> T get(String name) {
-        
+
         PropertyDescriptor property = dataSourceProperties.get(name);
-        
-        if ((property == null || property.getReadMethod() == null) && commonProperties.contains(name)) {
+
+        if (property == null || (property.getReadMethod() == null && commonProperties.contains(name))) {
             // Ignore fabricated properties that the actual data source doesn't have.
             return null;
         }
-        
+
         try {
             return (T) property.getReadMethod().invoke(commonDataSource);
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
@@ -78,14 +78,14 @@ public class CommonDataSourceWrapper implements CommonDataSource {
     }
 
     public void set(String name, Object value) {
-        
+
         PropertyDescriptor property = dataSourceProperties.get(name);
-        
-        if ((property == null || property.getReadMethod() == null) && commonProperties.contains(name)) {
+
+        if (property == null || (property.getReadMethod() == null && commonProperties.contains(name))) {
             // Ignore fabricated properties that the actual data source doesn't have.
             return;
         }
-        
+
         try {
             dataSourceProperties.get(name).getWriteMethod().invoke(commonDataSource, value);
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
@@ -209,7 +209,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
     public void setProtocolVersion(int protocolVersion) {
         set("protocolVersion", protocolVersion);
     }
-    
+
     public int getPrepareThreshold() {
         return get("prepareThreshold");
     }
