@@ -132,7 +132,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
             return -1;
         }
 
-        return stream(getters).<Comparator<Object>>map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
+        return stream(getters).map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
     }
 
     /**
