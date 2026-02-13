@@ -152,22 +152,24 @@
             <plugin>
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
-                <version>4.5</version>
-                <configuration>
-                    <header>license.txt</header>
-                    <excludes>
-                        <exclude>*.*</exclude>
-                    </excludes>
-                    <mapping>
-                        <java>SLASHSTAR_STYLE</java>
-                    </mapping>
-                </configuration>
+                <version>5.0.0</version>
                 <executions>
                     <execution>
                         <phase>process-sources</phase>
                         <goals>
                             <goal>format</goal>
                         </goals>
+                        <configuration>
+                            <licenseSets>
+                                <licenseSet>
+                                    <header>license.txt</header>
+                                    <excludes>
+                                       <exclude>*.*</exclude> <!-- excludes files in root folder -->
+                                       <exclude>src/test/resources/*.*</exclude>
+                                    </excludes>
+                                </licenseSet>
+                            </licenseSets>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
