@@ -24,8 +24,20 @@ import java.util.stream.Stream;
 
 import jakarta.persistence.EntityManager;
 
+import org.omnifaces.persistence.service.BaseEntityService;
+
 /**
- * Enumeration of all supported databases.
+ * Enumeration of all supported databases. The database is automatically detected from the JPA provider's dialect.
+ * <p>
+ * Currently supported databases:
+ * <ul>
+ * <li>{@link #H2}
+ * <li>{@link #MYSQL} (also matches MariaDB)
+ * <li>{@link #POSTGRESQL}
+ * </ul>
+ *
+ * @see Provider
+ * @see BaseEntityService#getDatabase()
  */
 public enum Database {
 

@@ -14,6 +14,13 @@ package org.omnifaces.persistence.exception;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
+/**
+ * Thrown when trying to {@link org.omnifaces.persistence.service.BaseEntityService#delete(BaseEntity) delete} an
+ * entity that has the {@link org.omnifaces.persistence.model.NonDeletable} annotation.
+ *
+ * @see BaseEntityException
+ * @see org.omnifaces.persistence.model.NonDeletable
+ */
 public class NonDeletableEntityException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;

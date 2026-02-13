@@ -17,6 +17,13 @@ import java.sql.SQLException;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
 
+/**
+ * <p>
+ * XA-capable variant of {@link SwitchableCommonDataSource}. Use this when you need XA (distributed) transactions.
+ * The wrapped data source must implement {@link XADataSource}.
+ *
+ * @see SwitchableCommonDataSource
+ */
 public class SwitchableXADataSource extends SwitchableCommonDataSource implements XADataSource {
 
     @Override

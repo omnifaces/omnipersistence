@@ -24,8 +24,18 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path = number</code>.
+ * <p>
+ * Supports parsing from string values. The target number type is determined by the entity field type
+ * and supports {@link java.math.BigDecimal}, {@link java.math.BigInteger}, {@link Integer} and {@link Long}.
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("age", Numeric.value(42));             // age = 42
+ * criteria.put("age", Numeric.parse("42", type));     // age = 42 (parsed from string)
+ * </pre>
  *
  * @author Bauke Scholtz
+ * @see Criteria
  */
 public final class Numeric extends Criteria<Number> {
 

@@ -20,14 +20,31 @@ import jakarta.persistence.Version;
 
 /**
  * <p>
- * Mapped superclass for versioned entity.
- * It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}.
+ * Mapped superclass for versioned entity with generated ID.
+ * It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}, and implements {@link Versioned}.
  * In addition to the "id", "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
  * On pre persist, JPA will automatically set version to 0.
  * On pre update, JPA will automatically increment version with 1.
+ * This is useful for optimistic locking; JPA will throw {@link jakarta.persistence.OptimisticLockException} when
+ * a concurrent update is detected.
+ * <p>
+ * Usage example:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends VersionedEntity&lt;Long&gt; {
+ *
+ *     private String name;
+ *
+ *     // Getters and setters omitted.
+ * }
+ * </pre>
+ * <p>
+ * If you'd like to manually define the ID column instead, use {@link VersionedBaseEntity}.
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @see VersionedBaseEntity
+ * @see TimestampedEntity
  */
 @MappedSuperclass
 public abstract class VersionedEntity<I extends Comparable<I> & Serializable> extends TimestampedEntity<I> implements Versioned {

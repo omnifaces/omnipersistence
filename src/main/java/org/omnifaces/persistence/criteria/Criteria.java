@@ -29,17 +29,32 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * There are so far the following criteria:
  * <ul>
- * <li>{@link Not} - to negate the value
- * <li>{@link Like} - to search a string value
+ * <li>{@link Not} - to negate any criteria value
+ * <li>{@link Like} - to search a string value (case insensitive; supports starts with, ends with, and contains)
  * <li>{@link Order} - to perform "less than" or "greater than" searches
- * <li>{@link Between} - to perform "between" searches
- * <li>{@link Enumerated} - to parse value as enum
+ * <li>{@link Between} - to perform "between" searches on any {@link Comparable}
+ * <li>{@link Enumerated} - to parse value as enum (case insensitive name matching)
  * <li>{@link Numeric} - to parse value as number
- * <li>{@link Bool} - to parse value as boolean
- * <li>{@link IgnoreCase} - to perform "ignore case" searches
+ * <li>{@link Bool} - to parse value as boolean (supports truthy values like "1", "true", etc.)
+ * <li>{@link IgnoreCase} - to perform case insensitive exact match
  * </ul>
  * <p>
- * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and turned into a predicate.
+ * Usage examples:
+ * <pre>
+ * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
+ * criteria.put("name", Like.contains("john"));          // LIKE '%john%'
+ * criteria.put("email", IgnoreCase.value("FOO@BAR"));   // LOWER(email) = LOWER('FOO@BAR')
+ * criteria.put("age", Order.greaterThan(18));            // age &gt; 18
+ * criteria.put("status", Not.value("INACTIVE"));        // status &lt;&gt; 'INACTIVE'
+ * criteria.put("created", Between.range(start, end));   // created BETWEEN start AND end
+ * criteria.put("role", Enumerated.value(Role.ADMIN));   // role = 'ADMIN'
+ * criteria.put("active", Bool.value(true));              // active IS TRUE
+ * criteria.put("score", Numeric.value(42));              // score = 42
+ * </pre>
+ * <p>
+ * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and
+ * turned into a predicate. Simply extend this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)},
+ * and optionally override {@link #applies(Object)}.
  * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *
@@ -136,10 +151,18 @@ public abstract class Criteria<T> {
     }
 
     /**
-     * This is used in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     * Factory for creating {@link ParameterExpression} instances in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     * The implementation is responsible for generating unique parameter names and tracking parameter values.
      */
     @FunctionalInterface
     public interface ParameterBuilder {
+
+        /**
+         * Creates a new {@link ParameterExpression} for the given value.
+         * @param <T> The generic parameter type.
+         * @param value The parameter value.
+         * @return A new parameter expression.
+         */
         <T> ParameterExpression<T> create(Object value);
     }
 

@@ -14,6 +14,16 @@ package org.omnifaces.persistence.datasource;
 
 import java.util.Map;
 
+/**
+ * <p>
+ * SPI for loading data source properties from an external file. Implementations of this interface can be registered
+ * via {@link java.util.ServiceLoader} to customize how {@link SwitchableCommonDataSource} loads its configuration.
+ * <p>
+ * If no implementation is found via ServiceLoader, the default behavior is to load the properties file from
+ * <code>META-INF/</code> on the classpath.
+ *
+ * @see SwitchableCommonDataSource
+ */
 public interface PropertiesFileLoader {
 
     Map<String, String> loadFromFile(String fileName);

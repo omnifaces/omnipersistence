@@ -20,8 +20,16 @@ import org.omnifaces.utils.data.Range;
 
 /**
  * Creates <code>path BETWEEN range.min AND range.max</code>.
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("age", Between.range(18, 65));
+ * criteria.put("created", Between.range(startDate, endDate));
+ * </pre>
  *
+ * @param <T> The generic comparable type.
  * @author Bauke Scholtz
+ * @see Criteria
  */
 public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 

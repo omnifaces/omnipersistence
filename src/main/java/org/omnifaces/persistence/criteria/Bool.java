@@ -21,8 +21,19 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path IS (NOT) TRUE</code>.
+ * <p>
+ * Supports truthy value parsing: besides actual {@link Boolean} values, it also accepts numeric values (where &gt; 0
+ * is considered truthy) and string values (parsed via {@link Boolean#parseBoolean(String)} or as number).
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("active", Bool.value(true));   // active IS TRUE
+ * criteria.put("active", Bool.value(false));  // active IS NOT TRUE
+ * criteria.put("active", Bool.parse("1"));    // active IS TRUE (truthy)
+ * </pre>
  *
  * @author Bauke Scholtz
+ * @see Criteria
  */
 public final class Bool extends Criteria<Boolean> {
 

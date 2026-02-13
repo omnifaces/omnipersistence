@@ -31,6 +31,18 @@ import java.util.logging.Logger;
 
 import javax.sql.CommonDataSource;
 
+/**
+ * <p>
+ * A wrapper around a {@link CommonDataSource} that delegates all property access to the wrapped data source via
+ * reflection-based JavaBeans introspection. This allows configuring any data source implementation generically
+ * without compile-time dependency on the specific driver class.
+ * <p>
+ * Properties are set and retrieved by name using the wrapped data source's getter and setter methods.
+ * Unknown properties are silently ignored.
+ *
+ * @see SwitchableCommonDataSource
+ * @see SwitchableXADataSource
+ */
 public class CommonDataSourceWrapper implements CommonDataSource {
 
     private CommonDataSource commonDataSource;

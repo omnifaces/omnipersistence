@@ -14,6 +14,13 @@ package org.omnifaces.persistence.exception;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
+/**
+ * Thrown when trying to use soft delete operations on an entity that doesn't have the
+ * {@link org.omnifaces.persistence.model.SoftDeletable} annotation on any of its fields.
+ *
+ * @see BaseEntityException
+ * @see org.omnifaces.persistence.model.SoftDeletable
+ */
 public class NonSoftDeletableEntityException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;

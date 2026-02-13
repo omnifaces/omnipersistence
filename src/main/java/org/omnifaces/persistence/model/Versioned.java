@@ -14,9 +14,11 @@ package org.omnifaces.persistence.model;
 
 /**
  * <p>
- * Base interface for versioned entity.
+ * Base interface for versioned entity. Implemented by {@link VersionedBaseEntity} and {@link VersionedEntity}.
  *
  * @author Bauke Scholtz
+ * @see VersionedBaseEntity
+ * @see VersionedEntity
  */
 public interface Versioned {
 

@@ -14,6 +14,14 @@ package org.omnifaces.persistence.exception;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
+/**
+ * Thrown when an entity is in an illegal state for the requested operation. For example, when trying to
+ * {@link org.omnifaces.persistence.service.BaseEntityService#persist(BaseEntity) persist} an entity that is already
+ * persisted, or when trying to {@link org.omnifaces.persistence.service.BaseEntityService#update(BaseEntity) update}
+ * an entity that has no ID.
+ *
+ * @see BaseEntityException
+ */
 public class IllegalEntityStateException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;

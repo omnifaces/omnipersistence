@@ -33,6 +33,42 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * This class basically defines a paged view of a database based on a given offset, limit, ordering, required criteria
  * and optional criteria. This is used by {@link BaseEntityService#getPage(Page, boolean)} methods.
+ * <p>
+ * There are two convenience constants:
+ * <ul>
+ * <li>{@link #ALL} - returns all results (offset 0, limit {@link Integer#MAX_VALUE}).
+ * <li>{@link #ONE} - returns at most one result (offset 0, limit 1).
+ * </ul>
+ * <p>
+ * Usage examples:
+ * <pre>
+ * // Simplest form: get first 10 records.
+ * Page first10Records = Page.of(0, 10);
+ * PartialResultList&lt;Foo&gt; foos = fooService.getPage(first10Records, true);
+ * </pre>
+ * <pre>
+ * // Using the builder with ordering and criteria.
+ * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
+ * criteria.put("name", Like.contains("john"));
+ * criteria.put("active", Bool.value(true));
+ *
+ * Page page = Page.with()
+ *     .range(0, 10)
+ *     .orderBy("name", true)
+ *     .allMatch(criteria)
+ *     .build();
+ * </pre>
+ * <pre>
+ * // Using optional (OR) criteria.
+ * Map&lt;String, Object&gt; optionalCriteria = new HashMap&lt;&gt;();
+ * optionalCriteria.put("name", Like.contains("john"));
+ * optionalCriteria.put("email", Like.contains("john"));
+ *
+ * Page page = Page.with()
+ *     .range(0, 10)
+ *     .anyMatch(optionalCriteria)
+ *     .build();
+ * </pre>
  *
  * @author Bauke Scholtz
  * @see BaseEntityService

@@ -20,8 +20,18 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>LOWER(path) = LOWER(value)</code>.
+ * <p>
+ * This performs an exact (non-LIKE) match, but case insensitive. If you need a case insensitive LIKE search,
+ * use {@link Like} instead which is already case insensitive by default.
+ * <p>
+ * Usage example:
+ * <pre>
+ * criteria.put("email", IgnoreCase.value("John@Example.COM"));
+ * </pre>
  *
  * @author Bauke Scholtz
+ * @see Criteria
+ * @see Like
  */
 public final class IgnoreCase extends Criteria<String> {
 

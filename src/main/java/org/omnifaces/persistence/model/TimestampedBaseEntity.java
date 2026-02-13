@@ -27,14 +27,38 @@ import jakarta.persistence.Transient;
 /**
  * <p>
  * Mapped superclass for timestamped entity.
- * It extends from {@link BaseEntity}.
+ * It extends from {@link BaseEntity} and implements {@link Timestamped}.
  * It specifies two timestamp columns, named "created" and "lastModified".
  * The {@link Id} column needs to be manually taken care of.
  * On pre persist, the both columns will be set to current timestamp.
  * On pre update, the "lastModified" column will be set to current timestamp, unless {@link #skipAdjustLastModified()} is called beforehand.
+ * <p>
+ * Usage example:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends TimestampedBaseEntity&lt;Long&gt; {
+ *
+ *     &#64;Id
+ *     private Long id;
+ *
+ *     private String name;
+ *
+ *     &#64;Override
+ *     public Long getId() { return id; }
+ *
+ *     &#64;Override
+ *     public void setId(Long id) { this.id = id; }
+ *
+ *     // Other getters and setters omitted.
+ * }
+ * </pre>
+ * <p>
+ * If you'd like a generated ID instead, use {@link TimestampedEntity}.
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @see TimestampedEntity
+ * @see VersionedBaseEntity
  */
 @MappedSuperclass
 public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> implements Timestamped {

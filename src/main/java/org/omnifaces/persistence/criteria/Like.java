@@ -27,8 +27,27 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path LIKE value</code>.
+ * <p>
+ * The search is case insensitive by default. There are three types of LIKE search:
+ * <ul>
+ * <li>{@link #startsWith(String)} - matches values starting with the given string.
+ * <li>{@link #endsWith(String)} - matches values ending with the given string.
+ * <li>{@link #contains(String)} - matches values containing the given string.
+ * </ul>
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("name", Like.contains("john"));     // LOWER(name) LIKE '%john%'
+ * criteria.put("name", Like.startsWith("john"));   // LOWER(name) LIKE 'john%'
+ * criteria.put("email", Like.endsWith("@foo.com")); // LOWER(email) LIKE '%@foo.com'
+ * </pre>
+ * <p>
+ * This also works on enum and boolean fields. For enums, it will match enum constants whose name contains the
+ * search string and generate an IN predicate. For booleans, it delegates to {@link Bool}.
  *
  * @author Bauke Scholtz
+ * @see Criteria
+ * @see IgnoreCase
  */
 public final class Like extends Criteria<String> {
 

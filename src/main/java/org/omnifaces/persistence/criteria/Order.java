@@ -20,9 +20,21 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * Creates <code>path LT|LTE|GT|GTE enum</code>.
+ * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>,
+ * or <code>path &gt;=</code> a given value.
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("age", Order.greaterThan(18));                         // age &gt; 18
+ * criteria.put("age", Order.greaterThanOrEqualTo(18));                // age &gt;= 18
+ * criteria.put("created", Order.lessThan(LocalDate.of(2025, 1, 1)));  // created &lt; 2025-01-01
+ * criteria.put("price", Order.lessThanOrEqualTo(99.99));              // price &lt;= 99.99
+ * </pre>
  *
+ * @param <T> The generic comparable type.
  * @author Bauke Scholtz
+ * @see Criteria
+ * @see Between
  */
 public final class Order<T extends Comparable<T>> extends Criteria<T> {
 

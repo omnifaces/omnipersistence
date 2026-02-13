@@ -39,9 +39,25 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Enumeration of all supported JPA providers.
+ * Enumeration of all supported JPA providers. The provider is automatically detected from the {@link EntityManager}'s
+ * delegate class.
+ * <p>
+ * Currently supported providers:
+ * <ul>
+ * <li>{@link #HIBERNATE}
+ * <li>{@link #ECLIPSELINK}
+ * <li>{@link #OPENJPA}
+ * </ul>
+ * <p>
+ * Each provider has specific handling for aggregation detection, proxy resolution, dialect name resolution,
+ * and relationship mapping quirks. The {@link BaseEntityService} uses this internally to generate correct queries
+ * across different providers.
+ *
+ * @see Database
+ * @see BaseEntityService#getProvider()
  */
 public enum Provider {
 

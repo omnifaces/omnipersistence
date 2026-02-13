@@ -20,8 +20,17 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path = enum</code>.
+ * <p>
+ * Supports case insensitive enum name matching when parsing from a string value.
+ * <p>
+ * Usage examples:
+ * <pre>
+ * criteria.put("status", Enumerated.value(Status.ACTIVE));    // status = 'ACTIVE'
+ * criteria.put("status", Enumerated.parse("active", type));   // status = 'ACTIVE' (case insensitive)
+ * </pre>
  *
  * @author Bauke Scholtz
+ * @see Criteria
  */
 public final class Enumerated extends Criteria<Enum<?>> {
 

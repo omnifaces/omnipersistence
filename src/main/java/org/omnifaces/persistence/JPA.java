@@ -66,7 +66,26 @@ import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * JPA utilities.
+ * <p>
+ * JPA utilities for common operations such as getting optional/first results, converting results to maps,
+ * counting foreign key references, and building criteria expressions.
+ * <p>
+ * Usage examples:
+ * <pre>
+ * // Get an optional single result from a typed query.
+ * Optional&lt;Foo&gt; foo = JPA.getOptionalSingleResult(typedQuery);
+ *
+ * // Get first result, ignoring duplicates.
+ * Optional&lt;Foo&gt; foo = JPA.getOptionalFirstResult(typedQuery);
+ *
+ * // Convert result list to a map.
+ * Map&lt;Long, Foo&gt; fooById = JPA.getResultMap(typedQuery, Foo::getId);
+ *
+ * // Count all foreign key references to an entity.
+ * long refs = JPA.countForeignKeyReferences(entityManager, Foo.class, Long.class, fooId);
+ * </pre>
+ *
+ * @see BaseEntityService
  */
 @Typed
 public final class JPA {

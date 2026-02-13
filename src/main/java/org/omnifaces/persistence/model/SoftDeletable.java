@@ -28,10 +28,44 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * {@link BaseEntityService} will allow to soft-delete the entity and later
  * soft-undelete it. It will also allow to get all entities that are
  * soft-deleted and/or active in the data store. Calling those methods from a
- * service for an entity that doesn't have such column will throw will throw
+ * service for an entity that doesn't have such column will throw
  * {@link NonSoftDeletableEntityException}.
+ * <p>
+ * Usage example:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
+ *
+ *     &#64;SoftDeletable
+ *     private boolean deleted;
+ *
+ *     // Getters and setters omitted.
+ * }
+ * </pre>
+ * <p>
+ * Or, when the column represents "active" state rather than "deleted" state:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
+ *
+ *     &#64;SoftDeletable(type = SoftDeletable.Type.ACTIVE)
+ *     private boolean active;
+ *
+ *     // Getters and setters omitted.
+ * }
+ * </pre>
+ * <p>
+ * Then in your service you can use:
+ * <pre>
+ * yourEntityService.softDelete(entity);   // Sets deleted=true (or active=false).
+ * yourEntityService.softUndelete(entity); // Sets deleted=false (or active=true).
+ * yourEntityService.listSoftDeleted();    // Lists only soft deleted entities.
+ * </pre>
  *
  * @author Sergey Kuntsel
+ * @see BaseEntityService#softDelete(BaseEntity)
+ * @see BaseEntityService#softUndelete(BaseEntity)
+ * @see BaseEntityService#listSoftDeleted()
  */
 @Target(value = { METHOD, FIELD })
 @Retention(RUNTIME)

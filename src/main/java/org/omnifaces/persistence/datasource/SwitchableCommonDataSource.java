@@ -20,6 +20,40 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ServiceLoader;
 
+/**
+ * <p>
+ * A {@link CommonDataSourceWrapper} that loads its data source configuration from an external properties file.
+ * This allows switching the underlying data source implementation and its properties without changing the application
+ * code or deployment descriptors.
+ * <p>
+ * The properties file must contain at least a <code>className</code> property specifying the fully qualified class
+ * name of the actual data source to instantiate. All other properties are set on the instantiated data source.
+ * <p>
+ * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to
+ * <code>META-INF/{configFile}</code> on the classpath.
+ * <p>
+ * Usage example in <code>web.xml</code> or <code>@DataSourceDefinition</code>:
+ * <pre>
+ * &#64;DataSourceDefinition(
+ *     name = "java:app/myDS",
+ *     className = "org.omnifaces.persistence.datasource.SwitchableCommonDataSource",
+ *     properties = { "configFile=database.properties" }
+ * )
+ * </pre>
+ * <p>
+ * And the <code>META-INF/database.properties</code> file:
+ * <pre>
+ * className=org.postgresql.ds.PGSimpleDataSource
+ * serverName=localhost
+ * databaseName=mydb
+ * user=myuser
+ * password=mypassword
+ * </pre>
+ *
+ * @see CommonDataSourceWrapper
+ * @see SwitchableXADataSource
+ * @see PropertiesFileLoader
+ */
 public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
     private boolean init;

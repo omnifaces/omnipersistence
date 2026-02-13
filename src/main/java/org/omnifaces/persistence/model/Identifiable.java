@@ -14,12 +14,35 @@ package org.omnifaces.persistence.model;
 
 import java.io.Serializable;
 
+import org.omnifaces.persistence.service.BaseEntityService;
+
 /**
  * <p>
- * Base interface for something identifiable.
+ * Base interface for something identifiable. All entities managed by {@link BaseEntityService} must implement this.
+ * <p>
+ * Usage example:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends BaseEntity&lt;Long&gt; {
+ *
+ *     &#64;Id
+ *     private Long id;
+ *
+ *     &#64;Override
+ *     public Long getId() {
+ *         return id;
+ *     }
+ *
+ *     &#64;Override
+ *     public void setId(Long id) {
+ *         this.id = id;
+ *     }
+ * }
+ * </pre>
  *
  * @param <I> The generic ID type, usually {@link Long}.
  * @author Bauke Scholtz
+ * @see BaseEntity
  */
 public interface Identifiable<I extends Comparable<I> & Serializable> {
 

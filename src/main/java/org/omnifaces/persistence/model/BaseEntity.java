@@ -32,8 +32,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * Let all your entities extend from this.
- * Then you can make use of {@link BaseEntityService}.
+ * Let all your entities extend from this. Then you can make use of {@link BaseEntityService}.
+ * This is the root of the entity hierarchy and provides default implementations of {@link Object#hashCode()},
+ * {@link Object#equals(Object)}, {@link Comparable#compareTo(Object)} and {@link Object#toString()} based on the entity ID.
  * <p>
  * There are five more mapped superclasses which may also be of interest.
  * <ul>
@@ -43,9 +44,44 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <li>{@link TimestampedEntity} - extends {@link GeneratedIdEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care of them.
  * <li>{@link VersionedEntity} - extends {@link TimestampedEntity} with a <code>@Version</code> column and automatically takes care of it.
  * </ul>
+ * <p>
+ * The first three ({@link BaseEntity}, {@link TimestampedBaseEntity} and {@link VersionedBaseEntity}) require you to
+ * manually define the {@link jakarta.persistence.Id} column. The last three ({@link GeneratedIdEntity}, {@link TimestampedEntity}
+ * and {@link VersionedEntity}) already provide an auto-generated <code>id</code> column.
+ * <p>
+ * Usage example:
+ * <pre>
+ * &#64;Entity
+ * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
+ *
+ *     private String name;
+ *
+ *     // Getters and setters omitted.
+ * }
+ * </pre>
+ * <p>
+ * Subclasses can override {@link #hashCode()}, {@link #equals(Object)}, {@link #compareTo(BaseEntity)} and {@link #toString()}
+ * based on custom property getters using the provided convenience methods:
+ * <pre>
+ * &#64;Override
+ * public int hashCode() {
+ *     return hashCode(YourEntity::getEmail);
+ * }
+ *
+ * &#64;Override
+ * public boolean equals(Object other) {
+ *     return equals(other, YourEntity::getEmail);
+ * }
+ *
+ * &#64;Override
+ * public String toString() {
+ *     return toString(YourEntity::getName, YourEntity::getEmail);
+ * }
+ * </pre>
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @see BaseEntityService
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)

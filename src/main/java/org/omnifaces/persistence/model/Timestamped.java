@@ -16,9 +16,11 @@ import java.time.Instant;
 
 /**
  * <p>
- * Base interface for timestamped entity.
+ * Base interface for timestamped entity. Implemented by {@link TimestampedBaseEntity} and {@link TimestampedEntity}.
  *
  * @author Bauke Scholtz
+ * @see TimestampedBaseEntity
+ * @see TimestampedEntity
  */
 public interface Timestamped {
 

@@ -16,7 +16,16 @@ import jakarta.ejb.ApplicationException;
 import jakarta.persistence.PersistenceException;
 
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.service.BaseEntityService;
 
+/**
+ * Base class for all entity-related exceptions thrown by {@link BaseEntityService}.
+ * This is an {@link ApplicationException} that triggers a transaction rollback.
+ *
+ * @see IllegalEntityStateException
+ * @see NonDeletableEntityException
+ * @see NonSoftDeletableEntityException
+ */
 @ApplicationException(rollback = true)
 public abstract class BaseEntityException extends PersistenceException {
 
