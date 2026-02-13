@@ -70,6 +70,8 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>${javase.version}</maven.compiler.release>
         <maven.source.excludeResources>true</maven.source.excludeResources>
+        <skipUTs>false</skipUTs>
+        <skipITs>true</skipITs>
 
         <!-- Test versions. -->
         <test.wildfly.version>33.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly.bom/wildfly -->
@@ -248,82 +250,57 @@
                 </executions>
             </plugin>
 
-            <!-- Configure snapshot deployment to Sonatype. -->
+
+            <!-- Configure the dependency plugin version (used by test profiles to unpack server distributions). -->
             <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.7.0</version>
-                <extensions>true</extensions>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.0</version>
+            </plugin>
+    
+            <!-- Configure the unit tests (*Test.java). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.0</version>
                 <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                    <skipTests>${skipUTs}</skipTests>
+                </configuration>
+            </plugin>
+    
+            <!-- Configure the integration tests (*IT.java). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <skipITs>${skipITs}</skipITs>
+                    <trimStackTrace>false</trimStackTrace>
+                    <systemPropertyVariables>
+                        <profile.id>${project.activeProfiles[0].id}</profile.id>
+                        <test.h2.version>${test.h2.version}</test.h2.version>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Configure snapshot deployment (release deployment is done via 'release' profile). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.4</version>
+                <configuration>
+                    <skip>false</skip>
                 </configuration>
             </plugin>
         </plugins>
-
-        <pluginManagement>
-            <plugins>
-
-                <!-- Make sure Eclipse itself also runs license format during build. -->
-                <plugin>
-                    <groupId>org.eclipse.m2e</groupId>
-                    <artifactId>lifecycle-mapping</artifactId>
-                    <version>1.0.0</version>
-                    <configuration>
-                        <lifecycleMappingMetadata>
-                            <pluginExecutions>
-                                <pluginExecution>
-                                    <pluginExecutionFilter>
-                                        <groupId>com.mycila</groupId>
-                                        <artifactId>license-maven-plugin</artifactId>
-                                        <versionRange>[4.4,)</versionRange>
-                                        <goals>
-                                            <goal>format</goal>
-                                        </goals>
-                                    </pluginExecutionFilter>
-                                    <action>
-                                        <execute>
-                                            <runOnConfiguration>true</runOnConfiguration>
-                                        </execute>
-                                    </action>
-                                </pluginExecution>
-                            </pluginExecutions>
-                        </lifecycleMappingMetadata>
-                    </configuration>
-                </plugin>
-
-                <!-- Global configuration for test profiles. -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.8.0</version>
-                    <executions>
-                        <execution>
-                            <phase>process-test-classes</phase>
-                            <goals>
-                                <goal>unpack</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                    <configuration>
-                        <outputDirectory>${project.build.directory}</outputDirectory>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.0</version>
-                    <configuration>
-                        <trimStackTrace>false</trimStackTrace>
-                        <systemPropertyVariables>
-                            <profile.id>${project.activeProfiles[0].id}</profile.id>
-                            <test.h2.version>${test.h2.version}</test.h2.version>
-                        </systemPropertyVariables>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
     </build>
 
     <profiles>
@@ -331,7 +308,7 @@
         <!-- below sections, then you need to add a default lifecycle mapping as instructed in M2E documentation: -->
         <!-- https://www.eclipse.org/m2e/documentation/m2e-execution-not-covered.html#common-problems -->
 
-        <!-- WildFly/Hibernate test profile: mvn verify -P wildfly-hibernate -->
+        <!-- WildFly/Hibernate test profile: ./it.sh -P wildfly-hibernate -->
         <profile>
             <id>wildfly-hibernate</id>
             <activation>
@@ -352,7 +329,12 @@
                         <artifactId>maven-dependency-plugin</artifactId>
                         <executions>
                             <execution>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
                                 <configuration>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
                                     <artifactItems>
                                         <artifactItem>
                                             <groupId>org.wildfly</groupId>
@@ -367,7 +349,7 @@
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
                         <configuration>
                             <systemPropertyVariables>
                                 <jboss.home>${project.build.directory}/wildfly-preview-${test.wildfly.version}</jboss.home>
@@ -378,7 +360,7 @@
             </build>
         </profile>
 
-        <!-- GlassFish/EclipseLink test profile: mvn verify -P glassfish-eclipselink -->
+        <!-- GlassFish/EclipseLink test profile: ./it.sh -P glassfish-eclipselink -->
         <profile>
             <id>glassfish-eclipselink</id>
             <dependencies>
@@ -396,7 +378,12 @@
                         <artifactId>maven-dependency-plugin</artifactId>
                         <executions>
                             <execution>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
                                 <configuration>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
                                     <artifactItems>
                                         <artifactItem>
                                             <groupId>org.glassfish.main.distributions</groupId>
@@ -429,7 +416,7 @@
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
                         <configuration>
                             <systemPropertyVariables>
                                 <glassfish.home>${project.build.directory}/glassfish7</glassfish.home>
@@ -445,12 +432,21 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.7.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <autoPublish>true</autoPublish>
+                        </configuration>
+                    </plugin>
 
                     <!-- Signing with GPG is a requirement for a release deployment to Maven central. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.0.1</version>
+                        <version>3.2.7</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>

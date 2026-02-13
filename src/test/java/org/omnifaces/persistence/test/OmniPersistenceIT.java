@@ -52,13 +52,13 @@ import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.TextService;
 
 @ExtendWith(ArquillianExtension.class)
-public class OmniPersistenceTest {
+public class OmniPersistenceIT {
 
     @Deployment
     public static WebArchive createDeployment() {
         var maven = Maven.resolver();
         return create(WebArchive.class)
-            .addPackages(true, OmniPersistenceTest.class.getPackage())
+            .addPackages(true, OmniPersistenceIT.class.getPackage())
             .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
             .addAsWebInfResource("web.xml")
             .addAsResource("META-INF/persistence.xml")
