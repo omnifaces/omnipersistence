@@ -73,13 +73,13 @@ public final class Bool extends Criteria<Boolean> {
             return (Boolean) value;
         }
         else if (value instanceof Number) {
-            return ((Number) value).intValue() > 0;
+            return ((Number) value).doubleValue() > 0;
         }
         else {
             String valueAsString = value.toString();
 
             try {
-                return new BigDecimal(valueAsString).intValue() > 0;
+                return new BigDecimal(valueAsString).doubleValue() > 0;
             }
             catch (NumberFormatException ignore) {
                 return Boolean.parseBoolean(valueAsString);

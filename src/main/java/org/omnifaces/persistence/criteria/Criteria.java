@@ -129,7 +129,7 @@ public abstract class Criteria<T> {
         Object value = possibleCriteria;
 
         while (value instanceof Criteria) {
-            value = ((Criteria<?>) possibleCriteria).getValue();
+            value = ((Criteria<?>) value).getValue();
         }
 
         return value;
