@@ -31,7 +31,7 @@ import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
-import static org.omnifaces.persistence.JPA.getOptionalFirstResult;
+import static org.omnifaces.persistence.JPA.findFirstResult;
 import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
@@ -526,7 +526,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching the given query and positional parameters.
      */
     protected Optional<E> find(String jpql, Object... parameters) {
-        return getOptionalSingleResult(list(jpql, parameters));
+        return findSingleResult(list(jpql, parameters));
     }
 
     /**
@@ -553,7 +553,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
      */
     protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
-        return getOptionalSingleResult(list(jpql, parameters));
+        return findSingleResult(list(jpql, parameters));
     }
 
     /**
@@ -576,10 +576,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
      */
     protected Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
-        return getOptionalSingleResult(list(queryBuilder, parameters));
+        return findSingleResult(list(queryBuilder, parameters));
     }
 
-    private Optional<E> getOptionalSingleResult(List<E> results) {
+    private Optional<E> findSingleResult(List<E> results) {
         if (results.isEmpty()) {
             return Optional.empty();
         }
@@ -609,7 +609,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching the given query and positional parameters, if any.
      */
     protected Optional<E> findFirst(String jpql, Object... parameters) {
-        return getOptionalFirstResult(createQuery(select(jpql), parameters));
+        return findFirstResult(createQuery(select(jpql), parameters));
     }
 
     /**
@@ -636,7 +636,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching the given query and mapped parameters, if any.
      */
     protected Optional<E> findFirst(String jpql, Consumer<Map<String, Object>> parameters) {
-        return getOptionalFirstResult(createQuery(select(jpql), parameters));
+        return findFirstResult(createQuery(select(jpql), parameters));
     }
 
     /**
@@ -659,7 +659,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
     protected Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
-        return getOptionalFirstResult(createQuery(queryBuilder, parameters));
+        return findFirstResult(createQuery(queryBuilder, parameters));
     }
 
     /**

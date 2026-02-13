@@ -73,10 +73,10 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * Usage examples:
  * <pre>
  * // Get an optional single result from a typed query.
- * Optional&lt;Foo&gt; foo = JPA.getOptionalSingleResult(typedQuery);
+ * Optional&lt;Foo&gt; foo = JPA.findSingleResult(typedQuery);
  *
  * // Get first result, ignoring duplicates.
- * Optional&lt;Foo&gt; foo = JPA.getOptionalFirstResult(typedQuery);
+ * Optional&lt;Foo&gt; foo = JPA.findFirstResult(typedQuery);
  *
  * // Convert result list to a map.
  * Map&lt;Long, Foo&gt; fooById = JPA.getResultMap(typedQuery, Foo::getId);
@@ -128,7 +128,7 @@ public final class JPA {
      * @return Single result of given typed query as {@link Optional}.
      * @throws NonUniqueResultException When there is no unique result.
      */
-    public static <T> Optional<T> getOptionalSingleResult(TypedQuery<T> typedQuery) {
+    public static <T> Optional<T> findSingleResult(TypedQuery<T> typedQuery) {
         return ofNullable(getSingleResultOrNull(typedQuery));
     }
 
@@ -140,7 +140,7 @@ public final class JPA {
      * @throws NonUniqueResultException When there is no unique result.
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
-    public static <T> Optional<T> getOptionalSingleResult(Query query) {
+    public static <T> Optional<T> findSingleResult(Query query) {
         return ofNullable(getSingleResultOrNull(query));
     }
 
@@ -180,26 +180,26 @@ public final class JPA {
 
     /**
      * Returns first result of given typed query as {@link Optional}.
-     * The difference with {@link #getOptionalSingleResult(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * The difference with {@link #findSingleResult(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
      * @param <T> The generic result type.
      * @param typedQuery The involved typed query.
      * @return First result of given typed query as {@link Optional}.
      */
-    public static <T> Optional<T> getOptionalFirstResult(TypedQuery<T> typedQuery) {
+    public static <T> Optional<T> findFirstResult(TypedQuery<T> typedQuery) {
         typedQuery.setMaxResults(1);
         return typedQuery.getResultList().stream().findFirst();
     }
 
     /**
      * Returns first result of given query as {@link Optional}.
-     * The difference with {@link #getOptionalSingleResult(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * The difference with {@link #findSingleResult(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
      * @param <T> The expected result type.
      * @param query The involved query.
      * @return First result of given query as {@link Optional}.
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
-    public static <T> Optional<T> getOptionalFirstResult(Query query) {
+    public static <T> Optional<T> findFirstResult(Query query) {
         query.setMaxResults(1);
         return query.getResultList().stream().findFirst();
     }
@@ -212,7 +212,7 @@ public final class JPA {
      * @return First result of given typed query, or <code>null</code> if there is none.
      */
     public static <T> T getFirstResultOrNull(TypedQuery<T> typedQuery) {
-        return getOptionalFirstResult(typedQuery).orElse(null);
+        return findFirstResult(typedQuery).orElse(null);
     }
 
     /**
@@ -225,7 +225,7 @@ public final class JPA {
      */
     @SuppressWarnings("unchecked")
     public static <T> T getFirstResultOrNull(Query query) {
-        return (T) getOptionalFirstResult(query).orElse(null);
+        return (T) findFirstResult(query).orElse(null);
     }
 
     /**
