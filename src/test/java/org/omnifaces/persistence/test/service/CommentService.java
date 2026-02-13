@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import javax.ejb.Stateless;
+import jakarta.ejb.Stateless;
 
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Comment;

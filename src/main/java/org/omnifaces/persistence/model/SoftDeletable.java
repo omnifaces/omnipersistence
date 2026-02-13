@@ -37,32 +37,32 @@ import org.omnifaces.persistence.service.BaseEntityService;
 @Retention(RUNTIME)
 public @interface SoftDeletable {
 
-	/**
-	 * Defines the types of the soft delete column.
-	 * @author Sergey Kuntsel
-	 */
-	public enum Type {
+    /**
+     * Defines the types of the soft delete column.
+     * @author Sergey Kuntsel
+     */
+    public enum Type {
 
-		/**
-		 * Indicates that the associated column is a column holding deleted state.
-		 * All entities that haven't been soft deleted will thus have false
-		 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
-		 * This is the default type.
-		 */
-		DELETED,
+        /**
+         * Indicates that the associated column is a column holding deleted state.
+         * All entities that haven't been soft deleted will thus have false
+         * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+         * This is the default type.
+         */
+        DELETED,
 
-		/**
-		 * Indicates that the associated column is a column holding active state.
-		 * All entities that haven't been soft deleted will thus have true
-		 * in the soft delete column, assuming it was mapped as <code>boolean</code>.
-		 */
-		ACTIVE
-	}
+        /**
+         * Indicates that the associated column is a column holding active state.
+         * All entities that haven't been soft deleted will thus have true
+         * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+         */
+        ACTIVE
+    }
 
-	/**
-	 * Returns The soft deletable type. Defaults to {@link Type#DELETED}.
-	 * @return The soft deletable type.
-	 */
-	public Type type() default Type.DELETED;
+    /**
+     * Returns The soft deletable type. Defaults to {@link Type#DELETED}.
+     * @return The soft deletable type.
+     */
+    public Type type() default Type.DELETED;
 
 }

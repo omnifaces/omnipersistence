@@ -16,10 +16,10 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import javax.persistence.Query;
-import javax.persistence.criteria.Fetch;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Root;
+import jakarta.persistence.Query;
+import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
 
 /**
  * EclipseLink stubbornly refuses to perform a join when a range (offset/limit) is fetched, resulting in cartesian products.
@@ -29,37 +29,37 @@ import javax.persistence.criteria.Root;
  */
 class EclipseLinkRoot<X> extends RootWrapper<X> {
 
-	private Set<String> postponedFetches;
+    private Set<String> postponedFetches;
 
-	public EclipseLinkRoot(Root<X> wrapped) {
-		super(wrapped);
-		postponedFetches = new HashSet<>(2);
-	}
+    public EclipseLinkRoot(Root<X> wrapped) {
+        super(wrapped);
+        postponedFetches = new HashSet<>(2);
+    }
 
-	@Override
-	@SuppressWarnings("hiding")
-	public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-		return new PostponedFetch<>(postponedFetches, attributeName);
-	}
+    @Override
+    @SuppressWarnings("hiding")
+    public <X, Y> Fetch<X, Y> fetch(String attributeName) {
+        return new PostponedFetch<>(postponedFetches, attributeName);
+    }
 
-	public boolean hasPostponedFetches() {
-		return !postponedFetches.isEmpty();
-	}
+    public boolean hasPostponedFetches() {
+        return !postponedFetches.isEmpty();
+    }
 
-	public void runPostponedFetches(Query query) {
-		postponedFetches.forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
-	}
+    public void runPostponedFetches(Query query) {
+        postponedFetches.forEach(fetch -> query.setHint("eclipselink.batch", "e." + fetch));
+    }
 
-	public void collectPostponedFetches(Map<String, Path<?>> paths) {
-		postponedFetches.forEach(fetch -> {
-			Path<?> path = this;
+    public void collectPostponedFetches(Map<String, Path<?>> paths) {
+        postponedFetches.forEach(fetch -> {
+            Path<?> path = this;
 
-			for (String attribute : fetch.split("\\.")) {
-				path = path.get(attribute);
-			}
+            for (String attribute : fetch.split("\\.")) {
+                path = path.get(attribute);
+            }
 
-			paths.put(fetch, path);
-		});
-	}
+            paths.put(fetch, path);
+        });
+    }
 
 }

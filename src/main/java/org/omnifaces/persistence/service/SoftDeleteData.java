@@ -30,69 +30,69 @@ import org.omnifaces.persistence.model.SoftDeletable;
  */
 class SoftDeleteData {
 
-	private static final String ERROR_NOT_SOFT_DELETABLE =
-		"Entity %s cannot be soft deleted. You need to add a @SoftDeletable field first.";
-	private static final String ERROR_ILLEGAL_SOFT_DELETABLE =
-		"Entity %s cannot be soft deleted. There should be only one @SoftDeletable field.";
+    private static final String ERROR_NOT_SOFT_DELETABLE =
+        "Entity %s cannot be soft deleted. You need to add a @SoftDeletable field first.";
+    private static final String ERROR_ILLEGAL_SOFT_DELETABLE =
+        "Entity %s cannot be soft deleted. There should be only one @SoftDeletable field.";
 
-	private Class<?> entityType;
-	private final boolean softDeletable;
-	private final String fieldName;
-	private final String setterName;
-	private final boolean typeActive;
+    private Class<?> entityType;
+    private final boolean softDeletable;
+    private final String fieldName;
+    private final String setterName;
+    private final boolean typeActive;
 
-	public SoftDeleteData(Class<?> entityType) {
-		this.entityType = entityType;
-		List<Field> softDeletableFields = listAnnotatedFields(entityType, SoftDeletable.class);
+    public SoftDeleteData(Class<?> entityType) {
+        this.entityType = entityType;
+        List<Field> softDeletableFields = listAnnotatedFields(entityType, SoftDeletable.class);
 
-		if (softDeletableFields.isEmpty()) {
-			this.softDeletable = false;
-			this.fieldName = null;
-			this.setterName = null;
-			this.typeActive = false;
-		}
-		else if (softDeletableFields.size() == 1) {
-			Field softDeletableField = softDeletableFields.get(0);
-			this.softDeletable = true;
-			this.fieldName = softDeletableField.getName();
-			this.setterName = ("set" + toUpperCase(fieldName.charAt(0)) + fieldName.substring(1));
-			this.typeActive = softDeletableField.getAnnotation(SoftDeletable.class).type() == SoftDeletable.Type.ACTIVE;
-		}
-		else {
-			throw new IllegalStateException(format(ERROR_ILLEGAL_SOFT_DELETABLE, entityType));
-		}
-	}
+        if (softDeletableFields.isEmpty()) {
+            this.softDeletable = false;
+            this.fieldName = null;
+            this.setterName = null;
+            this.typeActive = false;
+        }
+        else if (softDeletableFields.size() == 1) {
+            Field softDeletableField = softDeletableFields.get(0);
+            this.softDeletable = true;
+            this.fieldName = softDeletableField.getName();
+            this.setterName = ("set" + toUpperCase(fieldName.charAt(0)) + fieldName.substring(1));
+            this.typeActive = softDeletableField.getAnnotation(SoftDeletable.class).type() == SoftDeletable.Type.ACTIVE;
+        }
+        else {
+            throw new IllegalStateException(format(ERROR_ILLEGAL_SOFT_DELETABLE, entityType));
+        }
+    }
 
-	public void checkSoftDeletable() {
-		if (!softDeletable) {
-			throw new NonSoftDeletableEntityException(null, format(ERROR_NOT_SOFT_DELETABLE, entityType));
-		}
-	}
+    public void checkSoftDeletable() {
+        if (!softDeletable) {
+            throw new NonSoftDeletableEntityException(null, format(ERROR_NOT_SOFT_DELETABLE, entityType));
+        }
+    }
 
-	public boolean isSoftDeleted(BaseEntity<?> entity) {
-		if (!softDeletable) {
-			return false;
-		}
+    public boolean isSoftDeleted(BaseEntity<?> entity) {
+        if (!softDeletable) {
+            return false;
+        }
 
-		boolean value = accessField(entity, fieldName);
-		return typeActive ? !value : value;
-	}
+        boolean value = accessField(entity, fieldName);
+        return typeActive ? !value : value;
+    }
 
-	public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
-		invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
-	}
+    public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
+        invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
+    }
 
-	public String getWhereClause(boolean includeSoftDeleted) {
-		if (!softDeletable) {
-			return "";
-		}
+    public String getWhereClause(boolean includeSoftDeleted) {
+        if (!softDeletable) {
+            return "";
+        }
 
-		return (" WHERE e." + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
-	}
+        return (" WHERE e." + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
+    }
 
-	@Override
-	public String toString() {
-		return format("SoftDeleteData[softDeletable=%s, fieldName=%s, setterName=%s, typeActive=%s]", softDeletable, fieldName, setterName, typeActive);
-	}
+    @Override
+    public String toString() {
+        return format("SoftDeleteData[softDeletable=%s, fieldName=%s, setterName=%s, typeActive=%s]", softDeletable, fieldName, setterName, typeActive);
+    }
 }
 

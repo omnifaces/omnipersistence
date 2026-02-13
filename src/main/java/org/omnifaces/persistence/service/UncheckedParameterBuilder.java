@@ -14,8 +14,8 @@ package org.omnifaces.persistence.service;
 
 import java.util.Map;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.ParameterExpression;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.ParameterExpression;
 
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
 
@@ -24,24 +24,24 @@ import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
  */
 class UncheckedParameterBuilder implements ParameterBuilder {
 
-	private final String field;
-	private final CriteriaBuilder criteriaBuilder;
-	private final Map<String, Object> parameters;
+    private final String field;
+    private final CriteriaBuilder criteriaBuilder;
+    private final Map<String, Object> parameters;
 
-	public UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameters) {
-		this.field = field.replace('.', '$') + "_";
-		this.criteriaBuilder = criteriaBuilder;
-		this.parameters = parameters;
-	}
+    public UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameters) {
+        this.field = field.replace('.', '$') + "_";
+        this.criteriaBuilder = criteriaBuilder;
+        this.parameters = parameters;
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public <T> ParameterExpression<T> create(Object value) {
-		String name = field + parameters.size();
-		parameters.put(name, value);
-		Class<? extends Object> type = (value == null) ? Object.class : value.getClass();
-		return (ParameterExpression<T>) criteriaBuilder.parameter(type, name);
-	}
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> ParameterExpression<T> create(Object value) {
+        String name = field + parameters.size();
+        parameters.put(name, value);
+        Class<? extends Object> type = (value == null) ? Object.class : value.getClass();
+        return (ParameterExpression<T>) criteriaBuilder.parameter(type, name);
+    }
 
 }
 

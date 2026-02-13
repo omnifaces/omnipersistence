@@ -29,5 +29,5 @@ import org.omnifaces.persistence.service.BaseEntityService;
 @Target(TYPE)
 @Retention(RUNTIME)
 public @interface NonDeletable {
-	//
+    //
 }

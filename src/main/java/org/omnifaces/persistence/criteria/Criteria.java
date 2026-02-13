@@ -14,10 +14,10 @@ package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.ParameterExpression;
-import javax.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.ParameterExpression;
+import jakarta.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -50,97 +50,97 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 public abstract class Criteria<T> {
 
-	private T value;
+    private T value;
 
-	/**
-	 * Create criteria based on given value.
-	 * @param value The criteria value.
-	 * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
-	 */
-	protected Criteria(T value) {
-		this(value, false);
-	}
+    /**
+     * Create criteria based on given value.
+     * @param value The criteria value.
+     * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
+     */
+    protected Criteria(T value) {
+        this(value, false);
+    }
 
-	Criteria(T value, boolean nestable) {
-		if (value instanceof Criteria && (!nestable || value.getClass() == getClass())) {
-			throw new IllegalArgumentException("You cannot nest " + value + " in " + this);
-		}
+    Criteria(T value, boolean nestable) {
+        if (value instanceof Criteria && (!nestable || value.getClass() == getClass())) {
+            throw new IllegalArgumentException("You cannot nest " + value + " in " + this);
+        }
 
-		if (!nestable && value == null) {
-			throw new NullPointerException("value");
-		}
+        if (!nestable && value == null) {
+            throw new NullPointerException("value");
+        }
 
-		this.value = value;
-	}
+        this.value = value;
+    }
 
-	/**
-	 * Returns a predicate for the criteria value. Below is an example implementation:
-	 * <pre>
-	 * return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
-	 * </pre>
-	 * @param path Entity property path. You can use this to inspect the target entity property.
-	 * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
-	 * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
-	 * @return A predicate for the criteria value.
-	 */
-	public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
+    /**
+     * Returns a predicate for the criteria value. Below is an example implementation:
+     * <pre>
+     * return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
+     * </pre>
+     * @param path Entity property path. You can use this to inspect the target entity property.
+     * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
+     * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
+     * @return A predicate for the criteria value.
+     */
+    public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
-	/**
-	 * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java"
-	 * equivalent of the SQL behavior as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
-	 * @param modelValue The model value to test this criteria on.
-	 * @return Whether this criteria value would apply to the given model value.
-	 * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
-	 * @throws UnsupportedOperationException When this method is not implemented yet.
-	 */
-	public boolean applies(Object modelValue) {
-		throw new UnsupportedOperationException("This method is not implemented yet.");
-	}
+    /**
+     * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java"
+     * equivalent of the SQL behavior as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     * @param modelValue The model value to test this criteria on.
+     * @return Whether this criteria value would apply to the given model value.
+     * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
+     * @throws UnsupportedOperationException When this method is not implemented yet.
+     */
+    public boolean applies(Object modelValue) {
+        throw new UnsupportedOperationException("This method is not implemented yet.");
+    }
 
-	/**
-	 * Returns the criteria value.
-	 * @return The criteria value.
-	 */
-	public T getValue() {
-		return value;
-	}
+    /**
+     * Returns the criteria value.
+     * @return The criteria value.
+     */
+    public T getValue() {
+        return value;
+    }
 
-	/**
-	 * Unwraps the criteria value from given object which could possibly represent a {@link Criteria}.
-	 * @param possibleCriteria Any object which could possibly represent a {@link Criteria}.
-	 * @return The unwrapped criteria value when given object actually represents a {@link Criteria}, else the original value unmodified.
-	 */
-	public static Object unwrap(Object possibleCriteria) {
-		Object value = possibleCriteria;
+    /**
+     * Unwraps the criteria value from given object which could possibly represent a {@link Criteria}.
+     * @param possibleCriteria Any object which could possibly represent a {@link Criteria}.
+     * @return The unwrapped criteria value when given object actually represents a {@link Criteria}, else the original value unmodified.
+     */
+    public static Object unwrap(Object possibleCriteria) {
+        Object value = possibleCriteria;
 
-		while (value instanceof Criteria) {
-			value = ((Criteria<?>) possibleCriteria).getValue();
-		}
+        while (value instanceof Criteria) {
+            value = ((Criteria<?>) possibleCriteria).getValue();
+        }
 
-		return value;
-	}
+        return value;
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(getClass(), value);
-	}
+    @Override
+    public int hashCode() {
+        return Objects.hash(getClass(), value);
+    }
 
-	@Override
-	public boolean equals(Object object) {
-		return getClass().isInstance(object) && (object == this || (Objects.equals(value, ((Criteria<?>) object).value)));
-	}
+    @Override
+    public boolean equals(Object object) {
+        return getClass().isInstance(object) && (object == this || (Objects.equals(value, ((Criteria<?>) object).value)));
+    }
 
-	@Override
-	public String toString() {
-		return getClass().getSimpleName().toUpperCase() + "(" + getValue() + ")";
-	}
+    @Override
+    public String toString() {
+        return getClass().getSimpleName().toUpperCase() + "(" + getValue() + ")";
+    }
 
-	/**
-	 * This is used in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}.
-	 */
-	@FunctionalInterface
-	public interface ParameterBuilder {
-		<T> ParameterExpression<T> create(Object value);
-	}
+    /**
+     * This is used in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     */
+    @FunctionalInterface
+    public interface ParameterBuilder {
+        <T> ParameterExpression<T> create(Object value);
+    }
 
 }

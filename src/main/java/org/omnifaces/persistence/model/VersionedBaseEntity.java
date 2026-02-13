@@ -14,10 +14,10 @@ package org.omnifaces.persistence.model;
 
 import java.io.Serializable;
 
-import javax.persistence.Column;
-import javax.persistence.Id;
-import javax.persistence.MappedSuperclass;
-import javax.persistence.Version;
+import jakarta.persistence.Column;
+import jakarta.persistence.Id;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.Version;
 
 /**
  * <p>
@@ -34,16 +34,16 @@ import javax.persistence.Version;
 @MappedSuperclass
 public abstract class VersionedBaseEntity<I extends Comparable<I> & Serializable> extends TimestampedBaseEntity<I> implements Versioned {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@Version
-	@Column(nullable = false)
-	private Long version;
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
-	@Override
-	public Long getVersion() {
-		return version;
-	}
+    @Override
+    public Long getVersion() {
+        return version;
+    }
 
-	// No setter! JPA takes care of this.
+    // No setter! JPA takes care of this.
 }

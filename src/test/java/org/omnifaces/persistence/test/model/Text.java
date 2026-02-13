@@ -14,7 +14,7 @@ package org.omnifaces.persistence.test.model;
 
 import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
-import javax.persistence.Entity;
+import jakarta.persistence.Entity;
 
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
@@ -22,17 +22,17 @@ import org.omnifaces.persistence.model.SoftDeletable;
 @Entity
 public class Text extends GeneratedIdEntity<Long> {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@SoftDeletable(type = ACTIVE)
-	private boolean active = true;
+    @SoftDeletable(type = ACTIVE)
+    private boolean active = true;
 
-	public boolean isActive() {
-		return active;
-	}
+    public boolean isActive() {
+        return active;
+    }
 
-	public void setActive(boolean active) {
-		this.active = active;
-	}
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 
 }

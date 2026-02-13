@@ -20,10 +20,10 @@ import static org.omnifaces.utils.stream.Streams.stream;
 import java.util.Objects;
 import java.util.Set;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Path;
-import javax.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Creates <code>path LIKE value</code>.
@@ -32,97 +32,97 @@ import javax.persistence.criteria.Predicate;
  */
 public final class Like extends Criteria<String> {
 
-	private enum Type {
-		STARTS_WITH,
-		ENDS_WITH,
-		CONTAINS;
-	}
+    private enum Type {
+        STARTS_WITH,
+        ENDS_WITH,
+        CONTAINS;
+    }
 
-	private Type type;
+    private Type type;
 
-	private Like(Type type, String value) {
-		super(value);
-		this.type = type;
-	}
+    private Like(Type type, String value) {
+        super(value);
+        this.type = type;
+    }
 
-	public static Like startsWith(String value) {
-		return new Like(Type.STARTS_WITH, value);
-	}
+    public static Like startsWith(String value) {
+        return new Like(Type.STARTS_WITH, value);
+    }
 
-	public static Like endsWith(String value) {
-		return new Like(Type.ENDS_WITH, value);
-	}
+    public static Like endsWith(String value) {
+        return new Like(Type.ENDS_WITH, value);
+    }
 
-	public static Like contains(String value) {
-		return new Like(Type.CONTAINS, value);
-	}
+    public static Like contains(String value) {
+        return new Like(Type.CONTAINS, value);
+    }
 
-	public boolean startsWith() {
-		return type == Type.STARTS_WITH;
-	}
+    public boolean startsWith() {
+        return type == Type.STARTS_WITH;
+    }
 
-	public boolean endsWith() {
-		return type == Type.ENDS_WITH;
-	}
+    public boolean endsWith() {
+        return type == Type.ENDS_WITH;
+    }
 
-	public boolean contains() {
-		return type == Type.CONTAINS;
-	}
+    public boolean contains() {
+        return type == Type.CONTAINS;
+    }
 
-	@Override
-	@SuppressWarnings("unchecked")
-	public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-		Class<?> type = path.getJavaType();
+    @Override
+    @SuppressWarnings("unchecked")
+    public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        Class<?> type = path.getJavaType();
 
-		if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
-			Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
-			return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1)) : path.in(parameterBuilder.create(matches));
-		}
-		else if (Bool.is(type)) {
-			Expression<Boolean> pathAsBoolean = (Expression<Boolean>) path;
-			return Bool.isTruthy(getValue()) ? criteriaBuilder.isTrue(pathAsBoolean) : criteriaBuilder.isFalse(pathAsBoolean);
-		}
-		else {
-			boolean lowercaseable = !Numeric.is(type);
-			String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
-			Expression<String> pathAsString = castAsString(criteriaBuilder, path);
-			return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
-		}
-	}
+        if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
+            Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
+            return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1)) : path.in(parameterBuilder.create(matches));
+        }
+        else if (Bool.is(type)) {
+            Expression<Boolean> pathAsBoolean = (Expression<Boolean>) path;
+            return Bool.isTruthy(getValue()) ? criteriaBuilder.isTrue(pathAsBoolean) : criteriaBuilder.isFalse(pathAsBoolean);
+        }
+        else {
+            boolean lowercaseable = !Numeric.is(type);
+            String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
+            Expression<String> pathAsString = castAsString(criteriaBuilder, path);
+            return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+        }
+    }
 
-	@Override
-	public boolean applies(Object modelValue) {
-		if (modelValue == null) {
-			return false;
-		}
+    @Override
+    public boolean applies(Object modelValue) {
+        if (modelValue == null) {
+            return false;
+        }
 
-		String lowerCasedValue = getValue().toLowerCase();
-		String lowerCasedModelValue = modelValue.toString().toLowerCase();
+        String lowerCasedValue = getValue().toLowerCase();
+        String lowerCasedModelValue = modelValue.toString().toLowerCase();
 
-		if (startsWith()) {
-			return lowerCasedModelValue.startsWith(lowerCasedValue);
-		}
-		else if (endsWith()) {
-			return lowerCasedModelValue.endsWith(lowerCasedValue);
-		}
-		else {
-			return lowerCasedModelValue.contains(lowerCasedValue);
-		}
-	}
+        if (startsWith()) {
+            return lowerCasedModelValue.startsWith(lowerCasedValue);
+        }
+        else if (endsWith()) {
+            return lowerCasedModelValue.endsWith(lowerCasedValue);
+        }
+        else {
+            return lowerCasedModelValue.contains(lowerCasedValue);
+        }
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(super.hashCode(), type);
-	}
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), type);
+    }
 
-	@Override
-	public boolean equals(Object object) {
-		return super.equals(object) && Objects.equals(type, ((Like) object).type);
-	}
+    @Override
+    public boolean equals(Object object) {
+        return super.equals(object) && Objects.equals(type, ((Like) object).type);
+    }
 
-	@Override
-	public String toString() {
-		return "LIKE " + (startsWith() ? "" : "%") + getValue() + (endsWith() ? "" : "%");
-	}
+    @Override
+    public String toString() {
+        return "LIKE " + (startsWith() ? "" : "%") + getValue() + (endsWith() ? "" : "%");
+    }
 
 }

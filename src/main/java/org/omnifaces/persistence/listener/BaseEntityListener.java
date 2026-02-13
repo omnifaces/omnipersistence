@@ -17,18 +17,18 @@ import static org.omnifaces.utils.annotation.Annotations.createAnnotationInstanc
 import java.lang.annotation.Annotation;
 import java.util.Optional;
 
-import javax.enterprise.event.Observes;
-import javax.enterprise.inject.spi.BeanManager;
-import javax.enterprise.inject.spi.CDI;
-import javax.inject.Inject;
-import javax.persistence.PostPersist;
-import javax.persistence.PostRemove;
-import javax.persistence.PostUpdate;
-
 import org.omnifaces.persistence.event.Created;
 import org.omnifaces.persistence.event.Deleted;
 import org.omnifaces.persistence.event.Updated;
 import org.omnifaces.persistence.model.BaseEntity;
+
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.spi.BeanManager;
+import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Inject;
+import jakarta.persistence.PostPersist;
+import jakarta.persistence.PostRemove;
+import jakarta.persistence.PostUpdate;
 
 /**
  * <p>
@@ -56,49 +56,52 @@ import org.omnifaces.persistence.model.BaseEntity;
  */
 public class BaseEntityListener {
 
-	@Inject
-	private BeanManager beanManager;
+    @Inject
+    private BeanManager beanManager;
 
-	private Optional<BeanManager> optionalBeanManager;
+    private Optional<BeanManager> optionalBeanManager;
 
-	@PostPersist
-	public void onPostPersist(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Created.class);
-	}
+    @PostPersist
+    public void onPostPersist(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Created.class);
+    }
 
-	@PostUpdate
-	public void onPostUpdate(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Updated.class);
-	}
+    @PostUpdate
+    public void onPostUpdate(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Updated.class);
+    }
 
-	@PostRemove
-	public void onPostRemove(BaseEntity<?> entity) {
-		fireOptionalEvent(entity, Deleted.class);
-	}
+    @PostRemove
+    public void onPostRemove(BaseEntity<?> entity) {
+        fireOptionalEvent(entity, Deleted.class);
+    }
 
-	private BeanManager getBeanManager() {
-		if (beanManager == null) {
-			try {
-				beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
-			}
-			catch (IllegalStateException ignore) {
-				beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
-			}
-		}
+    private BeanManager getBeanManager() {
+        if (beanManager == null) {
+            try {
+                beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
+            }
+            catch (IllegalStateException ignore) {
+                beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
+            }
+        }
 
-		return beanManager;
-	}
+        return beanManager;
+    }
 
-	private Optional<BeanManager> getOptionalBeanManager() {
-		if (optionalBeanManager == null) {
-			optionalBeanManager = Optional.ofNullable(getBeanManager());
-		}
+    private Optional<BeanManager> getOptionalBeanManager() {
+        if (optionalBeanManager == null) {
+            optionalBeanManager = Optional.ofNullable(getBeanManager());
+        }
 
-		return optionalBeanManager;
-	}
+        return optionalBeanManager;
+    }
 
-	private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
-		getOptionalBeanManager().ifPresent(beanManager -> beanManager.fireEvent(entity, createAnnotationInstance(eventType)));
-	}
+    private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
+        getOptionalBeanManager().ifPresent(beanManager ->
+            beanManager.getEvent()
+                       .select(createAnnotationInstance(eventType))
+                       .fire(entity));
+    }
 
 }

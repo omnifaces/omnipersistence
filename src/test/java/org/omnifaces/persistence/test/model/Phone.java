@@ -12,14 +12,14 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import static javax.persistence.EnumType.STRING;
+import static jakarta.persistence.EnumType.STRING;
 
-import javax.persistence.Entity;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.ManyToOne;
-import javax.persistence.Transient;
-import javax.validation.constraints.NotNull;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Transient;
+import jakarta.validation.constraints.NotNull;
 
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
@@ -27,48 +27,48 @@ import org.omnifaces.persistence.model.GeneratedIdEntity;
 @Entity
 public class Phone extends GeneratedIdEntity<Long> {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	public enum Type {
-		MOBILE,
-		HOME,
-		WORK;
-	}
+    public enum Type {
+        MOBILE,
+        HOME,
+        WORK;
+    }
 
-	private @NotNull @Enumerated(STRING) Type type;
-	private @NotNull String number;
+    private @NotNull @Enumerated(STRING) Type type;
+    private @NotNull String number;
 
-	@ManyToOne(optional=false, fetch=FetchType.LAZY)
-	private @NotNull Person owner;
+    @ManyToOne(optional=false, fetch=FetchType.LAZY)
+    private @NotNull Person owner;
 
-	public Type getType() {
-		return type;
-	}
+    public Type getType() {
+        return type;
+    }
 
-	public void setType(Type type) {
-		this.type = type;
-	}
+    public void setType(Type type) {
+        this.type = type;
+    }
 
-	public String getNumber() {
-		return number;
-	}
+    public String getNumber() {
+        return number;
+    }
 
-	public void setNumber(String number) {
-		this.number = number;
-	}
+    public void setNumber(String number) {
+        this.number = number;
+    }
 
-	public Person getOwner() {
-		return owner;
-	}
+    public Person getOwner() {
+        return owner;
+    }
 
-	public void setOwner(Person owner) {
-		this.owner = owner;
-	}
+    public void setOwner(Person owner) {
+        this.owner = owner;
+    }
 
-	@Transient
-	public String getEmail() {
-		return getOwner().getEmail();
-	}
+    @Transient
+    public String getEmail() {
+        return getOwner().getEmail();
+    }
 
 	@Override
 	public int hashCode() {

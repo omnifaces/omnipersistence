@@ -20,11 +20,12 @@ import static java.util.Objects.requireNonNullElseGet;
 import static java.util.stream.Collectors.joining;
 
 import java.io.Serializable;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.function.Function;
 
-import javax.persistence.EntityListeners;
-import javax.persistence.MappedSuperclass;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.MappedSuperclass;
 
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -50,12 +51,12 @@ import org.omnifaces.persistence.service.BaseEntityService;
 @EntityListeners(BaseEntityListener.class)
 public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	/**
-	 * Hashes by default the ID.
-	 */
-	@Override
+    /**
+     * Hashes by default the ID.
+     */
+    @Override
     public int hashCode() {
         return hashCode(BaseEntity::getId);
     }
@@ -68,16 +69,16 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
     @SafeVarargs
     @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> int hashCode(Function<E, Object>... getters) {
-        Object[] values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
+    protected final <E extends BaseEntity<I>> int hashCode(final Function<E, Object>... getters) {
+        final var values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
         return values.length > 0 ? Objects.hash(values) : super.hashCode();
     }
 
-	/**
-	 * Compares by default by entity class (proxies taken into account) and ID.
-	 */
-	@Override
-    public boolean equals(Object other) {
+    /**
+     * Compares by default by entity class (proxies taken into account) and ID.
+     */
+    @Override
+    public boolean equals(final Object other) {
         return equals(other, BaseEntity::getId);
     }
 
@@ -90,41 +91,53 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 */
     @SafeVarargs
     @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> boolean equals(Object other, Function<E, Object>... getters) {
-        return other == this || (getClass().isInstance(other) && other.getClass().isInstance(this) && stream(getters)
-        	.map(getter -> Objects.equals(getter.apply((E) this), getter.apply((E) other)))
-        	.allMatch(b -> b));
+    protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
+        if (other == this) {
+            return true;
+        }
+
+        if (other == null || !getClass().isInstance(other) && !other.getClass().isInstance(this)) {
+            return false;
+        }
+
+        final var values = stream(getters).map(getter -> getter.apply((E) this)).toArray();
+
+        if (stream(values).allMatch(Objects::isNull)) {
+            return false;
+        }
+
+        final var otherValues = stream(getters).map(getter -> getter.apply((E) other)).toArray();
+        return Objects.deepEquals(values, otherValues);
     }
 
-	/**
-	 * Orders by default with "nulls last".
-	 */
-	@Override
-	public int compareTo(BaseEntity<I> other) {
+    /**
+     * Orders by default with "nulls last".
+     */
+    @Override
+    public int compareTo(final BaseEntity<I> other) {
         return compareTo(other, BaseEntity::getId);
-	}
-
-	/**
-	 * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param other The object to be compared.
-	 * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
-	 * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
-	 */
-	@SafeVarargs
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-    protected final <E extends BaseEntity<I>> int compareTo(BaseEntity<I> other, Function<E, Object>... getters) {
-		return stream(getters)
-			.reduce(
-				comparing((Function) getters[0], nullsLast(naturalOrder())),
-				(comparator, getter) -> comparator.thenComparing(getter, nullsLast(naturalOrder())),
-				(l, r) -> l
-			).compare(this, other);
     }
 
-	/**
-	 * The default format is <code>ClassName[{id}]</code> where <code>{id}</code> defaults to <code>@hashcode</code> when null.
-	 */
+    /**
+     * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
+     * @param <E> The generic base entity type.
+     * @param other The object to be compared.
+     * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
+     * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
+     */
+    @SafeVarargs
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    protected final <E extends BaseEntity<I>> int compareTo(final Object other, final Function<E, Object>... getters) {
+        if (other == null) {
+            return -1;
+        }
+
+        return stream(getters).<Comparator<Object>>map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
+    }
+
+    /**
+     * The default format is <code>ClassName[{id}]</code> where <code>{id}</code> defaults to <code>@hashcode</code> when null.
+     */
     @Override
     public String toString() {
         return toString(e -> requireNonNullElseGet(e.getId(), () -> ("@" + e.hashCode())));
@@ -139,12 +152,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @SafeVarargs
     @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> String toString(Function<E, Object>... getters) {
-        return new StringBuilder(getClass().getSimpleName())
-        	.append("[")
-        	.append(stream(getters).map(getter -> Objects.toString(getter.apply((E) this))).collect(joining(", ")))
-        	.append("]")
-        	.toString();
+    protected final <E extends BaseEntity<I>> String toString(final Function<E, Object>... getters) {
+        return stream(getters).map(getter -> Objects.toString(getter.apply((E) this))).collect(joining(", ", getClass().getSimpleName() + "[", "]"));
     }
-
 }

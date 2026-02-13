@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import javax.ejb.Stateless;
+import jakarta.ejb.Stateless;
 
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -22,12 +22,12 @@ import org.omnifaces.utils.collection.PartialResultList;
 @Stateless
 public class PhoneService extends BaseEntityService<Long, Phone> {
 
-	public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
-		return getPage(page, count, "owner");
-	}
+    public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
+        return getPage(page, count, "owner");
+    }
 
-	public PartialResultList<Phone> getAllWithOwners() {
-		return getPageWithOwners(Page.ALL, false);
-	}
+    public PartialResultList<Phone> getAllWithOwners() {
+        return getPageWithOwners(Page.ALL, false);
+    }
 
 }

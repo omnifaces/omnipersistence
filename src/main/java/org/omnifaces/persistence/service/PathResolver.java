@@ -12,16 +12,16 @@
  */
 package org.omnifaces.persistence.service;
 
-import javax.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Expression;
 
 /**
  * Helper functional interface of {@link BaseEntityService}.
  */
 @FunctionalInterface
 interface PathResolver {
-	Expression<?> get(String field);
+    Expression<?> get(String field);
 
-	default String join(String field) {
-		return '@' + field;
-	}
+    default String join(String field) {
+        return '@' + field;
+    }
 }

@@ -12,7 +12,7 @@
  */
 package org.omnifaces.persistence.test.model;
 
-import javax.persistence.Entity;
+import jakarta.persistence.Entity;
 
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
@@ -20,17 +20,17 @@ import org.omnifaces.persistence.model.SoftDeletable;
 @Entity
 public class Comment extends GeneratedIdEntity<Long> {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@SoftDeletable
-	private boolean deleted;
+    @SoftDeletable
+    private boolean deleted;
 
-	public boolean isDeleted() {
-		return deleted;
-	}
+    public boolean isDeleted() {
+        return deleted;
+    }
 
-	public void setDeleted(boolean deleted) {
-		this.deleted = deleted;
-	}
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
+    }
 
 }

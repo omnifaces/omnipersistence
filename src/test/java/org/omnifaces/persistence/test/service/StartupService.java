@@ -17,112 +17,89 @@ import static java.lang.Math.abs;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
-import javax.annotation.PostConstruct;
-import javax.ejb.Singleton;
-import javax.ejb.Startup;
-import javax.inject.Inject;
+import jakarta.annotation.PostConstruct;
+import jakarta.ejb.Singleton;
+import jakarta.ejb.Startup;
+import jakarta.inject.Inject;
 
-import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
-import org.omnifaces.persistence.test.model.Product;
-import org.omnifaces.persistence.test.model.ProductStatus;
 import org.omnifaces.persistence.test.model.Text;
-import org.omnifaces.persistence.test.model.UserRole;
 
 @Startup
 @Singleton
 public class StartupService {
 
-	public static final int TOTAL_RECORDS = 200;
-	public static final int ROWS_PER_PAGE = 10;
+    public static final int TOTAL_RECORDS = 200;
+    public static final int ROWS_PER_PAGE = 10;
+    public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
 
-	@Inject
-	private TextService textService;
+    @Inject
+    private TextService textService;
 
-	@Inject
-	private CommentService commentService;
+    @Inject
+    private CommentService commentService;
 
-	@Inject
-	private PersonService personService;
+    @Inject
+    private PersonService personService;
 
-	@Inject
-	private ProductService productService;
+    @PostConstruct
+    public void init() {
+        createTestPersons();
+        createTestTexts();
+        createTestComments();
+    }
 
-	@PostConstruct
-	public void init() {
-		createTestPersons();
-		createTestTexts();
-		createTestComments();
-		createTestProducts();
-	}
+    private void createTestPersons() {
+        var genders = Gender.values();
+        var phoneTypes = Phone.Type.values();
+        var groups = Arrays.asList(Group.values());
+        var random = ThreadLocalRandom.current();
 
-	private void createTestPersons() {
-		Gender[] genders = Gender.values();
-		Phone.Type[] phoneTypes = Phone.Type.values();
-		List<Group> groups = Arrays.asList(Group.values());
-		ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (var i = 0; i < TOTAL_RECORDS; i++) {
+            var person = new Person();
+            person.setEmail("name" + i + "@example.com");
+            person.setGender(genders[random.nextInt(genders.length)]);
+            person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
 
-		for (int i = 0; i < TOTAL_RECORDS; i++) {
-			Person person = new Person();
-			person.setEmail("name" + i + "@example.com");
-			person.setGender(genders[random.nextInt(genders.length)]);
-			person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
+            var address = new Address();
+            address.setStreet("Street" + i);
+            address.setHouseNumber("" + i);
+            address.setPostcode("Postcode" + i);
+            address.setCity("City" + i);
+            address.setCountry("Country" + i);
+            person.setAddress(address);
 
-			Address address = new Address();
-			address.setStreet("Street" + i);
-			address.setHouseNumber("" + i);
-			address.setPostcode("Postcode" + i);
-			address.setCity("City" + i);
-			address.setCountry("Country" + i);
-			person.setAddress(address);
+            var totalPhones = i == 0 ? TOTAL_PHONES_PER_PERSON_0 : random.nextInt(1, 6);
+            for (var j = 0; j < totalPhones; j++) {
+                var phone = new Phone();
+                phone.setType(phoneTypes[random.nextInt(phoneTypes.length)]);
+                phone.setNumber("0" + abs(random.nextInt()));
+                phone.setOwner(person);
+                person.getPhones().add(phone);
+            }
 
-			int totalPhones = random.nextInt(1, 6);
-			for (int j = 0; j < totalPhones; j++) {
-				Phone phone = new Phone();
-				phone.setType(phoneTypes[random.nextInt(phoneTypes.length)]);
-				phone.setNumber("0" + abs(random.nextInt()));
-				phone.setOwner(person);
-				person.getPhones().add(phone);
-			}
+            Collections.shuffle(groups, random);
+            person.getGroups().addAll(groups.subList(0, random.nextInt(1, groups.size() + 1)));
 
-			Collections.shuffle(groups, random);
-			person.getGroups().addAll(groups.subList(0, random.nextInt(1, groups.size() + 1)));
+            personService.persist(person);
+        }
+    }
 
-			personService.persist(person);
-		}
-	}
+    private void createTestTexts() {
+        textService.persist(new Text());
+        textService.persist(new Text());
+    }
 
-	private void createTestTexts() {
-		textService.persist(new Text());
-		textService.persist(new Text());
-	}
-
-	private void createTestComments() {
-		commentService.persist(new Comment());
-		commentService.persist(new Comment());
-	}
-
-	private void createTestProducts() {
-		if (productService.getProvider() != Provider.ECLIPSELINK) { // EclipseLink doesn't seem to support EnumMappingTableService's actions.
-			Product product = new Product();
-			product.setProductStatus(ProductStatus.IN_STOCK);
-			product.addUserRole(UserRole.USER);
-			productService.persist(product);
-
-			product = new Product();
-			product.setProductStatus(ProductStatus.DISCONTINUED);
-			product.addUserRole(UserRole.EMPLOYEE);
-			product.addUserRole(UserRole.MANAGER);
-			productService.persist(product);
-		}
-	}
+    private void createTestComments() {
+        commentService.persist(new Comment());
+        commentService.persist(new Comment());
+    }
 
 }

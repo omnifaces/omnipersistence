@@ -23,21 +23,21 @@ import java.io.Serializable;
  */
 public interface Identifiable<I extends Comparable<I> & Serializable> {
 
-	/**
-	 * The string representing the field name <code>"id"</code>.
-	 */
-	String ID = "id";
+    /**
+     * The string representing the field name <code>"id"</code>.
+     */
+    String ID = "id";
 
-	/**
-	 * Returns the ID.
-	 * @return The ID.
-	 */
-	I getId();
+    /**
+     * Returns the ID.
+     * @return The ID.
+     */
+    I getId();
 
-	/**
-	 * Sets the ID.
-	 * @param id The ID.
-	 */
-	void setId(I id);
+    /**
+     * Sets the ID.
+     * @param id The ID.
+     */
+    void setId(I id);
 
 }

@@ -20,52 +20,52 @@ import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
  */
 class PageBuilder<T> {
 
-	private final Page page;
-	private final boolean cacheable;
-	private final Class<T> resultType;
-	private final MappedQueryBuilder<T> queryBuilder;
+    private final Page page;
+    private final boolean cacheable;
+    private final Class<T> resultType;
+    private final MappedQueryBuilder<T> queryBuilder;
 
-	private boolean shouldBuildCountSubquery;
-	private boolean canBuildValueBasedPagingPredicate;
+    private boolean shouldBuildCountSubquery;
+    private boolean canBuildValueBasedPagingPredicate;
 
-	public PageBuilder(Page page, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-		this.page = page;
-		this.cacheable = cacheable;
-		this.resultType = resultType;
-		this.queryBuilder = queryBuilder;
-		this.canBuildValueBasedPagingPredicate = page.getLast() != null && page.getOffset() > 0;
-	}
+    public PageBuilder(Page page, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
+        this.page = page;
+        this.cacheable = cacheable;
+        this.resultType = resultType;
+        this.queryBuilder = queryBuilder;
+        this.canBuildValueBasedPagingPredicate = page.getLast() != null && page.getOffset() > 0;
+    }
 
-	public void shouldBuildCountSubquery(boolean yes) {
-		shouldBuildCountSubquery |= yes;
-	}
+    public void shouldBuildCountSubquery(boolean yes) {
+        shouldBuildCountSubquery |= yes;
+    }
 
-	public boolean shouldBuildCountSubquery() {
-		return shouldBuildCountSubquery;
-	}
+    public boolean shouldBuildCountSubquery() {
+        return shouldBuildCountSubquery;
+    }
 
-	public void canBuildValueBasedPagingPredicate(boolean yes) {
-		canBuildValueBasedPagingPredicate &= yes;
-	}
+    public void canBuildValueBasedPagingPredicate(boolean yes) {
+        canBuildValueBasedPagingPredicate &= yes;
+    }
 
-	public boolean canBuildValueBasedPagingPredicate() {
-		return canBuildValueBasedPagingPredicate;
-	}
+    public boolean canBuildValueBasedPagingPredicate() {
+        return canBuildValueBasedPagingPredicate;
+    }
 
-	public Page getPage() {
-		return page;
-	}
+    public Page getPage() {
+        return page;
+    }
 
-	public boolean isCacheable() {
-		return cacheable;
-	}
+    public boolean isCacheable() {
+        return cacheable;
+    }
 
-	public Class<T> getResultType() {
-		return resultType;
-	}
+    public Class<T> getResultType() {
+        return resultType;
+    }
 
-	public MappedQueryBuilder<T> getQueryBuilder() {
-		return queryBuilder;
-	}
+    public MappedQueryBuilder<T> getQueryBuilder() {
+        return queryBuilder;
+    }
 
 }

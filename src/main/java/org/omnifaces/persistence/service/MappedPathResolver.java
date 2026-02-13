@@ -15,31 +15,31 @@ package org.omnifaces.persistence.service;
 import java.util.Map;
 import java.util.Set;
 
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Root;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Root;
 
 /**
  * Helper class of {@link BaseEntityService}.
  */
 class MappedPathResolver extends RootPathResolver {
 
-	private final Map<String, Expression<?>> paths;
+    private final Map<String, Expression<?>> paths;
 
-	public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
-		super(root, elementCollections, manyOrOneToOnes);
-		this.paths = paths;
-	}
+    public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
+        super(root, elementCollections, manyOrOneToOnes);
+        this.paths = paths;
+    }
 
-	@Override
-	public Expression<?> get(String field) {
-		if (field != null) {
-			Expression<?> path = paths.get(field);
+    @Override
+    public Expression<?> get(String field) {
+        if (field != null) {
+            Expression<?> path = paths.get(field);
 
-			if (path != null) {
-				return path;
-			}
-		}
+            if (path != null) {
+                return path;
+            }
+        }
 
-		return super.get(field);
-	}
+        return super.get(field);
+    }
 }
