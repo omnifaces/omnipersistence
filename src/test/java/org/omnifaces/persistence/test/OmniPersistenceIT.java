@@ -26,6 +26,7 @@ import static org.omnifaces.persistence.test.service.StartupService.TOTAL_RECORD
 
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.ejb.EJB;
@@ -39,13 +40,23 @@ import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.omnifaces.persistence.criteria.Between;
+import org.omnifaces.persistence.criteria.Enumerated;
+import org.omnifaces.persistence.criteria.IgnoreCase;
+import org.omnifaces.persistence.criteria.Like;
+import org.omnifaces.persistence.criteria.Not;
+import org.omnifaces.persistence.criteria.Numeric;
+import org.omnifaces.persistence.criteria.Order;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
+import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.service.CommentService;
+import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.LookupService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -84,6 +95,9 @@ public class OmniPersistenceIT {
 
     @EJB
     private LookupService lookupService;
+
+    @EJB
+    private ConfigService configService;
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
@@ -174,6 +188,31 @@ public class OmniPersistenceIT {
     }
 
 
+    // Batch operations -----------------------------------------------------------------------------------------------
+
+    @Test
+    void testGetByIds() {
+        var persons = personService.getByIds(List.of(1L, 2L, 3L));
+        assertEquals(3, persons.size(), "Should find 3 persons by IDs");
+        assertTrue(persons.stream().anyMatch(p -> p.getId().equals(1L)), "Contains person 1");
+        assertTrue(persons.stream().anyMatch(p -> p.getId().equals(2L)), "Contains person 2");
+        assertTrue(persons.stream().anyMatch(p -> p.getId().equals(3L)), "Contains person 3");
+    }
+
+    @Test
+    void testGetByIdsWithNonExisting() {
+        var persons = personService.getByIds(List.of(1L, 999999L));
+        assertEquals(1, persons.size(), "Should find only 1 existing person");
+        assertEquals(1L, persons.get(0).getId(), "Found person has correct ID");
+    }
+
+    @Test
+    void testGetByIdsEmpty() {
+        var persons = personService.getByIds(List.of());
+        assertTrue(persons.isEmpty(), "Empty IDs should return empty list");
+    }
+
+
     // Page -----------------------------------------------------------------------------------------------------------
 
     @Test
@@ -191,6 +230,221 @@ public class OmniPersistenceIT {
         var phones = phoneService.getPage(Page.with().allMatch(Map.of("owner", person)).build(), true);
         assertEquals(TOTAL_PHONES_PER_PERSON_0, phones.size(), "There are 3 phones");
     }
+
+    @Test
+    void testPageWithOffsetAndLimit() {
+        var firstPage = personService.getPage(Page.of(0, 10), true);
+        assertEquals(10, firstPage.size(), "First page has 10 records");
+        assertEquals(TOTAL_RECORDS, firstPage.getEstimatedTotalNumberOfResults(), "Total count is correct");
+
+        var secondPage = personService.getPage(Page.of(10, 10), true);
+        assertEquals(10, secondPage.size(), "Second page has 10 records");
+
+        assertFalse(firstPage.get(0).getId().equals(secondPage.get(0).getId()), "Pages contain different records");
+    }
+
+    @Test
+    void testPageWithoutCount() {
+        var page = personService.getPage(Page.of(0, 10), false);
+        assertEquals(10, page.size(), "Page has 10 records");
+        assertEquals(-1, page.getEstimatedTotalNumberOfResults(), "Count is unknown when not requested");
+    }
+
+    @Test
+    void testPageWithOrdering() {
+        var ascPage = personService.getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        var descPage = personService.getPage(Page.with().range(0, 10).orderBy("id", false).build(), false);
+        assertTrue(ascPage.get(0).getId() < ascPage.get(9).getId(), "Ascending order");
+        assertTrue(descPage.get(0).getId() > descPage.get(9).getId(), "Descending order");
+    }
+
+    @Test
+    void testPageOne() {
+        var result = personService.getPage(Page.ONE, false);
+        assertEquals(1, result.size(), "Page.ONE returns exactly 1 record");
+    }
+
+    @Test
+    void testPageWithMultipleRequiredCriteria() {
+        var person1 = personService.getById(1L);
+        var criteria = Map.<String, Object>of(
+            "gender", person1.getGender(),
+            "email", IgnoreCase.value(person1.getEmail())
+        );
+        var result = personService.getPage(Page.with().allMatch(criteria).build(), true);
+        assertEquals(1, result.size(), "Exact match by gender and email should return 1 record");
+        assertEquals(person1.getId(), result.get(0).getId(), "Found the correct person");
+    }
+
+    @Test
+    void testPageWithMultipleOptionalCriteria() {
+        var person1 = personService.getById(1L);
+        var person2 = personService.getById(2L);
+        var criteria = Map.<String, Object>of(
+            "email", person1.getEmail(),
+            "gender", person2.getGender()
+        );
+        var result = personService.getPage(Page.with().anyMatch(criteria).build(), true);
+        assertTrue(result.size() >= 1, "At least one match by email or gender");
+    }
+
+
+    // Page with criteria types ---------------------------------------------------------------------------------------
+
+    @Test
+    void testPageWithLikeContains() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("email", Like.contains("e99@e"))).build(), true);
+        assertEquals(1, result.size(), "LIKE contains matches e99@e");
+        assertTrue(result.get(0).getEmail().contains("name99@"), "Email contains name99@");
+    }
+
+    @Test
+    void testPageWithLikeStartsWith() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("email", Like.startsWith("name1@"))).build(), true);
+        assertTrue(result.size() >= 1, "LIKE starts with matches at least name1@");
+        result.forEach(p -> assertTrue("name1@example.com".equals(p.getEmail()), "Email is name1@example.com"));
+    }
+
+    @Test
+    void testPageWithLikeEndsWith() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("email", Like.endsWith("@example.com"))).build(), true);
+        assertEquals(TOTAL_RECORDS, result.size(), "All records end with @example.com");
+    }
+
+    @Test
+    void testPageWithLikeNoMatch() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("email", Like.contains("nonexistent_xyz"))).build(), true);
+        assertEquals(0, result.size(), "No records match nonexistent search");
+    }
+
+    @Test
+    void testPageWithIgnoreCase() {
+        var person = personService.getById(1L);
+        var uppercaseEmail = person.getEmail().toUpperCase();
+        var result = personService.getPage(Page.with().allMatch(Map.of("email", IgnoreCase.value(uppercaseEmail))).build(), true);
+        assertEquals(1, result.size(), "Case insensitive exact match finds the record");
+        assertEquals(person.getId(), result.get(0).getId(), "Found the correct person");
+    }
+
+    @Test
+    void testPageWithEnumCriteria() {
+        var maleResult = personService.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
+        var femaleResult = personService.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.FEMALE))).build(), true);
+        assertTrue(maleResult.size() > 0, "Some males exist");
+        assertTrue(femaleResult.size() > 0, "Some females exist");
+        assertEquals(TOTAL_RECORDS, maleResult.size() + femaleResult.size()
+            + personService.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.TRANS))).build(), true).size()
+            + personService.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.OTHER))).build(), true).size(),
+            "All genders sum up to total");
+    }
+
+    @Test
+    void testPageWithNumericCriteria() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("id", Numeric.value(1))).build(), true);
+        assertEquals(1, result.size(), "Numeric match finds exactly 1 record");
+        assertEquals(1L, result.get(0).getId(), "Found person with ID 1");
+    }
+
+    @Test
+    void testPageWithOrderGreaterThan() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("id", Order.greaterThan(TOTAL_RECORDS - 5L))).build(), true);
+        assertEquals(5, result.size(), "IDs greater than 195 should be 196-200");
+        result.forEach(p -> assertTrue(p.getId() > TOTAL_RECORDS - 5L, "ID is greater than threshold"));
+    }
+
+    @Test
+    void testPageWithOrderLessThanOrEqualTo() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("id", Order.lessThanOrEqualTo(5L))).build(), true);
+        assertEquals(5, result.size(), "IDs <= 5 should be 1-5");
+        result.forEach(p -> assertTrue(p.getId() <= 5L, "ID is <= 5"));
+    }
+
+    @Test
+    void testPageWithBetween() {
+        var result = personService.getPage(Page.with().allMatch(Map.of("id", Between.range(10L, 19L))).build(), true);
+        assertEquals(10, result.size(), "IDs between 10 and 19 should be 10 records");
+        result.forEach(p -> {
+            assertTrue(p.getId() >= 10L, "ID >= 10");
+            assertTrue(p.getId() <= 19L, "ID <= 19");
+        });
+    }
+
+    @Test
+    void testPageWithBetweenDates() {
+        var start = LocalDate.of(1950, 1, 1);
+        var end = LocalDate.of(1960, 12, 31);
+        var result = personService.getPage(Page.with().allMatch(Map.of("dateOfBirth", Between.range(start, end))).build(), true);
+        result.forEach(p -> {
+            assertFalse(p.getDateOfBirth().isBefore(start), "Date of birth is not before start");
+            assertFalse(p.getDateOfBirth().isAfter(end), "Date of birth is not after end");
+        });
+    }
+
+    @Test
+    void testPageWithNotCriteria() {
+        var allMales = personService.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
+        var notMales = personService.getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
+        assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
+    }
+
+
+    // Page with fetch fields (PersonService/PhoneService custom methods) ---------------------------------------------
+
+    @Test
+    void testPageWithAddress() {
+        var result = personService.getAllWithAddress();
+        assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
+        result.forEach(p -> assertNotNull(p.getAddress(), "Address is fetched"));
+        result.forEach(p -> assertNotNull(p.getAddress().getStreet(), "Address street is accessible"));
+    }
+
+    @Test
+    void testPageWithPhones() {
+        var result = personService.getAllWithPhones();
+        assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
+        var person0 = result.stream().filter(p -> p.getId().equals(1L)).findFirst().orElseThrow();
+        assertEquals(TOTAL_PHONES_PER_PERSON_0, person0.getPhones().size(), "Person 1 has expected phones");
+    }
+
+    @Test
+    void testPageWithGroups() {
+        var result = personService.getAllWithGroups();
+        assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
+        result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Each person has at least one group"));
+    }
+
+    @Test
+    void testPhonePageWithOwners() {
+        var result = phoneService.getAllWithOwners();
+        assertFalse(result.isEmpty(), "Phones exist");
+        result.forEach(p -> assertNotNull(p.getOwner(), "Owner is fetched"));
+        result.forEach(p -> assertNotNull(p.getOwner().getEmail(), "Owner email is accessible"));
+    }
+
+
+    // Page with DTO mapping ------------------------------------------------------------------------------------------
+
+    @Test
+    void testPageOfPersonCards() {
+        var result = personService.getAllPersonCards();
+        assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
+        result.forEach(card -> {
+            assertNotNull(card.getId(), "Card has ID");
+            assertNotNull(card.getEmail(), "Card has email");
+            assertNotNull(card.getAddressString(), "Card has address string");
+            assertTrue(card.getAddressString().contains(","), "Address string is formatted with commas");
+            assertNotNull(card.getTotalPhones(), "Card has total phones");
+            assertTrue(card.getTotalPhones() >= 1, "Each person has at least one phone");
+        });
+    }
+
+    @Test
+    void testPageOfPersonCardsWithPagination() {
+        var page = personService.getPageOfPersonCards(Page.of(0, 5), true);
+        assertEquals(5, page.size(), "Page returns 5 cards");
+        assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+    }
+
 
     // @SoftDeletable -------------------------------------------------------------------------------------------------
 
@@ -234,6 +488,45 @@ public class OmniPersistenceIT {
         commentService.softDelete(allComments);
         assertEquals(0, commentService.list().size(), "Total records for comments");
         assertEquals(allComments.size(), commentService.listSoftDeleted().size(), "Total deleted records for comments");
+    }
+
+    @Test
+    void testSoftUndelete() {
+        var lookup = new Lookup("su");
+        lookupService.persist(lookup);
+
+        lookupService.softDelete(lookup);
+        assertNull(lookupService.getById("su"), "Soft deleted lookup not found by getById");
+
+        var softDeleted = lookupService.getSoftDeletedById("su");
+        assertNotNull(softDeleted, "Soft deleted lookup found by getSoftDeletedById");
+        lookupService.softUndelete(softDeleted);
+
+        var restored = lookupService.getById("su");
+        assertNotNull(restored, "Undeleted lookup found by getById");
+        assertTrue(restored.isActive(), "Undeleted lookup is active");
+    }
+
+    @Test
+    void testSoftDeleteBatch() {
+        var lookup1 = new Lookup("b1");
+        var lookup2 = new Lookup("b2");
+        lookupService.persist(lookup1);
+        lookupService.persist(lookup2);
+        var totalBefore = lookupService.list().size();
+
+        lookupService.softDelete(List.of(lookup1, lookup2));
+        assertEquals(totalBefore - 2, lookupService.list().size(), "Two less active records after batch soft delete");
+
+        var deleted = lookupService.listSoftDeleted();
+        assertTrue(deleted.stream().anyMatch(l -> "b1".equals(l.getId())), "b1 is in soft deleted list");
+        assertTrue(deleted.stream().anyMatch(l -> "b2".equals(l.getId())), "b2 is in soft deleted list");
+
+        lookupService.softUndelete(List.of(
+            lookupService.getSoftDeletedById("b1"),
+            lookupService.getSoftDeletedById("b2")
+        ));
+        assertEquals(totalBefore, lookupService.list().size(), "Records restored after batch undelete");
     }
 
     @Test
@@ -312,6 +605,50 @@ public class OmniPersistenceIT {
     void testUpdateNewLookup() {
         var lookup = new Lookup("ee");
         assertThrows(IllegalEntityStateException.class, () -> lookupService.update(lookup));
+    }
+
+
+    // @NonDeletable --------------------------------------------------------------------------------------------------
+
+    @Test
+    void testNonDeletableCanBePersisted() {
+        var config = new Config();
+        config.setKey("test.key");
+        config.setValue("test.value");
+        configService.persist(config);
+        assertNotNull(config.getId(), "Config entity was persisted");
+
+        var persisted = configService.getById(config.getId());
+        assertNotNull(persisted, "Config entity found by ID");
+        assertEquals("test.key", persisted.getKey(), "Key is correct");
+        assertEquals("test.value", persisted.getValue(), "Value is correct");
+    }
+
+    @Test
+    void testNonDeletableCanBeUpdated() {
+        var config = new Config();
+        config.setKey("update.key");
+        config.setValue("old.value");
+        configService.persist(config);
+
+        config.setValue("new.value");
+        configService.update(config);
+
+        var updated = configService.getById(config.getId());
+        assertEquals("new.value", updated.getValue(), "Value was updated");
+    }
+
+    @Test
+    void testNonDeletableCannotBeDeleted() {
+        var config = new Config();
+        config.setKey("nodelete.key");
+        config.setValue("nodelete.value");
+        configService.persist(config);
+
+        assertThrows(NonDeletableEntityException.class, () -> configService.delete(config));
+
+        var stillExists = configService.getById(config.getId());
+        assertNotNull(stillExists, "Entity still exists after failed delete");
     }
 
 }
