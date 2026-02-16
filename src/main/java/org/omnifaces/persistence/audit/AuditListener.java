@@ -13,6 +13,8 @@
 package org.omnifaces.persistence.audit;
 
 import static java.beans.Introspector.getBeanInfo;
+import static java.util.Optional.empty;
+import static java.util.Optional.ofNullable;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toConcurrentMap;
 import static java.util.stream.Collectors.toSet;
@@ -26,53 +28,91 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * See {@link Audit} for usage instructions.
+ * JPA entity listener that tracks changes to fields annotated with {@link Audit} and fires a CDI {@link AuditedChange}
+ * event for each detected change.
+ * <p>
+ * Usage:
+ * <ol>
+ * <li>Declare this listener as {@link EntityListeners} on your entity.
+ * <li>Put {@link Audit} annotation on fields of interest.
+ * <li>Observe the {@link AuditedChange} CDI event.
+ * </ol>
+ * <p>
+ * Entity example:
+ * <pre>
+ * &#64;Entity
+ * &#64;EntityListeners(AuditListener.class)
+ * public class YourEntity extends BaseEntity&lt;Long&gt; {
  *
- * @param <I> The generic ID type. This is used to associate auditable properties with a specific entity.
+ *     &#64;Audit
+ *     &#64;Column
+ *     private String email;
+ *
+ *     // ...
+ * }
+ * </pre>
+ * <p>
+ * Observer example:
+ * <pre>
+ * public void onAuditedChange(&#64;Observes AuditedChange change) {
+ *     YourAuditLog log = new YourAuditLog();
+ *     log.setEntityName(change.getEntityName());
+ *     log.setEntityId(change.getEntity().getId());
+ *     log.setPropertyName(change.getPropertyName());
+ *     log.setOldValue(Objects.toString(change.getOldValue(), null));
+ *     log.setNewValue(Objects.toString(change.getNewValue(), null));
+ *     yourAuditLogService.persist(log);
+ * }
+ * </pre>
+ *
  * @author Bauke Scholtz
  * @see Audit
+ * @see AuditedChange
  */
-public abstract class AuditListener<I extends Comparable<I> & Serializable> {
+public class AuditListener {
 
-    private static final Map<Class<?>, Map<PropertyDescriptor, Map<?, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Map<PropertyDescriptor, Map<Serializable, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
+
+    private Optional<BeanManager> optionalBeanManager;
 
     @PostLoad
-    public void beforeUpdate(BaseEntity<I> entity) {
+    public void beforeUpdate(BaseEntity<?> entity) {
         getAuditableProperties(entity).forEach((property, values) -> values.put(entity.getId(), invokeMethod(entity, property.getReadMethod())));
     }
 
     @PreUpdate
-    public void afterUpdate(BaseEntity<I> entity) {
+    public void afterUpdate(BaseEntity<?> entity) {
         getAuditableProperties(entity).forEach((property, values) -> {
-            if (values.containsKey(entity.getId())) {
+            var id = entity.getId();
+            if (values.containsKey(id)) {
                 Object newValue = invokeMethod(entity, property.getReadMethod());
-                Object oldValue = values.remove(entity.getId());
+                Object oldValue = values.remove(id);
 
                 if (!Objects.equals(oldValue, newValue)) {
-                    saveAuditedChange(entity, property, oldValue, newValue);
+                    fireAuditedChangeEvent(entity, property.getName(), oldValue, newValue);
                 }
             }
         });
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    private Map<PropertyDescriptor, Map<I, Object>> getAuditableProperties(BaseEntity<I> entity) {
-        Map auditableProperties = AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
-            BaseEntityService<?, ?> baseEntityService = getCurrentBaseEntityService();
-            Set<String> auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
+    private static Map<PropertyDescriptor, Map<Serializable, Object>> getAuditableProperties(BaseEntity<?> entity) {
+        return AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
+            var baseEntityService = getCurrentBaseEntityService();
+            var auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
                 .filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).isAnnotationPresent(Audit.class))
                 .map(Attribute::getName)
                 .collect(toSet());
@@ -86,45 +126,25 @@ public abstract class AuditListener<I extends Comparable<I> & Serializable> {
                 throw new UnsupportedOperationException(e);
             }
         });
-
-        return auditableProperties;
     }
 
-    /**
-     * <p>
-     * Example implementation:
-     * <pre>
-     * YourAuditedChange yourAuditedChange = new YourAuditedChange();
-     * yourAuditedChange.setTimestamp(Instant.now());
-     * yourAuditedChange.setUser(activeUser);
-     * yourAuditedChange.setEntityName(entityManager.getMetamodel().entity(entity.getClass()).getName());
-     * yourAuditedChange.setEntityId(entity.getId());
-     * yourAuditedChange.setPropertyName(property.getName());
-     * yourAuditedChange.setOldValue(oldValue != null ? oldValue.toString() : null);
-     * yourAuditedChange.setNewValue(newValue != null ? newValue.toString() : null);
-     * inject(YourAuditedChangeService.class).persist(yourAuditedChange);
-     * </pre>
-     *
-     * @param entity The parent entity.
-     * @param property The audited property.
-     * @param oldValue The old value.
-     * @param newValue The new value.
-     */
-    protected abstract void saveAuditedChange(BaseEntity<I> entity, PropertyDescriptor property, Object oldValue, Object newValue);
-
-    /**
-     * <p>
-     * Work around for CDI inject not working in JPA EntityListener. Usage:
-     * <pre>
-     * YourAuditedChangeService service = inject(YourAuditedChangeService.class);
-     * </pre>
-     *
-     * @param <T> The generic CDI managed bean type.
-     * @param type The CDI managed bean type.
-     * @return The CDI managed instance.
-     */
-    protected static <T> T inject(Class<T> type) {
-        return CDI.current().select(type).get();
+    private void fireAuditedChangeEvent(BaseEntity<?> entity, String propertyName, Object oldValue, Object newValue) {
+        findBeanManager().ifPresent(beanManager -> {
+            var entityName = entity.getClass().getSimpleName();
+            beanManager.getEvent().fire(new AuditedChange(entity, entityName, propertyName, oldValue, newValue));
+        });
     }
 
+    private Optional<BeanManager> findBeanManager() {
+        if (optionalBeanManager == null) {
+            try {
+                optionalBeanManager = ofNullable(CDI.current().getBeanManager());
+            }
+            catch (IllegalStateException ignore) {
+                optionalBeanManager = empty();
+            }
+        }
+
+        return optionalBeanManager;
+    }
 }

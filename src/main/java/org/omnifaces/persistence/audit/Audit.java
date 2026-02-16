@@ -23,16 +23,15 @@ import jakarta.persistence.EntityListeners;
  * <p>
  * Instructions:
  * <ol>
- * <li>Extend {@link AuditListener}
- * <li>Declare that listener as {@link EntityListeners} on your entity.
- * <li>Put {@link Audit} annotation on column of interest.
- * <li>Profit.
+ * <li>Declare {@link AuditListener} as {@link EntityListeners} on your entity.
+ * <li>Put {@link Audit} annotation on fields of interest.
+ * <li>Observe the {@link AuditedChange} CDI event.
  * </ol>
  * <p>
  * Usage example:
  * <pre>
  * &#64;Entity
- * &#64;EntityListeners(YourAuditListener.class)
+ * &#64;EntityListeners(AuditListener.class)
  * public class YourEntity extends BaseEntity&lt;Long&gt; {
  *
  *     &#64;Audit
@@ -44,6 +43,8 @@ import jakarta.persistence.EntityListeners;
  * </pre>
  *
  * @author Bauke Scholtz
+ * @see AuditListener
+ * @see AuditedChange
  */
 @Retention(RUNTIME)
 @Target(FIELD)
