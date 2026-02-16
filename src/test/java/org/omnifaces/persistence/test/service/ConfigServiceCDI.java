@@ -12,15 +12,18 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import jakarta.ejb.Stateless;
+import static jakarta.transaction.Transactional.TxType.REQUIRED;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Config;
 
-@Stateless
-public class ConfigService extends BaseEntityService<Long, Config> {
+@ApplicationScoped
+public class ConfigServiceCDI extends BaseEntityService<Long, Config> {
 
     public boolean isDatabaseH2() {
         return getDatabase() == Database.H2;
@@ -34,11 +37,13 @@ public class ConfigService extends BaseEntityService<Long, Config> {
         return getProvider() == Provider.ECLIPSELINK;
     }
 
+    @Transactional(REQUIRED)
     public void updateValue(Long id, String newValue) {
         var config = getById(id);
         config.setValue(newValue);
     }
 
+    @Transactional(REQUIRED)
     public void updateKey(Long id, String newKey) {
         var config = getById(id);
         config.setKey(newKey);

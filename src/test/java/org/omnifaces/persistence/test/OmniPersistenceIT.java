@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import jakarta.ejb.EJB;
+import jakarta.inject.Inject;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit5.ArquillianExtension;
@@ -57,6 +58,7 @@ import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.service.CommentService;
 import org.omnifaces.persistence.test.service.ConfigService;
+import org.omnifaces.persistence.test.service.ConfigServiceCDI;
 import org.omnifaces.persistence.test.service.LookupService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -99,6 +101,9 @@ public class OmniPersistenceIT {
 
     @EJB
     private ConfigService configService;
+
+    @Inject
+    private ConfigServiceCDI configServiceCDI;
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
@@ -609,7 +614,7 @@ public class OmniPersistenceIT {
     }
 
 
-    // @NonDeletable --------------------------------------------------------------------------------------------------
+    // @NonDeletable with EJB -----------------------------------------------------------------------------------------
 
     @Test
     void testNonDeletableCanBePersisted() {
@@ -653,7 +658,7 @@ public class OmniPersistenceIT {
     }
 
 
-    // getCurrentBaseEntityService via Provider.is / Database.is -------------------------------------------------------
+    // getDatabase() / getProvider with EJB ---------------------------------------------------------------------------
 
     @Test
     void testDatabaseIs() {
@@ -673,7 +678,7 @@ public class OmniPersistenceIT {
     }
 
 
-    // @Audit (exercises getCurrentBaseEntityService via AuditListener) ------------------------------------------------
+    // @Audit with EJB ------------------------------------------------------------------------------------------------
 
     @Test
     void testAuditTracksValueChange() {
@@ -724,6 +729,128 @@ public class OmniPersistenceIT {
         configService.persist(config);
 
         configService.updateValue(config.getId(), "unchanged");
+
+        var valueChanges = TestAuditListener.getChanges().stream()
+            .filter(c -> "value".equals(c.getPropertyName()))
+            .toList();
+        assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
+    }
+
+    // @NonDeletable with CDI -----------------------------------------------------------------------------------------
+
+    @Test
+    void testNonDeletableCanBePersistedCDI() {
+        var config = new Config();
+        config.setKey("test.key");
+        config.setValue("test.value");
+        configServiceCDI.persist(config);
+        assertNotNull(config.getId(), "Config entity was persisted");
+
+        var persisted = configServiceCDI.getById(config.getId());
+        assertNotNull(persisted, "Config entity found by ID");
+        assertEquals("test.key", persisted.getKey(), "Key is correct");
+        assertEquals("test.value", persisted.getValue(), "Value is correct");
+    }
+
+    @Test
+    void testNonDeletableCanBeUpdatedCDI() {
+        var config = new Config();
+        config.setKey("update.key");
+        config.setValue("old.value");
+        configServiceCDI.persist(config);
+
+        config.setValue("new.value");
+        configServiceCDI.update(config);
+
+        var updated = configServiceCDI.getById(config.getId());
+        assertEquals("new.value", updated.getValue(), "Value was updated");
+    }
+
+    @Test
+    void testNonDeletableCannotBeDeletedCDI() {
+        var config = new Config();
+        config.setKey("nodelete.key");
+        config.setValue("nodelete.value");
+        configServiceCDI.persist(config);
+
+        assertThrows(NonDeletableEntityException.class, () -> configServiceCDI.delete(config));
+
+        var stillExists = configServiceCDI.getById(config.getId());
+        assertNotNull(stillExists, "Entity still exists after failed delete");
+    }
+
+
+    // getDatabase() / getProvider with EJB ---------------------------------------------------------------------------
+
+    @Test
+    void testDatabaseIsCDI() {
+        assertTrue(configServiceCDI.isDatabaseH2(), "Test database is H2");
+    }
+
+    @Test
+    void testProviderIsCDI() {
+        if (isEclipseLink()) {
+            assertTrue(configServiceCDI.isProviderEclipseLink(), "Provider is EclipseLink");
+            assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
+        }
+        else {
+            assertTrue(configServiceCDI.isProviderHibernate(), "Provider is Hibernate");
+            assertFalse(configServiceCDI.isProviderEclipseLink(), "Provider is not EclipseLink");
+        }
+    }
+
+
+    // @Audit with EJB ------------------------------------------------------------------------------------------------
+
+    @Test
+    void testAuditTracksValueChangeCDI() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.key");
+        config.setValue("original");
+        configServiceCDI.persist(config);
+
+        configServiceCDI.updateValue(config.getId(), "modified");
+
+        var changes = TestAuditListener.getChanges();
+        assertFalse(changes.isEmpty(), "Audit changes were recorded");
+
+        var valueChange = changes.stream()
+            .filter(c -> "value".equals(c.getPropertyName()))
+            .findFirst();
+        assertTrue(valueChange.isPresent(), "Value change was audited");
+        assertEquals("original", valueChange.get().getOldValue(), "Old value is correct");
+        assertEquals("modified", valueChange.get().getNewValue(), "New value is correct");
+    }
+
+    @Test
+    void testAuditDoesNotTrackNonAuditedFieldCDI() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.notrack");
+        config.setValue("stable");
+        configServiceCDI.persist(config);
+
+        configServiceCDI.updateKey(config.getId(), "audit.notrack.changed");
+
+        var keyChanges = TestAuditListener.getChanges().stream()
+            .filter(c -> "key".equals(c.getPropertyName()))
+            .toList();
+        assertTrue(keyChanges.isEmpty(), "Non-audited field 'key' should not produce audit changes");
+    }
+
+    @Test
+    void testAuditDoesNotTrackUnchangedValueCDI() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.same");
+        config.setValue("unchanged");
+        configServiceCDI.persist(config);
+
+        configServiceCDI.updateValue(config.getId(), "unchanged");
 
         var valueChanges = TestAuditListener.getChanges().stream()
             .filter(c -> "value".equals(c.getPropertyName()))
