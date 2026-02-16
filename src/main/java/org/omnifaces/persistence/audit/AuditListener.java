@@ -18,7 +18,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toConcurrentMap;
 import static java.util.stream.Collectors.toSet;
-import static org.omnifaces.persistence.JPA.getCurrentBaseEntityService;
+import static org.omnifaces.persistence.service.BaseEntityService.getCurrentBaseEntityService;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Streams.stream;
 

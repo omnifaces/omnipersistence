@@ -16,7 +16,6 @@ import static java.util.Arrays.stream;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.concat;
-import static org.omnifaces.persistence.JPA.getCurrentBaseEntityService;
 import static org.omnifaces.utils.Lang.startsWithOneOf;
 
 import java.util.logging.Logger;
@@ -76,9 +75,4 @@ public enum Database {
 
         return UNKNOWN;
     }
-
-    public static boolean is(Database database) {
-        return getCurrentBaseEntityService().getDatabase() == database;
-    }
-
 }

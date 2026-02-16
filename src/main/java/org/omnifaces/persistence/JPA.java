@@ -16,6 +16,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toList;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
+import static org.omnifaces.persistence.service.BaseEntityService.getCurrentBaseEntityService;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.stream.Collectors.toMap;
@@ -34,9 +35,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.naming.InitialContext;
-
-import jakarta.ejb.SessionContext;
 import jakarta.enterprise.inject.Typed;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
@@ -258,23 +256,6 @@ public final class JPA {
     // Entity utils -----------------------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns the currently active {@link BaseEntityService} from the {@link SessionContext}.
-     * @return The currently active {@link BaseEntityService} from the {@link SessionContext}.
-     * @throws IllegalStateException if there is none, which can happen if this method is called outside EJB context,
-     * or when currently invoked EJB service is not an instance of {@link BaseEntityService}.
-     */
-    @SuppressWarnings("unchecked")
-    public static BaseEntityService<?, ?> getCurrentBaseEntityService() {
-        try {
-            var ejbContext = (SessionContext) new InitialContext().lookup("java:comp/EJBContext");
-            return (BaseEntityService<?, ?>) ejbContext.getBusinessObject(ejbContext.getInvokedBusinessInterface());
-        }
-        catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    /**
      * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type.
      * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
      * @param <T> The generic result type.
@@ -376,7 +357,7 @@ public final class JPA {
 
         // NOTE: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
 
-        if (Provider.is(HIBERNATE)) {
+        if (getCurrentBaseEntityService().getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);
 
             if (cast.isPresent()) { // Hibernate 6.6.0.
@@ -390,7 +371,7 @@ public final class JPA {
         // EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
-        if (Database.is(POSTGRESQL)) {
+        if (getCurrentBaseEntityService().getDatabase() == POSTGRESQL) {
             String pattern = null;
 
             if (Numeric.is(expression.getJavaType())) {

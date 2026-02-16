@@ -14,6 +14,7 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.CacheRetrieveMode.BYPASS;
 import static jakarta.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
@@ -76,7 +77,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.ejb.Stateless;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.CacheRetrieveMode;
 import jakarta.persistence.CacheStoreMode;
@@ -112,6 +112,7 @@ import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
+import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -142,9 +143,9 @@ import org.omnifaces.utils.reflect.Getter;
 
 /**
  * <p>
- * Base entity service. Let your {@link Stateless} service classes extend from this. Ideally, you would not anymore have
- * the need to inject the {@link EntityManager} in your service class and it would suffice to just delegate all
- * persistence actions to methods of this abstract class.
+ * Base entity service. Let your {@code ApplicationScoped} CDI or {@code Stateless} EJB service classes extend from this.
+ * Ideally, you would not anymore have the need to inject the {@link EntityManager} in your service class and it would
+ * suffice to just delegate all persistence actions to methods of this abstract class.
  * <p>
  * You only need to let your entities extend from one of the following mapped super classes:
  * <ul>
@@ -179,6 +180,8 @@ import org.omnifaces.utils.reflect.Getter;
  * @see Criteria
  */
 public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
+
+    private static final ThreadLocal<BaseEntityService<?, ?>> CURRENT_INSTANCE = new ThreadLocal<>();
 
     private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
@@ -257,6 +260,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
+        }
+    }
+
+    /**
+     * Returns the currently active {@link BaseEntityService} instance, if any.
+     * This is set via a {@link ThreadLocal} during the execution of any public method on this service.
+     * @return The currently active {@link BaseEntityService} instance, or <code>null</code>.
+     */
+    public static BaseEntityService<?, ?> getCurrentBaseEntityService() {
+        return CURRENT_INSTANCE.get();
+    }
+
+    private <T> T runWithCurrentInstance(Supplier<T> action) {
+        CURRENT_INSTANCE.set(this);
+
+        try {
+            return action.get();
+        }
+        finally {
+            CURRENT_INSTANCE.remove();
+        }
+    }
+
+    private void runWithCurrentInstance(Runnable action) {
+        CURRENT_INSTANCE.set(this);
+
+        try {
+            action.run();
+        }
+        finally {
+            CURRENT_INSTANCE.remove();
         }
     }
 
@@ -668,7 +702,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity, if any.
      */
     public Optional<E> findById(I id) {
-        return Optional.ofNullable(getById(id, false));
+        return runWithCurrentInstance(() -> Optional.ofNullable(getById(id, false)));
     }
 
     /**
@@ -688,7 +722,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     public Optional<E> findSoftDeletedById(I id) {
-        return Optional.ofNullable(getSoftDeletedById(id));
+        return runWithCurrentInstance(() -> Optional.ofNullable(getSoftDeletedById(id)));
     }
 
     /**
@@ -697,7 +731,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity, or <code>null</code> if there is none.
      */
     public E getById(I id) {
-        return getById(id, false);
+        return runWithCurrentInstance(() -> getById(id, false));
     }
 
     /**
@@ -723,12 +757,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity, or <code>null</code> if there is none.
      */
     public E getByIdWithLoadGraph(I id, String entityGraphName) {
-        var entityGraph = entityManager.getEntityGraph(entityGraphName);
-        var properties = new HashMap<String, Object>();
-        properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
-        properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
+        return runWithCurrentInstance(() -> {
+            var entityGraph = entityManager.getEntityGraph(entityGraphName);
+            var properties = new HashMap<String, Object>();
+            properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
+            properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
 
-        return getEntityManager().find(entityType, id, properties);
+            return getEntityManager().find(entityType, id, properties);
+        });
     }
 
     /**
@@ -738,14 +774,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     public E getSoftDeletedById(I id) {
-        softDeleteData.checkSoftDeletable();
-        var entity = getEntityManager().find(entityType, id);
+        return runWithCurrentInstance(() -> {
+            softDeleteData.checkSoftDeletable();
+            var entity = getEntityManager().find(entityType, id);
 
-        if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
-            return null;
-        }
+            if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
+                return null;
+            }
 
-        return entity;
+            return entity;
+        });
     }
 
     /**
@@ -754,7 +792,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entities, or an empty set if there is none.
      */
     public List<E> getByIds(Iterable<I> ids) {
-        return getByIds(ids, false);
+        return runWithCurrentInstance(() -> getByIds(ids, false));
     }
 
     /**
@@ -793,7 +831,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return List of all entities.
      */
     public List<E> list() {
-        return list(false);
+        return runWithCurrentInstance(() -> list(false));
     }
 
     /**
@@ -814,10 +852,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     public List<E> listSoftDeleted() {
-        softDeleteData.checkSoftDeletable();
-        return list(select("")
-            + softDeleteData.getWhereClause(true)
-            + " ORDER BY e.id DESC");
+        return runWithCurrentInstance(() -> {
+            softDeleteData.checkSoftDeletable();
+            return list(select("")
+                + softDeleteData.getWhereClause(true)
+                + " ORDER BY e.id DESC");
+        });
     }
 
     /**
@@ -945,29 +985,32 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Entity ID.
      * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
      */
+    @Transactional(REQUIRED)
     public I persist(E entity) {
-        if (entity.getId() != null) {
-            if (generatedId || exists(entity)) {
-                throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
+        return runWithCurrentInstance(() -> {
+            if (entity.getId() != null) {
+                if (generatedId || exists(entity)) {
+                    throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
+                }
             }
-        }
-        else if (!generatedId) {
-            throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
-        }
+            else if (!generatedId) {
+                throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
+            }
 
-        try {
-            getEntityManager().persist(entity);
+            try {
+                getEntityManager().persist(entity);
 
-        }
-        catch (ConstraintViolationException e) {
-            logConstraintViolations(e.getConstraintViolations());
-            throw e;
-        }
+            }
+            catch (ConstraintViolationException e) {
+                logConstraintViolations(e.getConstraintViolations());
+                throw e;
+            }
 
-        // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
-        getEntityManager().flush();
+            // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
+            getEntityManager().flush();
 
-        return entity.getId();
+            return entity.getId();
+        });
     }
 
 
@@ -983,28 +1026,31 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Updated entity.
      * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
      */
+    @Transactional(REQUIRED)
     public E update(E entity) {
-        if (entity.getId() == null) {
-            if (generatedId) {
+        return runWithCurrentInstance(() -> {
+            if (entity.getId() == null) {
+                if (generatedId) {
+                    throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
+                }
+                else {
+                    throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
+                }
+            }
+
+            if (!exists(entity)) {
                 throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
             }
-            else {
-                throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
+
+            if (validator != null) {
+                // EntityManager#merge() doesn't directly throw ConstraintViolationException without performing flush, so we can't put it in a
+                // try-catch, and we can't even use an @Interceptor as it happens in JTA side not in EJB side. Hence, we're manually performing
+                // bean validation here so that we can capture them.
+                logConstraintViolations(validator.validate(entity));
             }
-        }
 
-        if (!exists(entity)) {
-            throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
-        }
-
-        if (validator != null) {
-            // EntityManager#merge() doesn't directly throw ConstraintViolationException without performing flush, so we can't put it in a
-            // try-catch, and we can't even use an @Interceptor as it happens in JTA side not in EJB side. Hence, we're manually performing
-            // bean validation here so that we can capture them.
-            logConstraintViolations(validator.validate(entity));
-        }
-
-        return getEntityManager().merge(entity);
+            return getEntityManager().merge(entity);
+        });
     }
 
     /**
@@ -1038,8 +1084,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Updated entities.
      * @throws IllegalEntityStateException When at least one entity has no ID.
      */
+    @Transactional(REQUIRED)
     public List<E> update(Iterable<E> entities) {
-        return stream(entities).map(this::update).toList();
+        return runWithCurrentInstance(() -> stream(entities).map(this::update).toList());
     }
 
     /**
@@ -1096,14 +1143,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entity Entity to save.
      * @return Saved entity.
      */
+    @Transactional(REQUIRED)
     public E save(E entity) {
-        if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
-            persist(entity);
-            return entity;
-        }
-        else {
-            return update(entity);
-        }
+        return runWithCurrentInstance(() -> {
+            if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
+                persist(entity);
+                return entity;
+            }
+            else {
+                return update(entity);
+            }
+        });
     }
 
     /**
@@ -1129,16 +1179,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been deleted.
      */
+    @Transactional(REQUIRED)
     public void delete(E entity) {
-        if (entity.getClass().isAnnotationPresent(NonDeletable.class)) {
-            throw new NonDeletableEntityException(entity);
-        }
+        runWithCurrentInstance(() -> {
+            if (entity.getClass().isAnnotationPresent(NonDeletable.class)) {
+                throw new NonDeletableEntityException(entity);
+            }
 
-        getEntityManager().remove(manage(entity));
+            getEntityManager().remove(manage(entity));
 
-        if (getProvider() != ECLIPSELINK || !getEntityManager().contains(entity)) {
-            entity.setId(null);
-        }
+            if (getProvider() != ECLIPSELINK || !getEntityManager().contains(entity)) {
+                entity.setId(null);
+            }
+        });
     }
 
     /**
@@ -1148,9 +1201,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been hard deleted.
      */
+    @Transactional(REQUIRED)
     public void softDelete(E entity) {
-        softDeleteData.checkSoftDeletable();
-        softDeleteData.setSoftDeleted(manage(entity), true);
+        runWithCurrentInstance(() -> {
+            softDeleteData.checkSoftDeletable();
+            softDeleteData.setSoftDeleted(manage(entity), true);
+        });
     }
 
     /**
@@ -1160,9 +1216,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been hard deleted.
      */
+    @Transactional(REQUIRED)
     public void softUndelete(E entity) {
-        softDeleteData.checkSoftDeletable();
-        softDeleteData.setSoftDeleted(manage(entity), false);
+        runWithCurrentInstance(() -> {
+            softDeleteData.checkSoftDeletable();
+            softDeleteData.setSoftDeleted(manage(entity), false);
+        });
     }
 
     /**
@@ -1172,8 +1231,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When at least one entity has no ID.
      * @throws EntityNotFoundException When at least one entity has in meanwhile been deleted.
      */
+    @Transactional(REQUIRED)
     public void delete(Iterable<E> entities) {
-        entities.forEach(this::delete);
+        runWithCurrentInstance(() -> entities.forEach(this::delete));
     }
 
     /**
@@ -1183,8 +1243,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When at least one entity has no ID.
      * @throws EntityNotFoundException When at least one entity has in meanwhile been hard deleted.
      */
+    @Transactional(REQUIRED)
     public void softDelete(Iterable<E> entities) {
-        entities.forEach(this::softDelete);
+        runWithCurrentInstance(() -> entities.forEach(this::softDelete));
     }
 
     /**
@@ -1194,8 +1255,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When at least one entity has no ID.
      * @throws EntityNotFoundException When at least one entity has in meanwhile been hard deleted.
      */
+    @Transactional(REQUIRED)
     public void softUndelete(Iterable<E> entities) {
-        entities.forEach(this::softUndelete);
+        runWithCurrentInstance(() -> entities.forEach(this::softUndelete));
     }
 
 
@@ -1274,14 +1336,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity is already managed, or has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been deleted.
      */
+    @Transactional(REQUIRED)
     public void reset(E entity) {
-        if (!getProvider().isProxy(entity) && getEntityManager().contains(entity)) {
-            throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
-        }
+        runWithCurrentInstance(() -> {
+            if (!getProvider().isProxy(entity) && getEntityManager().contains(entity)) {
+                throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
+            }
 
-        var managed = manage(entity);
-        getMetamodel(entity).getAttributes().stream().map(Attribute::getJavaMember).filter(Field.class::isInstance).forEach(field -> map(field, managed, entity));
-        // Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
+            var managed = manage(entity);
+            getMetamodel(entity).getAttributes().stream().map(Attribute::getJavaMember).filter(Field.class::isInstance).forEach(field -> map(field, managed, entity));
+            // Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before resetting.
+        });
     }
 
 
@@ -1718,21 +1783,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @see Criteria
      */
     protected <T extends E> PartialResultList<T> getPage(Page page, boolean count, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
-        beforePage().accept(getEntityManager());
+        return runWithCurrentInstance(() -> {
+            beforePage().accept(getEntityManager());
 
-        try {
-            logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
-            var pageBuilder = new PageBuilder<>(page, cacheable, resultType, queryBuilder);
-            var criteriaBuilder = getEntityManager().getCriteriaBuilder();
-            TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
-            var countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
-            PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery);
-            logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, resultList, resultList.getEstimatedTotalNumberOfResults()));
-            return resultList;
-        }
-        finally {
-            afterPage().accept(getEntityManager());
-        }
+            try {
+                logger.log(FINER, () -> format(LOG_FINER_GET_PAGE, page, count, cacheable, resultType));
+                var pageBuilder = new PageBuilder<>(page, cacheable, resultType, queryBuilder);
+                var criteriaBuilder = getEntityManager().getCriteriaBuilder();
+                TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
+                var countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
+                PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery);
+                logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, resultList, resultList.getEstimatedTotalNumberOfResults()));
+                return resultList;
+            }
+            finally {
+                afterPage().accept(getEntityManager());
+            }
+        });
     }
 
 

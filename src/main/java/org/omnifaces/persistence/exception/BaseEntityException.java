@@ -20,7 +20,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * Base class for all entity-related exceptions thrown by {@link BaseEntityService}.
- * This is an {@link ApplicationException} that triggers a transaction rollback.
+ * The {@link ApplicationException} annotation ensures EJB passes this exception through unwrapped
+ * (instead of wrapping it in an {@code EJBException}) and triggers a transaction rollback.
+ * In CDI {@code @Transactional} contexts, the rollback happens automatically as this is a {@link RuntimeException}.
  *
  * @see IllegalEntityStateException
  * @see NonDeletableEntityException
