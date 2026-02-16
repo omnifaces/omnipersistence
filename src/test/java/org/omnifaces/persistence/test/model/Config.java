@@ -12,18 +12,27 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 
+import org.omnifaces.persistence.audit.Audit;
+import org.omnifaces.persistence.audit.AuditListener;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 
 @Entity
 @NonDeletable
+@EntityListeners(AuditListener.class)
 public class Config extends GeneratedIdEntity<Long> {
 
     private static final long serialVersionUID = 1L;
 
+    @Column(name = "configKey")
     private String key;
+
+    @Audit
+    @Column(name = "configValue")
     private String value;
 
     public String getKey() {

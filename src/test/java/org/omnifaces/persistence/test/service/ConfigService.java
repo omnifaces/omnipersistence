@@ -14,10 +14,34 @@ package org.omnifaces.persistence.test.service;
 
 import jakarta.ejb.Stateless;
 
+import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Config;
 
 @Stateless
 public class ConfigService extends BaseEntityService<Long, Config> {
+
+    public boolean isDatabaseH2() {
+        return Database.is(Database.H2);
+    }
+
+    public boolean isProviderHibernate() {
+        return Provider.is(Provider.HIBERNATE);
+    }
+
+    public boolean isProviderEclipseLink() {
+        return Provider.is(Provider.ECLIPSELINK);
+    }
+
+    public void updateValue(Long id, String newValue) {
+        var config = getById(id);
+        config.setValue(newValue);
+    }
+
+    public void updateKey(Long id, String newKey) {
+        var config = getById(id);
+        config.setKey(newKey);
+    }
 
 }

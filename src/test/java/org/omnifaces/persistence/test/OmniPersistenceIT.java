@@ -60,6 +60,7 @@ import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.LookupService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
+import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TextService;
 
 @ExtendWith(ArquillianExtension.class)
@@ -649,6 +650,85 @@ public class OmniPersistenceIT {
 
         var stillExists = configService.getById(config.getId());
         assertNotNull(stillExists, "Entity still exists after failed delete");
+    }
+
+
+    // getCurrentBaseEntityService via Provider.is / Database.is -------------------------------------------------------
+
+    @Test
+    void testDatabaseIs() {
+        assertTrue(configService.isDatabaseH2(), "Test database is H2");
+    }
+
+    @Test
+    void testProviderIs() {
+        if (isEclipseLink()) {
+            assertTrue(configService.isProviderEclipseLink(), "Provider is EclipseLink");
+            assertFalse(configService.isProviderHibernate(), "Provider is not Hibernate");
+        }
+        else {
+            assertTrue(configService.isProviderHibernate(), "Provider is Hibernate");
+            assertFalse(configService.isProviderEclipseLink(), "Provider is not EclipseLink");
+        }
+    }
+
+
+    // @Audit (exercises getCurrentBaseEntityService via AuditListener) ------------------------------------------------
+
+    @Test
+    void testAuditTracksValueChange() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.key");
+        config.setValue("original");
+        configService.persist(config);
+
+        configService.updateValue(config.getId(), "modified");
+
+        var changes = TestAuditListener.getChanges();
+        assertFalse(changes.isEmpty(), "Audit changes were recorded");
+
+        var valueChange = changes.stream()
+            .filter(c -> "value".equals(c.getPropertyName()))
+            .findFirst();
+        assertTrue(valueChange.isPresent(), "Value change was audited");
+        assertEquals("original", valueChange.get().getOldValue(), "Old value is correct");
+        assertEquals("modified", valueChange.get().getNewValue(), "New value is correct");
+    }
+
+    @Test
+    void testAuditDoesNotTrackNonAuditedField() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.notrack");
+        config.setValue("stable");
+        configService.persist(config);
+
+        configService.updateKey(config.getId(), "audit.notrack.changed");
+
+        var keyChanges = TestAuditListener.getChanges().stream()
+            .filter(c -> "key".equals(c.getPropertyName()))
+            .toList();
+        assertTrue(keyChanges.isEmpty(), "Non-audited field 'key' should not produce audit changes");
+    }
+
+    @Test
+    void testAuditDoesNotTrackUnchangedValue() {
+        TestAuditListener.clearChanges();
+
+        var config = new Config();
+        config.setKey("audit.same");
+        config.setValue("unchanged");
+        configService.persist(config);
+
+        configService.updateValue(config.getId(), "unchanged");
+
+        var valueChanges = TestAuditListener.getChanges().stream()
+            .filter(c -> "value".equals(c.getPropertyName()))
+            .toList();
+        assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
     }
 
 }
