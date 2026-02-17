@@ -30,11 +30,9 @@ import java.util.List;
 import java.util.Map;
 
 import jakarta.ejb.EJB;
-import jakarta.inject.Inject;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit5.ArquillianExtension;
-import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
@@ -58,22 +56,22 @@ import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.service.CommentServiceEJB;
 import org.omnifaces.persistence.test.service.ConfigServiceEJB;
-import org.omnifaces.persistence.test.service.ConfigServiceCDI;
 import org.omnifaces.persistence.test.service.LookupServiceEJB;
 import org.omnifaces.persistence.test.service.PersonServiceEJB;
 import org.omnifaces.persistence.test.service.PhoneServiceEJB;
+import org.omnifaces.persistence.test.service.StartupServiceCDI;
 import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TextServiceEJB;
 
 @ExtendWith(ArquillianExtension.class)
-public class OmniPersistenceIT {
+public class OmniPersistenceEJBIT {
 
     @Deployment
     public static WebArchive createDeployment() {
         var maven = Maven.resolver();
         return create(WebArchive.class)
-            .addPackages(true, OmniPersistenceIT.class.getPackage())
-            .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
+            .addPackages(true, OmniPersistenceEJBIT.class.getPackage())
+            .deleteClass(StartupServiceCDI.class)
             .addAsWebInfResource("web.xml")
             .addAsResource("META-INF/persistence.xml")
             .addAsResource("META-INF/sql/create-test.sql")
@@ -102,17 +100,15 @@ public class OmniPersistenceIT {
     @EJB
     private ConfigServiceEJB configServiceEJB;
 
-    @Inject
-    private ConfigServiceCDI configServiceCDI;
-
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
     }
 
-    // Basic ----------------------------------------------------------------------------------------------------------
+
+    // Basic operations with EJB --------------------------------------------------------------------------------------
 
     @Test
-    void testFindPerson() {
+    void testFindPersonEJB() {
         var existingPerson = personServiceEJB.findById(1L);
         assertTrue(existingPerson.isPresent(), "Existing person");
         var nonExistingPerson = personServiceEJB.findById(0L);
@@ -120,7 +116,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testGetPerson() {
+    void testGetPersonEJB() {
         var existingPerson = personServiceEJB.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var nonExistingPerson = personServiceEJB.getById(0L);
@@ -128,7 +124,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPersistAndDeleteNewPerson() {
+    void testPersistAndDeleteNewPersonEJB() {
         var newPerson = createNewPerson("testPersistNewPerson@example.com");
         personServiceEJB.persist(newPerson);
         Long expectedNewId = TOTAL_RECORDS + 1L;
@@ -140,14 +136,14 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPersistExistingPerson() {
+    void testPersistExistingPersonEJB() {
         var existingPerson = createNewPerson("testPersistExistingPerson@example.com");
         existingPerson.setId(1L);
         assertThrows(IllegalEntityStateException.class, () -> personServiceEJB.persist(existingPerson));
     }
 
     @Test
-    void testUpdateExistingPerson() {
+    void testUpdateExistingPersonEJB() {
         var existingPerson = personServiceEJB.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var newEmail = "testUpdateExistingPerson@example.com";
@@ -158,13 +154,13 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testUpdateNewPerson() {
+    void testUpdateNewPersonEJB() {
         var newPerson = createNewPerson("testUpdateNewPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceEJB.update(newPerson));
     }
 
     @Test
-    void testResetExistingPerson() {
+    void testResetExistingPersonEJB() {
         var existingPerson = personServiceEJB.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var oldEmail = existingPerson.getEmail();
@@ -174,13 +170,13 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testResetNonExistingPerson() {
+    void testResetNonExistingPersonEJB() {
         var nonExistingPerson = createNewPerson("testResetNonExistingPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceEJB.reset(nonExistingPerson));
     }
 
     @Test
-    void testDeleteNonExistingPerson() {
+    void testDeleteNonExistingPersonEJB() {
         var nonExistingPerson = createNewPerson("testDeleteNonExistingPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceEJB.delete(nonExistingPerson));
     }
@@ -194,10 +190,10 @@ public class OmniPersistenceIT {
     }
 
 
-    // Batch operations -----------------------------------------------------------------------------------------------
+    // Batch operations with EJB --------------------------------------------------------------------------------------
 
     @Test
-    void testGetByIds() {
+    void testGetByIdsEJB() {
         var persons = personServiceEJB.getByIds(List.of(1L, 2L, 3L));
         assertEquals(3, persons.size(), "Should find 3 persons by IDs");
         assertTrue(persons.stream().anyMatch(p -> p.getId().equals(1L)), "Contains person 1");
@@ -206,23 +202,23 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testGetByIdsWithNonExisting() {
+    void testGetByIdsWithNonExistingEJB() {
         var persons = personServiceEJB.getByIds(List.of(1L, 999999L));
         assertEquals(1, persons.size(), "Should find only 1 existing person");
         assertEquals(1L, persons.get(0).getId(), "Found person has correct ID");
     }
 
     @Test
-    void testGetByIdsEmpty() {
+    void testGetByIdsEmptyEJB() {
         var persons = personServiceEJB.getByIds(List.of());
         assertTrue(persons.isEmpty(), "Empty IDs should return empty list");
     }
 
 
-    // Page -----------------------------------------------------------------------------------------------------------
+    // Page with EJB --------------------------------------------------------------------------------------------------
 
     @Test
-    void testPage() {
+    void testPageEJB() {
         var persons = personServiceEJB.getPage(Page.ALL, true);
         assertEquals(TOTAL_RECORDS, persons.size(), "There are 200 records");
 
@@ -231,14 +227,14 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageByLazyManyToOne() { // This was failing since Hibernate 6 upgrade.
+    void testPageByLazyManyToOneEJB() { // This was failing since Hibernate 6 upgrade.
         var person = personServiceEJB.getById(1L);
         var phones = phoneServiceEJB.getPage(Page.with().allMatch(Map.of("owner", person)).build(), true);
         assertEquals(TOTAL_PHONES_PER_PERSON_0, phones.size(), "There are 3 phones");
     }
 
     @Test
-    void testPageWithOffsetAndLimit() {
+    void testPageWithOffsetAndLimitEJB() {
         var firstPage = personServiceEJB.getPage(Page.of(0, 10), true);
         assertEquals(10, firstPage.size(), "First page has 10 records");
         assertEquals(TOTAL_RECORDS, firstPage.getEstimatedTotalNumberOfResults(), "Total count is correct");
@@ -250,14 +246,14 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithoutCount() {
+    void testPageWithoutCountEJB() {
         var page = personServiceEJB.getPage(Page.of(0, 10), false);
         assertEquals(10, page.size(), "Page has 10 records");
         assertEquals(-1, page.getEstimatedTotalNumberOfResults(), "Count is unknown when not requested");
     }
 
     @Test
-    void testPageWithOrdering() {
+    void testPageWithOrderingEJB() {
         var ascPage = personServiceEJB.getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
         var descPage = personServiceEJB.getPage(Page.with().range(0, 10).orderBy("id", false).build(), false);
         assertTrue(ascPage.get(0).getId() < ascPage.get(9).getId(), "Ascending order");
@@ -265,13 +261,13 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageOne() {
+    void testPageOneEJB() {
         var result = personServiceEJB.getPage(Page.ONE, false);
         assertEquals(1, result.size(), "Page.ONE returns exactly 1 record");
     }
 
     @Test
-    void testPageWithMultipleRequiredCriteria() {
+    void testPageWithMultipleRequiredCriteriaEJB() {
         var person1 = personServiceEJB.getById(1L);
         var criteria = Map.<String, Object>of(
             "gender", person1.getGender(),
@@ -283,7 +279,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithMultipleOptionalCriteria() {
+    void testPageWithMultipleOptionalCriteriaEJB() {
         var person1 = personServiceEJB.getById(1L);
         var person2 = personServiceEJB.getById(2L);
         var criteria = Map.<String, Object>of(
@@ -295,36 +291,36 @@ public class OmniPersistenceIT {
     }
 
 
-    // Page with criteria types ---------------------------------------------------------------------------------------
+    // Page with criteria types with EJB ------------------------------------------------------------------------------
 
     @Test
-    void testPageWithLikeContains() {
+    void testPageWithLikeContainsEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("email", Like.contains("e99@e"))).build(), true);
         assertEquals(1, result.size(), "LIKE contains matches e99@e");
         assertTrue(result.get(0).getEmail().contains("name99@"), "Email contains name99@");
     }
 
     @Test
-    void testPageWithLikeStartsWith() {
+    void testPageWithLikeStartsWithEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("email", Like.startsWith("name1@"))).build(), true);
         assertTrue(result.size() >= 1, "LIKE starts with matches at least name1@");
         result.forEach(p -> assertTrue("name1@example.com".equals(p.getEmail()), "Email is name1@example.com"));
     }
 
     @Test
-    void testPageWithLikeEndsWith() {
+    void testPageWithLikeEndsWithEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("email", Like.endsWith("@example.com"))).build(), true);
         assertEquals(TOTAL_RECORDS, result.size(), "All records end with @example.com");
     }
 
     @Test
-    void testPageWithLikeNoMatch() {
+    void testPageWithLikeNoMatchEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("email", Like.contains("nonexistent_xyz"))).build(), true);
         assertEquals(0, result.size(), "No records match nonexistent search");
     }
 
     @Test
-    void testPageWithIgnoreCase() {
+    void testPageWithIgnoreCaseEJB() {
         var person = personServiceEJB.getById(1L);
         var uppercaseEmail = person.getEmail().toUpperCase();
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("email", IgnoreCase.value(uppercaseEmail))).build(), true);
@@ -333,7 +329,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithEnumCriteria() {
+    void testPageWithEnumCriteriaEJB() {
         var maleResult = personServiceEJB.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
         var femaleResult = personServiceEJB.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.FEMALE))).build(), true);
         assertTrue(maleResult.size() > 0, "Some males exist");
@@ -345,28 +341,28 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithNumericCriteria() {
+    void testPageWithNumericCriteriaEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("id", Numeric.value(1))).build(), true);
         assertEquals(1, result.size(), "Numeric match finds exactly 1 record");
         assertEquals(1L, result.get(0).getId(), "Found person with ID 1");
     }
 
     @Test
-    void testPageWithOrderGreaterThan() {
+    void testPageWithOrderGreaterThanEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("id", Order.greaterThan(TOTAL_RECORDS - 5L))).build(), true);
         assertEquals(5, result.size(), "IDs greater than 195 should be 196-200");
         result.forEach(p -> assertTrue(p.getId() > TOTAL_RECORDS - 5L, "ID is greater than threshold"));
     }
 
     @Test
-    void testPageWithOrderLessThanOrEqualTo() {
+    void testPageWithOrderLessThanOrEqualToEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("id", Order.lessThanOrEqualTo(5L))).build(), true);
         assertEquals(5, result.size(), "IDs <= 5 should be 1-5");
         result.forEach(p -> assertTrue(p.getId() <= 5L, "ID is <= 5"));
     }
 
     @Test
-    void testPageWithBetween() {
+    void testPageWithBetweenEJB() {
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("id", Between.range(10L, 19L))).build(), true);
         assertEquals(10, result.size(), "IDs between 10 and 19 should be 10 records");
         result.forEach(p -> {
@@ -376,7 +372,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithBetweenDates() {
+    void testPageWithBetweenDatesEJB() {
         var start = LocalDate.of(1950, 1, 1);
         var end = LocalDate.of(1960, 12, 31);
         var result = personServiceEJB.getPage(Page.with().allMatch(Map.of("dateOfBirth", Between.range(start, end))).build(), true);
@@ -387,17 +383,17 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithNotCriteria() {
+    void testPageWithNotCriteriaEJB() {
         var allMales = personServiceEJB.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
         var notMales = personServiceEJB.getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
         assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
     }
 
 
-    // Page with fetch fields (PersonService/PhoneService custom methods) ---------------------------------------------
+    // Page with fetch fields (PersonService/PhoneService custom methods) with EJB ------------------------------------
 
     @Test
-    void testPageWithAddress() {
+    void testPageWithAddressEJB() {
         var result = personServiceEJB.getAllWithAddress();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         result.forEach(p -> assertNotNull(p.getAddress(), "Address is fetched"));
@@ -405,7 +401,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithPhones() {
+    void testPageWithPhonesEJB() {
         var result = personServiceEJB.getAllWithPhones();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         var person0 = result.stream().filter(p -> p.getId().equals(1L)).findFirst().orElseThrow();
@@ -413,14 +409,14 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageWithGroups() {
+    void testPageWithGroupsEJB() {
         var result = personServiceEJB.getAllWithGroups();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Each person has at least one group"));
     }
 
     @Test
-    void testPhonePageWithOwners() {
+    void testPhonePageWithOwnersEJB() {
         var result = phoneServiceEJB.getAllWithOwners();
         assertFalse(result.isEmpty(), "Phones exist");
         result.forEach(p -> assertNotNull(p.getOwner(), "Owner is fetched"));
@@ -428,10 +424,10 @@ public class OmniPersistenceIT {
     }
 
 
-    // Page with DTO mapping ------------------------------------------------------------------------------------------
+    // Page with DTO mapping with EJB ---------------------------------------------------------------------------------
 
     @Test
-    void testPageOfPersonCards() {
+    void testPageOfPersonCardsEJB() {
         var result = personServiceEJB.getAllPersonCards();
         assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
         result.forEach(card -> {
@@ -445,17 +441,17 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPageOfPersonCardsWithPagination() {
+    void testPageOfPersonCardsWithPaginationEJB() {
         var page = personServiceEJB.getPageOfPersonCards(Page.of(0, 5), true);
         assertEquals(5, page.size(), "Page returns 5 cards");
         assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
     }
 
 
-    // @SoftDeletable -------------------------------------------------------------------------------------------------
+    // @SoftDeletable with EJB ----------------------------------------------------------------------------------------
 
     @Test
-    void testSoftDelete() {
+    void testSoftDeleteEJB() {
         var allTexts = textServiceEJB.list();
         var allComments = commentServiceEJB.list();
 
@@ -497,7 +493,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testSoftUndelete() {
+    void testSoftUndeleteEJB() {
         var lookup = new Lookup("su");
         lookupServiceEJB.persist(lookup);
 
@@ -514,7 +510,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testSoftDeleteBatch() {
+    void testSoftDeleteBatchEJB() {
         var lookup1 = new Lookup("b1");
         var lookup2 = new Lookup("b2");
         lookupServiceEJB.persist(lookup1);
@@ -536,24 +532,24 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testGetAllSoftDeletedForNonSoftDeletable() {
+    void testGetAllSoftDeletedForNonSoftDeletableEJB() {
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceEJB.listSoftDeleted());
     }
 
     @Test
-    void testSoftDeleteNonSoftDeletable() {
+    void testSoftDeleteNonSoftDeletableEJB() {
         var person = personServiceEJB.getById(1L);
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceEJB.softDelete(person));
     }
 
     @Test
-    void testSoftUndeleteNonSoftDeletable() {
+    void testSoftUndeleteNonSoftDeletableEJB() {
         var person = personServiceEJB.getById(1L);
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceEJB.softUndelete(person));
     }
 
     @Test
-    void testGetSoftDeletableById() {
+    void testGetSoftDeletableByIdEJB() {
         lookupServiceEJB.persist(new Lookup("aa"));
         var activeLookup = lookupServiceEJB.getById("aa");
         assertNotNull(activeLookup, "Got active entity with getById method");
@@ -567,7 +563,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testFindSoftDeletableById() {
+    void testFindSoftDeletableByIdEJB() {
         lookupServiceEJB.persist(new Lookup("bb"));
         var activeLookup = lookupServiceEJB.findById("bb");
         assertTrue(activeLookup.isPresent(), "Got active entity with findById method");
@@ -581,7 +577,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testSave() {
+    void testSaveEJB() {
         var lookup = new Lookup("cc");
         lookupServiceEJB.save(lookup);
         var persistedLookup = lookupServiceEJB.getById("cc");
@@ -599,7 +595,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testPersistExistingLookup() {
+    void testPersistExistingLookupEJB() {
         var lookup = new Lookup("dd");
         lookupServiceEJB.save(lookup);
         var persistedLookup = lookupServiceEJB.getById("dd");
@@ -608,7 +604,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testUpdateNewLookup() {
+    void testUpdateNewLookupEJB() {
         var lookup = new Lookup("ee");
         assertThrows(IllegalEntityStateException.class, () -> lookupServiceEJB.update(lookup));
     }
@@ -617,7 +613,7 @@ public class OmniPersistenceIT {
     // @NonDeletable with EJB -----------------------------------------------------------------------------------------
 
     @Test
-    void testNonDeletableCanBePersisted() {
+    void testNonDeletableCanBePersistedEJB() {
         var config = new Config();
         config.setKey("test.key");
         config.setValue("test.value");
@@ -631,7 +627,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testNonDeletableCanBeUpdated() {
+    void testNonDeletableCanBeUpdatedEJB() {
         var config = new Config();
         config.setKey("update.key");
         config.setValue("old.value");
@@ -645,7 +641,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testNonDeletableCannotBeDeleted() {
+    void testNonDeletableCannotBeDeletedEJB() {
         var config = new Config();
         config.setKey("nodelete.key");
         config.setValue("nodelete.value");
@@ -661,12 +657,12 @@ public class OmniPersistenceIT {
     // getDatabase() / getProvider with EJB ---------------------------------------------------------------------------
 
     @Test
-    void testDatabaseIs() {
+    void testDatabaseIsEJB() {
         assertTrue(configServiceEJB.isDatabaseH2(), "Test database is H2");
     }
 
     @Test
-    void testProviderIs() {
+    void testProviderIsEJB() {
         if (isEclipseLink()) {
             assertTrue(configServiceEJB.isProviderEclipseLink(), "Provider is EclipseLink");
             assertFalse(configServiceEJB.isProviderHibernate(), "Provider is not Hibernate");
@@ -681,7 +677,7 @@ public class OmniPersistenceIT {
     // @Audit with EJB ------------------------------------------------------------------------------------------------
 
     @Test
-    void testAuditTracksValueChange() {
+    void testAuditTracksValueChangeEJB() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
@@ -703,7 +699,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testAuditDoesNotTrackNonAuditedField() {
+    void testAuditDoesNotTrackNonAuditedFieldEJB() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
@@ -720,7 +716,7 @@ public class OmniPersistenceIT {
     }
 
     @Test
-    void testAuditDoesNotTrackUnchangedValue() {
+    void testAuditDoesNotTrackUnchangedValueEJB() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
@@ -735,127 +731,4 @@ public class OmniPersistenceIT {
             .toList();
         assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
     }
-
-    // @NonDeletable with CDI -----------------------------------------------------------------------------------------
-
-    @Test
-    void testNonDeletableCanBePersistedCDI() {
-        var config = new Config();
-        config.setKey("test.key");
-        config.setValue("test.value");
-        configServiceCDI.persist(config);
-        assertNotNull(config.getId(), "Config entity was persisted");
-
-        var persisted = configServiceCDI.getById(config.getId());
-        assertNotNull(persisted, "Config entity found by ID");
-        assertEquals("test.key", persisted.getKey(), "Key is correct");
-        assertEquals("test.value", persisted.getValue(), "Value is correct");
-    }
-
-    @Test
-    void testNonDeletableCanBeUpdatedCDI() {
-        var config = new Config();
-        config.setKey("update.key");
-        config.setValue("old.value");
-        configServiceCDI.persist(config);
-
-        config.setValue("new.value");
-        configServiceCDI.update(config);
-
-        var updated = configServiceCDI.getById(config.getId());
-        assertEquals("new.value", updated.getValue(), "Value was updated");
-    }
-
-    @Test
-    void testNonDeletableCannotBeDeletedCDI() {
-        var config = new Config();
-        config.setKey("nodelete.key");
-        config.setValue("nodelete.value");
-        configServiceCDI.persist(config);
-
-        assertThrows(NonDeletableEntityException.class, () -> configServiceCDI.delete(config));
-
-        var stillExists = configServiceCDI.getById(config.getId());
-        assertNotNull(stillExists, "Entity still exists after failed delete");
-    }
-
-
-    // getDatabase() / getProvider with EJB ---------------------------------------------------------------------------
-
-    @Test
-    void testDatabaseIsCDI() {
-        assertTrue(configServiceCDI.isDatabaseH2(), "Test database is H2");
-    }
-
-    @Test
-    void testProviderIsCDI() {
-        if (isEclipseLink()) {
-            assertTrue(configServiceCDI.isProviderEclipseLink(), "Provider is EclipseLink");
-            assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
-        }
-        else {
-            assertTrue(configServiceCDI.isProviderHibernate(), "Provider is Hibernate");
-            assertFalse(configServiceCDI.isProviderEclipseLink(), "Provider is not EclipseLink");
-        }
-    }
-
-
-    // @Audit with EJB ------------------------------------------------------------------------------------------------
-
-    @Test
-    void testAuditTracksValueChangeCDI() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.key");
-        config.setValue("original");
-        configServiceCDI.persist(config);
-
-        configServiceCDI.updateValue(config.getId(), "modified");
-
-        var changes = TestAuditListener.getChanges();
-        assertFalse(changes.isEmpty(), "Audit changes were recorded");
-
-        var valueChange = changes.stream()
-            .filter(c -> "value".equals(c.getPropertyName()))
-            .findFirst();
-        assertTrue(valueChange.isPresent(), "Value change was audited");
-        assertEquals("original", valueChange.get().getOldValue(), "Old value is correct");
-        assertEquals("modified", valueChange.get().getNewValue(), "New value is correct");
-    }
-
-    @Test
-    void testAuditDoesNotTrackNonAuditedFieldCDI() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.notrack");
-        config.setValue("stable");
-        configServiceCDI.persist(config);
-
-        configServiceCDI.updateKey(config.getId(), "audit.notrack.changed");
-
-        var keyChanges = TestAuditListener.getChanges().stream()
-            .filter(c -> "key".equals(c.getPropertyName()))
-            .toList();
-        assertTrue(keyChanges.isEmpty(), "Non-audited field 'key' should not produce audit changes");
-    }
-
-    @Test
-    void testAuditDoesNotTrackUnchangedValueCDI() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.same");
-        config.setValue("unchanged");
-        configServiceCDI.persist(config);
-
-        configServiceCDI.updateValue(config.getId(), "unchanged");
-
-        var valueChanges = TestAuditListener.getChanges().stream()
-            .filter(c -> "value".equals(c.getPropertyName()))
-            .toList();
-        assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
-    }
-
 }

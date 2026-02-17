@@ -19,10 +19,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.ejb.EJB;
-import jakarta.ejb.Singleton;
-import jakarta.ejb.Startup;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.Initialized;
+import jakarta.enterprise.event.Observes;
+import jakarta.inject.Inject;
 
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Comment;
@@ -32,25 +32,24 @@ import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Text;
 
-@Startup
-@Singleton
-public class StartupServiceEJB {
+@ApplicationScoped
+public class StartupServiceCDI {
 
     public static final int TOTAL_RECORDS = 200;
     public static final int ROWS_PER_PAGE = 10;
     public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
 
-    @EJB
-    private TextServiceEJB textServiceEJB;
+    @Inject
+    private TextServiceCDI textServiceCDI;
 
-    @EJB
-    private CommentServiceEJB commentServiceEJB;
+    @Inject
+    private CommentServiceCDI commentServiceCDI;
 
-    @EJB
-    private PersonServiceEJB personServiceEJB;
+    @Inject
+    private PersonServiceCDI personServiceCDI;
 
-    @PostConstruct
-    public void init() {
+    @SuppressWarnings("unused")
+    public void init(@Observes @Initialized(ApplicationScoped.class) Object init) {
         createTestPersons();
         createTestTexts();
         createTestComments();
@@ -88,18 +87,18 @@ public class StartupServiceEJB {
             Collections.shuffle(groups, random);
             person.getGroups().addAll(groups.subList(0, random.nextInt(1, groups.size() + 1)));
 
-            personServiceEJB.persist(person);
+            personServiceCDI.persist(person);
         }
     }
 
     private void createTestTexts() {
-        textServiceEJB.persist(new Text());
-        textServiceEJB.persist(new Text());
+        textServiceCDI.persist(new Text());
+        textServiceCDI.persist(new Text());
     }
 
     private void createTestComments() {
-        commentServiceEJB.persist(new Comment());
-        commentServiceEJB.persist(new Comment());
+        commentServiceCDI.persist(new Comment());
+        commentServiceCDI.persist(new Comment());
     }
 
 }
