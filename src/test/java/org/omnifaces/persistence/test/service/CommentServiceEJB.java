@@ -15,9 +15,9 @@ package org.omnifaces.persistence.test.service;
 import jakarta.ejb.Stateless;
 
 import org.omnifaces.persistence.service.BaseEntityService;
-import org.omnifaces.persistence.test.model.Lookup;
+import org.omnifaces.persistence.test.model.Comment;
 
 @Stateless
-public class LookupService extends BaseEntityService<String, Lookup> {
+public class CommentServiceEJB extends BaseEntityService<Long, Comment> {
 
 }

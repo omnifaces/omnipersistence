@@ -20,7 +20,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Config;
 
 @Stateless
-public class ConfigService extends BaseEntityService<Long, Config> {
+public class ConfigServiceEJB extends BaseEntityService<Long, Config> {
 
     public boolean isDatabaseH2() {
         return getDatabase() == Database.H2;

@@ -34,20 +34,20 @@ import org.omnifaces.persistence.test.model.Text;
 
 @Startup
 @Singleton
-public class StartupService {
+public class StartupServiceEJB {
 
     public static final int TOTAL_RECORDS = 200;
     public static final int ROWS_PER_PAGE = 10;
     public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
 
     @Inject
-    private TextService textService;
+    private TextServiceEJB textService;
 
     @Inject
-    private CommentService commentService;
+    private CommentServiceEJB commentService;
 
     @Inject
-    private PersonService personService;
+    private PersonServiceEJB personService;
 
     @PostConstruct
     public void init() {

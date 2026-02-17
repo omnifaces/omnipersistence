@@ -14,10 +14,20 @@ package org.omnifaces.persistence.test.service;
 
 import jakarta.ejb.Stateless;
 
+import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
-import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.utils.collection.PartialResultList;
 
 @Stateless
-public class TextService extends BaseEntityService<Long, Text> {
+public class PhoneServiceEJB extends BaseEntityService<Long, Phone> {
+
+    public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
+        return getPage(page, count, "owner");
+    }
+
+    public PartialResultList<Phone> getAllWithOwners() {
+        return getPageWithOwners(Page.ALL, false);
+    }
 
 }

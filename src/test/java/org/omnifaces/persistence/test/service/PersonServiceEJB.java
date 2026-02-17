@@ -30,7 +30,7 @@ import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
 
 @Stateless
-public class PersonService extends BaseEntityService<Long, Person> {
+public class PersonServiceEJB extends BaseEntityService<Long, Person> {
 
     public PartialResultList<Person> getPageWithAddress(Page page, boolean count) {
         return getPage(page, count, "address");
