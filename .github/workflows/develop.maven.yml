@@ -11,13 +11,13 @@
 # specific language governing permissions and limitations under the License.
 #
 
-name: jakartified
+name: develop
 
 on:
   push:
-    branches: [ jakartified ]
+    branches: [ develop ]
   pull_request:
-    branches: [ jakartified ]
+    branches: [ develop ]
 
 jobs:
   test:
