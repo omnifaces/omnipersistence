@@ -23,6 +23,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
 import static java.util.logging.Level.WARNING;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -75,6 +76,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.StreamSupport;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
@@ -803,14 +805,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
-        if (!ids.iterator().hasNext()) {
+        var copyOfIds = StreamSupport.stream(ids.spliterator(), false).toList();
+
+        if (copyOfIds.isEmpty()) {
             return emptyList();
+        }
+
+        String paramNames;
+        Consumer<Map<String, Object>> paramValues;
+
+        if (getProvider() == ECLIPSELINK) {
+            paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
+            paramValues = p -> range(0, copyOfIds.size()).forEach(i -> p.put("id" + i, copyOfIds.get(i)));
+        }
+        else {
+            paramNames = ":ids";
+            paramValues = p -> p.put("ids", copyOfIds);
         }
 
         var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
         return list(select("")
-            + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (:ids)"
-            + " ORDER BY e.id DESC", p -> p.put("ids", ids));
+                + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (" + paramNames + ")"
+                + " ORDER BY e.id DESC", paramValues);
     }
 
     /**
