@@ -57,7 +57,9 @@ public final class Numeric extends Criteria<Number> {
 
     @Override
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
+        var targetType = path.getJavaType();
+        var value = (targetType != null && Numeric.is(targetType)) ? parseNumber(getValue(), targetType) : getValue();
+        return criteriaBuilder.equal(path, parameterBuilder.create(value));
     }
 
     @Override
@@ -66,22 +68,18 @@ public final class Numeric extends Criteria<Number> {
     }
 
     private static Number parseNumber(Object searchValue, Class<?> targetType) throws NumberFormatException {
-        if (searchValue instanceof Number) {
-            return (Number) searchValue;
-        }
-
         try {
             if (BigDecimal.class.isAssignableFrom(targetType)) {
-                return new BigDecimal(searchValue.toString());
+                return searchValue instanceof BigDecimal n ? n : new BigDecimal(searchValue.toString());
             }
             else if (BigInteger.class.isAssignableFrom(targetType)) {
-                return new BigInteger(searchValue.toString());
+                return searchValue instanceof BigInteger n ? n : new BigInteger(searchValue.toString());
             }
-            else if (Integer.class.isAssignableFrom(targetType)) {
-                return Integer.valueOf(searchValue.toString());
+            else if (Integer.class.isAssignableFrom(targetType) || int.class == targetType) {
+                return searchValue instanceof Integer n ? n : Integer.valueOf(searchValue.toString());
             }
             else {
-                return Long.valueOf(searchValue.toString());
+                return searchValue instanceof Long n ? n : Long.valueOf(searchValue.toString());
             }
         }
         catch (NumberFormatException e) {
