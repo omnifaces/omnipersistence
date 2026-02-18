@@ -76,6 +76,7 @@
         <!-- Test versions. -->
         <test.wildfly.version>33.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly.bom/wildfly -->
         <test.glassfish.version>7.0.17</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish -->
+        <test.tomee.version>10.1.4</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
         <test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it https://github.com/eclipse-ee4j/eclipselink/issues/1393 -->
     </properties>
 
@@ -94,14 +95,6 @@
             <groupId>org.omnifaces</groupId>
             <artifactId>omniutils</artifactId>
             <version>0.16</version>
-        </dependency>
-
-        <!-- Hibernate Metamodel generator. -->
-        <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-jpamodelgen</artifactId>
-            <version>6.6.0.Final</version>
-            <scope>provided</scope>
         </dependency>
 
         <!-- Test dependencies.    -->
@@ -308,7 +301,7 @@
         <!-- below sections, then you need to add a default lifecycle mapping as instructed in M2E documentation: -->
         <!-- https://www.eclipse.org/m2e/documentation/m2e-execution-not-covered.html#common-problems -->
 
-        <!-- WildFly/Hibernate test profile: ./it.sh -P wildfly-hibernate -->
+        <!-- WildFly/Hibernate integration test profile: ./it.sh -P wildfly-hibernate -->
         <profile>
             <id>wildfly-hibernate</id>
             <activation>
@@ -360,7 +353,7 @@
             </build>
         </profile>
 
-        <!-- GlassFish/EclipseLink test profile: ./it.sh -P glassfish-eclipselink -->
+        <!-- GlassFish/EclipseLink integration test profile: ./it.sh -P glassfish-eclipselink -->
         <profile>
             <id>glassfish-eclipselink</id>
             <dependencies>
@@ -420,6 +413,74 @@
                         <configuration>
                             <systemPropertyVariables>
                                 <glassfish.home>${project.build.directory}/glassfish7</glassfish.home>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- TomEE/OpenJPA integration test profile: ./it.sh -P tomee-openjpa -->
+        <profile>
+            <id>tomee-openjpa</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.tomee</groupId>
+                    <artifactId>arquillian-tomee-remote</artifactId>
+                    <version>${test.tomee.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>org.apache.tomee</groupId>
+                                            <artifactId>apache-tomee</artifactId>
+                                            <version>${test.tomee.version}</version>
+                                            <type>zip</type>
+                                            <classifier>webprofile</classifier>
+                                        </artifactItem>
+                                    </artifactItems>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>install-h2-in-tomee</id>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>com.h2database</groupId>
+                                            <artifactId>h2</artifactId>
+                                            <version>${test.h2.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
+                                        </artifactItem>
+                                    </artifactItems>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <tomee.dir>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}</tomee.dir>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>

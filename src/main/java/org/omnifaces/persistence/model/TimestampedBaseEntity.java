@@ -65,6 +65,12 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
 
     private static final long serialVersionUID = 1L;
 
+    /** The JPA field name of the {@link #getCreated() created} property, to be used in JPQL queries and criteria maps. */
+    public static final String CREATED = "created";
+
+    /** The JPA field name of the {@link #getLastModified() lastModified} property, to be used in JPQL queries and criteria maps. */
+    public static final String LAST_MODIFIED = "lastModified";
+
     @Column(nullable = false)
     private Instant created;
 

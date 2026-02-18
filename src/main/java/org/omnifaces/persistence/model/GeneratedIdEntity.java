@@ -49,6 +49,9 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
 
     private static final long serialVersionUID = 1L;
 
+    /** The JPA field name of the {@link #getId() id} property, to be used in JPQL queries and criteria maps. */
+    public static final String ID = "id";
+
     @Id @GeneratedValue(strategy = IDENTITY)
     private I id;
 

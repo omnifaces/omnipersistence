@@ -62,6 +62,9 @@ public abstract class VersionedBaseEntity<I extends Comparable<I> & Serializable
 
     private static final long serialVersionUID = 1L;
 
+    /** The JPA field name of the {@link #getVersion() version} property, to be used in JPQL queries and criteria maps. */
+    public static final String VERSION = "version";
+
     @Version
     @Column(nullable = false)
     private Long version;
