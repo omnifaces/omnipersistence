@@ -110,7 +110,7 @@ public class OmniPersistenceCDIIT {
     // Basic operations with CDI --------------------------------------------------------------------------------------
 
     @Test
-    void testFindPersonCDI() {
+    void testFindPerson() {
         var existingPerson = personServiceCDI.findById(1L);
         assertTrue(existingPerson.isPresent(), "Existing person");
         var nonExistingPerson = personServiceCDI.findById(0L);
@@ -118,7 +118,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testGetPersonCDI() {
+    void testGetPerson() {
         var existingPerson = personServiceCDI.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var nonExistingPerson = personServiceCDI.getById(0L);
@@ -126,7 +126,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPersistAndDeleteNewPersonCDI() {
+    void testPersistAndDeleteNewPerson() {
         var newPerson = createNewPerson("testPersistNewPerson@example.com");
         personServiceCDI.persist(newPerson);
         Long expectedNewId = TOTAL_RECORDS + 1L;
@@ -138,14 +138,14 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPersistExistingPersonCDI() {
+    void testPersistExistingPerson() {
         var existingPerson = createNewPerson("testPersistExistingPerson@example.com");
         existingPerson.setId(1L);
         assertThrows(IllegalEntityStateException.class, () -> personServiceCDI.persist(existingPerson));
     }
 
     @Test
-    void testUpdateExistingPersonCDI() {
+    void testUpdateExistingPerson() {
         var existingPerson = personServiceCDI.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var newEmail = "testUpdateExistingPerson@example.com";
@@ -156,13 +156,13 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testUpdateNewPersonCDI() {
+    void testUpdateNewPerson() {
         var newPerson = createNewPerson("testUpdateNewPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceCDI.update(newPerson));
     }
 
     @Test
-    void testResetExistingPersonCDI() {
+    void testResetExistingPerson() {
         var existingPerson = personServiceCDI.getById(1L);
         assertNotNull(existingPerson, "Existing person");
         var oldEmail = existingPerson.getEmail();
@@ -172,13 +172,13 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testResetNonExistingPersonCDI() {
+    void testResetNonExistingPerson() {
         var nonExistingPerson = createNewPerson("testResetNonExistingPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceCDI.reset(nonExistingPerson));
     }
 
     @Test
-    void testDeleteNonExistingPersonCDI() {
+    void testDeleteNonExistingPerson() {
         var nonExistingPerson = createNewPerson("testDeleteNonExistingPerson@example.com");
         assertThrows(IllegalEntityStateException.class, () -> personServiceCDI.delete(nonExistingPerson));
     }
@@ -195,7 +195,7 @@ public class OmniPersistenceCDIIT {
     // Batch operations with CDI --------------------------------------------------------------------------------------
 
     @Test
-    void testGetByIdsCDI() {
+    void testGetByIds() {
         var persons = personServiceCDI.getByIds(List.of(1L, 2L, 3L));
         assertEquals(3, persons.size(), "Should find 3 persons by IDs");
         assertTrue(persons.stream().anyMatch(p -> p.getId().equals(1L)), "Contains person 1");
@@ -204,14 +204,14 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testGetByIdsWithNonExistingCDI() {
+    void testGetByIdsWithNonExisting() {
         var persons = personServiceCDI.getByIds(List.of(1L, 999999L));
         assertEquals(1, persons.size(), "Should find only 1 existing person");
         assertEquals(1L, persons.get(0).getId(), "Found person has correct ID");
     }
 
     @Test
-    void testGetByIdsEmptyCDI() {
+    void testGetByIdsEmpty() {
         var persons = personServiceCDI.getByIds(List.of());
         assertTrue(persons.isEmpty(), "Empty IDs should return empty list");
     }
@@ -220,7 +220,7 @@ public class OmniPersistenceCDIIT {
     // Page with CDI --------------------------------------------------------------------------------------------------
 
     @Test
-    void testPageCDI() {
+    void testPage() {
         var persons = personServiceCDI.getPage(Page.ALL, true);
         assertEquals(TOTAL_RECORDS, persons.size(), "There are 200 records");
 
@@ -229,14 +229,14 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageByLazyManyToOneCDI() { // This was failing since Hibernate 6 upgrade.
+    void testPageByLazyManyToOne() { // This was failing since Hibernate 6 upgrade.
         var person = personServiceCDI.getById(1L);
         var phones = phoneServiceCDI.getPage(Page.with().allMatch(Map.of("owner", person)).build(), true);
         assertEquals(TOTAL_PHONES_PER_PERSON_0, phones.size(), "There are 3 phones");
     }
 
     @Test
-    void testPageWithOffsetAndLimitCDI() {
+    void testPageWithOffsetAndLimit() {
         var firstPage = personServiceCDI.getPage(Page.of(0, 10), true);
         assertEquals(10, firstPage.size(), "First page has 10 records");
         assertEquals(TOTAL_RECORDS, firstPage.getEstimatedTotalNumberOfResults(), "Total count is correct");
@@ -248,14 +248,14 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithoutCountCDI() {
+    void testPageWithoutCount() {
         var page = personServiceCDI.getPage(Page.of(0, 10), false);
         assertEquals(10, page.size(), "Page has 10 records");
         assertEquals(-1, page.getEstimatedTotalNumberOfResults(), "Count is unknown when not requested");
     }
 
     @Test
-    void testPageWithOrderingCDI() {
+    void testPageWithOrdering() {
         var ascPage = personServiceCDI.getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
         var descPage = personServiceCDI.getPage(Page.with().range(0, 10).orderBy("id", false).build(), false);
         assertTrue(ascPage.get(0).getId() < ascPage.get(9).getId(), "Ascending order");
@@ -263,13 +263,13 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageOneCDI() {
+    void testPageOne() {
         var result = personServiceCDI.getPage(Page.ONE, false);
         assertEquals(1, result.size(), "Page.ONE returns exactly 1 record");
     }
 
     @Test
-    void testPageWithMultipleRequiredCriteriaCDI() {
+    void testPageWithMultipleRequiredCriteria() {
         var person1 = personServiceCDI.getById(1L);
         var criteria = Map.<String, Object>of(
             "gender", person1.getGender(),
@@ -281,7 +281,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithMultipleOptionalCriteriaCDI() {
+    void testPageWithMultipleOptionalCriteria() {
         var person1 = personServiceCDI.getById(1L);
         var person2 = personServiceCDI.getById(2L);
         var criteria = Map.<String, Object>of(
@@ -296,33 +296,33 @@ public class OmniPersistenceCDIIT {
     // Page with criteria types with CDI ------------------------------------------------------------------------------
 
     @Test
-    void testPageWithLikeContainsCDI() {
+    void testPageWithLikeContains() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("email", Like.contains("e99@e"))).build(), true);
         assertEquals(1, result.size(), "LIKE contains matches e99@e");
         assertTrue(result.get(0).getEmail().contains("name99@"), "Email contains name99@");
     }
 
     @Test
-    void testPageWithLikeStartsWithCDI() {
+    void testPageWithLikeStartsWith() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("email", Like.startsWith("name1@"))).build(), true);
         assertTrue(result.size() >= 1, "LIKE starts with matches at least name1@");
         result.forEach(p -> assertTrue("name1@example.com".equals(p.getEmail()), "Email is name1@example.com"));
     }
 
     @Test
-    void testPageWithLikeEndsWithCDI() {
+    void testPageWithLikeEndsWith() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("email", Like.endsWith("@example.com"))).build(), true);
         assertEquals(TOTAL_RECORDS, result.size(), "All records end with @example.com");
     }
 
     @Test
-    void testPageWithLikeNoMatchCDI() {
+    void testPageWithLikeNoMatch() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("email", Like.contains("nonexistent_xyz"))).build(), true);
         assertEquals(0, result.size(), "No records match nonexistent search");
     }
 
     @Test
-    void testPageWithIgnoreCaseCDI() {
+    void testPageWithIgnoreCase() {
         var person = personServiceCDI.getById(1L);
         var uppercaseEmail = person.getEmail().toUpperCase();
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("email", IgnoreCase.value(uppercaseEmail))).build(), true);
@@ -331,7 +331,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithEnumCriteriaCDI() {
+    void testPageWithEnumCriteria() {
         var maleResult = personServiceCDI.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
         var femaleResult = personServiceCDI.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.FEMALE))).build(), true);
         assertTrue(maleResult.size() > 0, "Some males exist");
@@ -343,28 +343,28 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithNumericCriteriaCDI() {
+    void testPageWithNumericCriteria() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("id", Numeric.value(1))).build(), true);
         assertEquals(1, result.size(), "Numeric match finds exactly 1 record");
         assertEquals(1L, result.get(0).getId(), "Found person with ID 1");
     }
 
     @Test
-    void testPageWithOrderGreaterThanCDI() {
+    void testPageWithOrderGreaterThan() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("id", Order.greaterThan(TOTAL_RECORDS - 5L))).build(), true);
         assertEquals(5, result.size(), "IDs greater than 195 should be 196-200");
         result.forEach(p -> assertTrue(p.getId() > TOTAL_RECORDS - 5L, "ID is greater than threshold"));
     }
 
     @Test
-    void testPageWithOrderLessThanOrEqualToCDI() {
+    void testPageWithOrderLessThanOrEqualTo() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("id", Order.lessThanOrEqualTo(5L))).build(), true);
         assertEquals(5, result.size(), "IDs <= 5 should be 1-5");
         result.forEach(p -> assertTrue(p.getId() <= 5L, "ID is <= 5"));
     }
 
     @Test
-    void testPageWithBetweenCDI() {
+    void testPageWithBetween() {
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("id", Between.range(10L, 19L))).build(), true);
         assertEquals(10, result.size(), "IDs between 10 and 19 should be 10 records");
         result.forEach(p -> {
@@ -374,7 +374,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithBetweenDatesCDI() {
+    void testPageWithBetweenDates() {
         var start = LocalDate.of(1950, 1, 1);
         var end = LocalDate.of(1960, 12, 31);
         var result = personServiceCDI.getPage(Page.with().allMatch(Map.of("dateOfBirth", Between.range(start, end))).build(), true);
@@ -385,7 +385,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithNotCriteriaCDI() {
+    void testPageWithNotCriteria() {
         var allMales = personServiceCDI.getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
         var notMales = personServiceCDI.getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
         assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
@@ -395,7 +395,7 @@ public class OmniPersistenceCDIIT {
     // Page with fetch fields (PersonService/PhoneService custom methods) with CDI ------------------------------------
 
     @Test
-    void testPageWithAddressCDI() {
+    void testPageWithAddress() {
         var result = personServiceCDI.getAllWithAddress();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         result.forEach(p -> assertNotNull(p.getAddress(), "Address is fetched"));
@@ -403,7 +403,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithPhonesCDI() {
+    void testPageWithPhones() {
         var result = personServiceCDI.getAllWithPhones();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         var person0 = result.stream().filter(p -> p.getId().equals(1L)).findFirst().orElseThrow();
@@ -411,14 +411,14 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageWithGroupsCDI() {
+    void testPageWithGroups() {
         var result = personServiceCDI.getAllWithGroups();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Each person has at least one group"));
     }
 
     @Test
-    void testPhonePageWithOwnersCDI() {
+    void testPhonePageWithOwners() {
         var result = phoneServiceCDI.getAllWithOwners();
         assertFalse(result.isEmpty(), "Phones exist");
         result.forEach(p -> assertNotNull(p.getOwner(), "Owner is fetched"));
@@ -429,7 +429,7 @@ public class OmniPersistenceCDIIT {
     // Page with DTO mapping with CDI ---------------------------------------------------------------------------------
 
     @Test
-    void testPageOfPersonCardsCDI() {
+    void testPageOfPersonCards() {
         var result = personServiceCDI.getAllPersonCards();
         assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
         result.forEach(card -> {
@@ -443,7 +443,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPageOfPersonCardsWithPaginationCDI() {
+    void testPageOfPersonCardsWithPagination() {
         var page = personServiceCDI.getPageOfPersonCards(Page.of(0, 5), true);
         assertEquals(5, page.size(), "Page returns 5 cards");
         assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
@@ -453,7 +453,7 @@ public class OmniPersistenceCDIIT {
     // @SoftDeletable with CDI ----------------------------------------------------------------------------------------
 
     @Test
-    void testSoftDeleteCDI() {
+    void testSoftDelete() {
         var allTexts = textServiceCDI.list();
         var allComments = commentServiceCDI.list();
 
@@ -495,7 +495,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testSoftUndeleteCDI() {
+    void testSoftUndelete() {
         var lookup = new Lookup("su");
         lookupServiceCDI.persist(lookup);
 
@@ -512,7 +512,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testSoftDeleteBatchCDI() {
+    void testSoftDeleteBatch() {
         var lookup1 = new Lookup("b1");
         var lookup2 = new Lookup("b2");
         lookupServiceCDI.persist(lookup1);
@@ -534,24 +534,24 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testGetAllSoftDeletedForNonSoftDeletableCDI() {
+    void testGetAllSoftDeletedForNonSoftDeletable() {
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceCDI.listSoftDeleted());
     }
 
     @Test
-    void testSoftDeleteNonSoftDeletableCDI() {
+    void testSoftDeleteNonSoftDeletable() {
         var person = personServiceCDI.getById(1L);
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceCDI.softDelete(person));
     }
 
     @Test
-    void testSoftUndeleteNonSoftDeletableCDI() {
+    void testSoftUndeleteNonSoftDeletable() {
         var person = personServiceCDI.getById(1L);
         assertThrows(NonSoftDeletableEntityException.class, () -> personServiceCDI.softUndelete(person));
     }
 
     @Test
-    void testGetSoftDeletableByIdCDI() {
+    void testGetSoftDeletableById() {
         lookupServiceCDI.persist(new Lookup("aa"));
         var activeLookup = lookupServiceCDI.getById("aa");
         assertNotNull(activeLookup, "Got active entity with getById method");
@@ -565,7 +565,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testFindSoftDeletableByIdCDI() {
+    void testFindSoftDeletableById() {
         lookupServiceCDI.persist(new Lookup("bb"));
         var activeLookup = lookupServiceCDI.findById("bb");
         assertTrue(activeLookup.isPresent(), "Got active entity with findById method");
@@ -579,7 +579,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testSaveCDI() {
+    void testSave() {
         var lookup = new Lookup("cc");
         lookupServiceCDI.save(lookup);
         var persistedLookup = lookupServiceCDI.getById("cc");
@@ -597,7 +597,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testPersistExistingLookupCDI() {
+    void testPersistExistingLookup() {
         var lookup = new Lookup("dd");
         lookupServiceCDI.save(lookup);
         var persistedLookup = lookupServiceCDI.getById("dd");
@@ -606,7 +606,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testUpdateNewLookupCDI() {
+    void testUpdateNewLookup() {
         var lookup = new Lookup("ee");
         assertThrows(IllegalEntityStateException.class, () -> lookupServiceCDI.update(lookup));
     }
@@ -615,7 +615,7 @@ public class OmniPersistenceCDIIT {
     // @NonDeletable with CDI -----------------------------------------------------------------------------------------
 
     @Test
-    void testNonDeletableCanBePersistedCDI() {
+    void testNonDeletableCanBePersisted() {
         var config = new Config();
         config.setKey("test.key");
         config.setValue("test.value");
@@ -629,7 +629,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testNonDeletableCanBeUpdatedCDI() {
+    void testNonDeletableCanBeUpdated() {
         var config = new Config();
         config.setKey("update.key");
         config.setValue("old.value");
@@ -643,7 +643,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testNonDeletableCannotBeDeletedCDI() {
+    void testNonDeletableCannotBeDeleted() {
         var config = new Config();
         config.setKey("nodelete.key");
         config.setValue("nodelete.value");
@@ -659,12 +659,12 @@ public class OmniPersistenceCDIIT {
     // getDatabase() / getProvider with EJB ---------------------------------------------------------------------------
 
     @Test
-    void testDatabaseIsCDI() {
+    void testDatabaseIs() {
         assertTrue(configServiceCDI.isDatabaseH2(), "Test database is H2");
     }
 
     @Test
-    void testProviderIsCDI() {
+    void testProviderIs() {
         if (isEclipseLink()) {
             assertTrue(configServiceCDI.isProviderEclipseLink(), "Provider is EclipseLink");
             assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
@@ -679,7 +679,7 @@ public class OmniPersistenceCDIIT {
     // @Audit with EJB ------------------------------------------------------------------------------------------------
 
     @Test
-    void testAuditTracksValueChangeCDI() {
+    void testAuditTracksValueChange() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
@@ -701,7 +701,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testAuditDoesNotTrackNonAuditedFieldCDI() {
+    void testAuditDoesNotTrackNonAuditedField() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
@@ -718,7 +718,7 @@ public class OmniPersistenceCDIIT {
     }
 
     @Test
-    void testAuditDoesNotTrackUnchangedValueCDI() {
+    void testAuditDoesNotTrackUnchangedValue() {
         TestAuditListener.clearChanges();
 
         var config = new Config();
