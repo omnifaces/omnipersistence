@@ -75,12 +75,12 @@
 
         <!-- Test versions. -->
         <test.wildfly.version>39.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly/wildfly-preview-dist -->
-        <test.wildfly.hibernate.version>7.1.1.Final</test.wildfly.hibernate.version> <!-- https://mvnrepository.com/artifact/org.hibernate.orm/hibernate-core --> <!-- NOTE: This must be Hibernate version bundled in test.wildfly.version -->
+        <test.wildfly.hibernate.version>7.1.11.Final</test.wildfly.hibernate.version> <!-- https://mvnrepository.com/artifact/org.hibernate.orm/hibernate-core --> <!-- NOTE: This must be Hibernate version bundled in test.wildfly.version -->
         <test.glassfish.version>8.0.0</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish --> <!-- NOTE: needs Java 21 instead of 17! Else it complains that it's unable eo execute bin/asadmin -->
         <test.glassfish.eclipselink.version>5.0.0-B13</test.glassfish.eclipselink.version> <!-- https://mvnrepository.com/artifact/org.eclipse.persistence/eclipselink --> <!-- NOTE: This must be EclipseLink version bundled in test.glassfish.version -->
         <test.tomee.version>10.1.4</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
         <test.tomee.openjpa.version>4.1.1</test.tomee.openjpa.version> <!-- https://mvnrepository.com/artifact/org.apache.openjpa/openjpa-all --> <!-- NOTE: This must be OpenJPA version bundled in test.tomee.version -->
-        <test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it https://github.com/eclipse-ee4j/eclipselink/issues/1393 -->
+        <test.h2.version>2.4.240</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
     </properties>
 
     <dependencies>

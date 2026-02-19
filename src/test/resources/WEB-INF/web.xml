@@ -24,7 +24,7 @@
     <data-source>
         <name>java:app/${persistenceUnitName}</name>
         <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
-        <url>jdbc:h2:mem:${persistenceUnitName};DB_CLOSE_DELAY=-1</url>
+        <url>jdbc:h2:mem:${persistenceUnitName};DB_CLOSE_DELAY=-1;MODE=LEGACY</url>
         <transactional>true</transactional>
         <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
     </data-source>
