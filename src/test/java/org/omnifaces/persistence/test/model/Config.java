@@ -18,13 +18,12 @@ import jakarta.persistence.EntityListeners;
 
 import org.omnifaces.persistence.audit.Audit;
 import org.omnifaces.persistence.audit.AuditListener;
-import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 
 @Entity
 @NonDeletable
 @EntityListeners(AuditListener.class)
-public class Config extends GeneratedIdEntity<Long> {
+public class Config extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 

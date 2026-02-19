@@ -75,8 +75,11 @@
 
         <!-- Test versions. -->
         <test.wildfly.version>33.0.1.Final</test.wildfly.version> <!-- https://mvnrepository.com/artifact/org.wildfly.bom/wildfly -->
+        <test.wildfly.hibernate.version>6.4.4.Final</test.wildfly.hibernate.version> <!-- This must be Hibernate version bundled in test.wildfly.version -->
         <test.glassfish.version>7.0.17</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish -->
+        <test.glassfish.eclipselink.version>4.0.3</test.glassfish.eclipselink.version> <!-- This must be EclipseLink version bundled in test.glassfish.version -->
         <test.tomee.version>10.1.4</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
+        <test.tomee.openjpa.version>4.1.1</test.tomee.openjpa.version> <!-- This must be OpenJPA version bundled in test.tomee.version -->
         <test.h2.version>1.4.200</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 TODO: bump to 2.x once EclipseLink is compatible with it https://github.com/eclipse-ee4j/eclipselink/issues/1393 -->
     </properties>
 
@@ -97,7 +100,7 @@
             <version>0.16</version>
         </dependency>
 
-        <!-- Test dependencies.    -->
+        <!-- Test dependencies. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -114,6 +117,26 @@
             <groupId>org.jboss.shrinkwrap.resolver</groupId>
             <artifactId>shrinkwrap-resolver-impl-maven-archive</artifactId>
             <version>3.3.1</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JPA impl dependencies are needed for test scope so that Arquillian can unwrap any impl-specific exception from failing tests without throwing ClassCastException -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>${test.wildfly.hibernate.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.persistence</groupId>
+            <artifactId>eclipselink</artifactId>
+            <version>${test.glassfish.eclipselink.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.openjpa</groupId>
+            <artifactId>openjpa-all</artifactId>
+            <version>${test.tomee.openjpa.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

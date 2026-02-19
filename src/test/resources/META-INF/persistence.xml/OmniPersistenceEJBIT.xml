@@ -19,12 +19,15 @@
     xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
     version="3.0"
 >
-    <persistence-unit name="OmniPersistenceTest">
-        <jta-data-source>java:app/OmniPersistenceTest</jta-data-source>
+    <persistence-unit name="OmniPersistenceEJBIT">
+        <jta-data-source>java:app/OmniPersistenceEJBIT</jta-data-source>
+
+        <!-- Needed for OpenJPA only! -->
+        <class>org.omnifaces.persistence.model.BaseEntity</class>
 
         <properties>
             <!-- JPA -->
-            <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
+            <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" /> <!-- ignored by OpenJPA! it instead uses openjpa.jdbc.SynchronizeMappings property -->
             <property name="jakarta.persistence.schema-generation.create-source" value="metadata-then-script" />
             <property name="jakarta.persistence.schema-generation.create-script-source" value="META-INF/sql/create-test.sql" />
             <property name="jakarta.persistence.schema-generation.drop-source" value="metadata-then-script" />
@@ -42,6 +45,10 @@
             <property name="eclipselink.logging.timestamp" value="false" />
             <property name="eclipselink.logging.thread" value="false" />
             <property name="eclipselink.logging.session" value="false" />
+
+            <!-- OpenJPA -->
+            <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(validate=true,foreignKeys=true,schemaAction='dropDB,add')" />
+            <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=INFO, SQL=TRACE" />
 
             <!-- WildFly -->
             <property name="wildfly.jpa.twophasebootstrap" value="false" /> <!-- https://issues.jboss.org/browse/WFLY-2727 -->

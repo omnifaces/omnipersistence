@@ -16,11 +16,10 @@ import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
 import jakarta.persistence.Entity;
 
-import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
 
 @Entity
-public class Text extends GeneratedIdEntity<Long> {
+public class Text extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 

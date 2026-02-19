@@ -15,10 +15,8 @@ package org.omnifaces.persistence.test.model;
 import jakarta.persistence.Entity;
 import jakarta.validation.constraints.NotNull;
 
-import org.omnifaces.persistence.model.GeneratedIdEntity;
-
 @Entity
-public class Address extends GeneratedIdEntity<Long> {
+public class Address extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 

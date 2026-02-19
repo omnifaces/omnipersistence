@@ -33,6 +33,7 @@ import jakarta.ejb.EJB;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit5.ArquillianExtension;
+import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
@@ -72,8 +73,9 @@ public class OmniPersistenceEJBIT {
         return create(WebArchive.class)
             .addPackages(true, OmniPersistenceEJBIT.class.getPackage())
             .deleteClass(StartupServiceCDI.class)
+            .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
             .addAsWebInfResource("web.xml")
-            .addAsResource("META-INF/persistence.xml")
+            .addAsResource("META-INF/persistence.xml/" + OmniPersistenceEJBIT.class.getSimpleName() + ".xml", "META-INF/persistence.xml")
             .addAsResource("META-INF/sql/create-test.sql")
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
@@ -100,8 +102,16 @@ public class OmniPersistenceEJBIT {
     @EJB
     private ConfigServiceEJB configServiceEJB;
 
+    protected static boolean isHibernate() {
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-hibernate");
+    }
+
     protected static boolean isEclipseLink() {
-        return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
+    }
+
+    protected static boolean isOpenJPA() {
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-openjpa");
     }
 
 
@@ -663,13 +673,23 @@ public class OmniPersistenceEJBIT {
 
     @Test
     void testProviderIs() {
-        if (isEclipseLink()) {
-            assertTrue(configServiceEJB.isProviderEclipseLink(), "Provider is EclipseLink");
-            assertFalse(configServiceEJB.isProviderHibernate(), "Provider is not Hibernate");
-        }
-        else {
+        if (isHibernate()) {
             assertTrue(configServiceEJB.isProviderHibernate(), "Provider is Hibernate");
             assertFalse(configServiceEJB.isProviderEclipseLink(), "Provider is not EclipseLink");
+            assertFalse(configServiceEJB.isProviderOpenJPA(), "Provider is not OpenJPA");
+        }
+        else if (isEclipseLink()) {
+            assertFalse(configServiceEJB.isProviderHibernate(), "Provider is not Hibernate");
+            assertTrue(configServiceEJB.isProviderEclipseLink(), "Provider is EclipseLink");
+            assertFalse(configServiceEJB.isProviderOpenJPA(), "Provider is not OpenJPA");
+        }
+        else if (isOpenJPA()) {
+            assertFalse(configServiceEJB.isProviderHibernate(), "Provider is not Hibernate");
+            assertFalse(configServiceEJB.isProviderEclipseLink(), "Provider is not EclipseLink");
+            assertTrue(configServiceEJB.isProviderOpenJPA(), "Provider is OpenJPA");
+        }
+        else {
+            throw new IllegalStateException();
         }
     }
 

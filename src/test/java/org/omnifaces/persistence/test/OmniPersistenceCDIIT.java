@@ -75,7 +75,7 @@ public class OmniPersistenceCDIIT {
             .deleteClass(StartupServiceEJB.class)
             .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
             .addAsWebInfResource("web.xml")
-            .addAsResource("META-INF/persistence.xml")
+            .addAsResource("META-INF/persistence.xml/" + OmniPersistenceCDIIT.class.getSimpleName() + ".xml", "META-INF/persistence.xml")
             .addAsResource("META-INF/sql/create-test.sql")
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
@@ -102,8 +102,16 @@ public class OmniPersistenceCDIIT {
     @Inject
     private ConfigServiceCDI configServiceCDI;
 
+    protected static boolean isHibernate() {
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-hibernate");
+    }
+
     protected static boolean isEclipseLink() {
-        return getenv("MAVEN_CMD_LINE_ARGS").endsWith("-eclipselink");
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
+    }
+
+    protected static boolean isOpenJPA() {
+        return getenv("MAVEN_CMD_LINE_ARGS").contains("-openjpa");
     }
 
 
@@ -665,13 +673,23 @@ public class OmniPersistenceCDIIT {
 
     @Test
     void testProviderIs() {
-        if (isEclipseLink()) {
-            assertTrue(configServiceCDI.isProviderEclipseLink(), "Provider is EclipseLink");
-            assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
-        }
-        else {
+        if (isHibernate()) {
             assertTrue(configServiceCDI.isProviderHibernate(), "Provider is Hibernate");
             assertFalse(configServiceCDI.isProviderEclipseLink(), "Provider is not EclipseLink");
+            assertFalse(configServiceCDI.isProviderOpenJPA(), "Provider is not OpenJPA");
+        }
+        else if (isEclipseLink()) {
+            assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
+            assertTrue(configServiceCDI.isProviderEclipseLink(), "Provider is EclipseLink");
+            assertFalse(configServiceCDI.isProviderOpenJPA(), "Provider is not OpenJPA");
+        }
+        else if (isOpenJPA()) {
+            assertFalse(configServiceCDI.isProviderHibernate(), "Provider is not Hibernate");
+            assertFalse(configServiceCDI.isProviderEclipseLink(), "Provider is not EclipseLink");
+            assertTrue(configServiceCDI.isProviderOpenJPA(), "Provider is OpenJPA");
+        }
+        else {
+            throw new IllegalStateException();
         }
     }
 

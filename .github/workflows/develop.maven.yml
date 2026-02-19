@@ -26,7 +26,7 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        server: [wildfly-hibernate, glassfish-eclipselink]
+        server: [wildfly-hibernate, glassfish-eclipselink, tomee-openjpa]
 
     steps:
     - uses: actions/checkout@v4

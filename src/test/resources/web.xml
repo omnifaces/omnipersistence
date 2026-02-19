@@ -19,12 +19,20 @@
     xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd"
     version="5.0"
 >
-    <display-name>OmniPersistenceTest</display-name>
+    <display-name>OmniPersistenceIT</display-name>
 
     <data-source>
-        <name>java:app/OmniPersistenceTest</name>
+        <name>java:app/OmniPersistenceEJBIT</name>
         <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
-        <url>jdbc:h2:mem:test</url>
+        <url>jdbc:h2:mem:./target/h2-ejb-it;DB_CLOSE_DELAY=-1</url>
+        <transactional>true</transactional>
+        <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
+    </data-source>
+
+    <data-source>
+        <name>java:app/OmniPersistenceCDIIT</name>
+        <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
+        <url>jdbc:h2:mem:./target/h2-cdi-it;DB_CLOSE_DELAY=-1</url>
         <transactional>true</transactional>
         <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
     </data-source>

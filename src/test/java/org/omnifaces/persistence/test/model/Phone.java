@@ -22,10 +22,9 @@ import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 
 import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 @Entity
-public class Phone extends GeneratedIdEntity<Long> {
+public class Phone extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 

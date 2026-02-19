@@ -37,6 +37,10 @@ public class ConfigServiceCDI extends BaseEntityService<Long, Config> {
         return getProvider() == Provider.ECLIPSELINK;
     }
 
+    public boolean isProviderOpenJPA() {
+        return getProvider() == Provider.OPENJPA;
+    }
+
     @Transactional(REQUIRED)
     public void updateValue(Long id, String newValue) {
         var config = getById(id);

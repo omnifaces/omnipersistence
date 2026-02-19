@@ -14,11 +14,10 @@ package org.omnifaces.persistence.test.model;
 
 import jakarta.persistence.Entity;
 
-import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
 
 @Entity
-public class Comment extends GeneratedIdEntity<Long> {
+public class Comment extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 

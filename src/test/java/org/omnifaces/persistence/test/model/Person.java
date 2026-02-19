@@ -30,10 +30,8 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.validation.constraints.NotNull;
 
-import org.omnifaces.persistence.model.GeneratedIdEntity;
-
 @Entity
-public class Person extends GeneratedIdEntity<Long> {
+public class Person extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 
