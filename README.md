@@ -44,11 +44,11 @@ Pick the base class that matches what your entity needs:
 | Class | Generated ID | Timestamps | Optimistic lock |
 |---|---|---|---|
 | `BaseEntity<I>` | — | — | — |
-| `GeneratedIdEntity<I>` | ✓ | — | — |
-| `TimestampedBaseEntity<I>` | — | ✓ | — |
-| `TimestampedEntity<I>` | ✓ | ✓ | — |
-| `VersionedBaseEntity<I>` | — | ✓ | ✓ |
-| `VersionedEntity<I>` | ✓ | ✓ | ✓ |
+| `GeneratedIdEntity<I>` | ✅ | — | — |
+| `TimestampedBaseEntity<I>` | — | ✅ | — |
+| `TimestampedEntity<I>` | ✅ | ✅ | — |
+| `VersionedBaseEntity<I>` | — | ✅ | ✅ |
+| `VersionedEntity<I>` | ✅ | ✅ | ✅ |
 
 All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box. Override them using the protected helper methods to base identity on specific fields instead:
 
@@ -173,7 +173,26 @@ PartialResultList<Person> result = personService.getPage(page, true /* count */)
 result.getEstimatedTotalNumberOfResults(); // total matching rows
 ```
 
-**DTO projection** — map results to a different type directly in the query:
+**DTO projection** — map results to a different type directly in the query. The DTO must extend the entity class and provide a constructor whose parameters match the mapped expressions in order:
+
+```java
+// DTO — extends Person so getPage() accepts it as a result type
+public class PersonCard extends Person {
+
+    private final String addressString;
+    private final Long totalPhones;
+
+    public PersonCard(Long id, String email, String addressString, Long totalPhones) {
+        setId(id);
+        setEmail(email);
+        this.addressString = addressString;
+        this.totalPhones   = totalPhones;
+    }
+
+    public String getAddressString() { return addressString; }
+    public Long   getTotalPhones()   { return totalPhones; }
+}
+```
 
 ```java
 PartialResultList<PersonCard> cards = personService.getPage(
@@ -182,9 +201,10 @@ PartialResultList<PersonCard> cards = personService.getPage(
         var phones = root.join("phones", LEFT);
         query.groupBy(root.get("id"));
         return new LinkedHashMap<>() {{
-            put(PersonCard::getId,         root.get("id"));
-            put(PersonCard::getFullName,   JPA.concat(builder, root.get("firstName"), " ", root.get("lastName")));
-            put(PersonCard::getTotalPhones, builder.count(phones));
+            put(PersonCard::getId,            root.get("id"));
+            put(PersonCard::getEmail,         root.get("email"));
+            put(PersonCard::getAddressString, JPA.concat(builder, root.get("address").get("street"), " ", root.get("address").get("city")));
+            put(PersonCard::getTotalPhones,   builder.count(phones));
         }};
     }
 );
@@ -230,7 +250,9 @@ Map<String, Object> criteria = new LinkedHashMap<>();
 criteria.put("lastName",  Like.contains("smith"));
 criteria.put("age",       Between.range(18, 65));
 criteria.put("gender",    Enumerated.value(Gender.FEMALE));
-criteria.put("status",    Not.value("BANNED"));
+criteria.put("status",    Not.value("BANNED"));              // NOT = 'BANNED'
+criteria.put("email",     Not.value(Like.contains("spam"))); // NOT LIKE '%spam%'
+criteria.put("age",       Not.value(Between.range(18, 25))); // NOT BETWEEN 18 AND 25
 
 PartialResultList<Person> result = personService.getPage(
     Page.with().range(0, 20).allMatch(criteria).orderBy("lastName", true).build(),
