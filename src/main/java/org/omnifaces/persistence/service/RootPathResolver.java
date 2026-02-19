@@ -25,6 +25,9 @@ import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.IdentifiableType;
+
+import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Helper class of {@link BaseEntityService}.
@@ -77,7 +80,10 @@ class RootPathResolver implements PathResolver {
                     path = path.get(attribute);
                 }
                 catch (IllegalArgumentException e) {
-                    if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
+                    if (Identifiable.ID.equals(attribute)) {
+                        path = getSupertypePath(path, attribute); // OpenJPA work around.
+                    }
+                    else if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
                         path = guessManyOrOneToOnePath(attribute);
                     }
 
@@ -94,6 +100,21 @@ class RootPathResolver implements PathResolver {
 
     private boolean isTransient(Class<?> type, String property) {
         return true; // TODO implement?
+    }
+
+    private static Path<?> getSupertypePath(Path<?> path, String attribute) {
+        if (path.getModel() instanceof IdentifiableType<?> type) {
+            while (type != null) {
+                try {
+                    return path.get(attribute);
+                }
+                catch (IllegalArgumentException ignore) {
+                    type = type.getSupertype();
+                }
+            }
+        }
+
+        return null;
     }
 
     private Path<?> guessManyOrOneToOnePath(String attribute) {
@@ -126,7 +147,7 @@ class RootPathResolver implements PathResolver {
         }
         if (path instanceof FetchParent) {
             try {
-                ((FetchParent<?, ?>) path).getFetches().stream().filter(fetch -> fetch instanceof Path).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+                ((FetchParent<?, ?>) path).getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
             }
             catch (NullPointerException openJPAWillThrowThisOnEmptyFetches) {
                 // Ignore and continue.

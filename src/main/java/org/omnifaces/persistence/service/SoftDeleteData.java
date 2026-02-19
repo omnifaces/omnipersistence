@@ -75,11 +75,11 @@ class SoftDeleteData {
         }
 
         boolean value = accessField(entity, fieldName);
-        return typeActive ? !value : value;
+        return typeActive ^ value;
     }
 
     public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
-        invokeMethod(entity, setterName, typeActive ? !deleted : deleted);
+        invokeMethod(entity, setterName, typeActive ^ deleted);
     }
 
     public String getWhereClause(boolean includeSoftDeleted) {
@@ -87,7 +87,7 @@ class SoftDeleteData {
             return "";
         }
 
-        return (" WHERE e." + fieldName + (includeSoftDeleted ? "=" : "!=") + (typeActive ? "false": "true"));
+        return (" WHERE e." + fieldName + "=" + (typeActive ^ includeSoftDeleted));
     }
 
     @Override
