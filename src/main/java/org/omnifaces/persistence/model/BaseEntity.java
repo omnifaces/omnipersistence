@@ -12,17 +12,13 @@
  */
 package org.omnifaces.persistence.model;
 
-import static java.util.Arrays.stream;
-import static java.util.Comparator.comparing;
-import static java.util.Comparator.naturalOrder;
-import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElseGet;
 import static java.util.stream.Collectors.joining;
 
 import java.io.Serializable;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.Objects;
-import java.util.function.Function;
+import java.util.stream.IntStream;
 
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
@@ -60,24 +56,15 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * }
  * </pre>
  * <p>
- * Subclasses can override {@link #hashCode()}, {@link #equals(Object)}, {@link #compareTo(BaseEntity)} and {@link #toString()}
- * based on custom property getters using the provided convenience methods:
+ * To base {@link #hashCode()}, {@link #equals(Object)}, {@link #compareTo(BaseEntity)} and {@link #toString()} on
+ * specific fields rather than the entity ID, override {@link #identity()} to return those field values:
  * <pre>
  * &#64;Override
- * public int hashCode() {
- *     return hashCode(YourEntity::getEmail);
- * }
- *
- * &#64;Override
- * public boolean equals(Object other) {
- *     return equals(other, YourEntity::getEmail);
- * }
- *
- * &#64;Override
- * public String toString() {
- *     return toString(YourEntity::getName, YourEntity::getEmail);
+ * protected Object[] identity() {
+ *     return new Object[]{ getType(), getNumber() };
  * }
  * </pre>
+ * All four methods will automatically use the returned values. No other overrides are needed.
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
@@ -90,44 +77,37 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     private static final long serialVersionUID = 1L;
 
     /**
-     * Hashes by default the ID.
+     * Returns the field values that define this entity's identity, used by {@link #hashCode()}, {@link #equals(Object)},
+     * {@link #compareTo(BaseEntity)} and {@link #toString()}.
+     * <p>
+     * The default implementation returns the entity ID. Override this in subclasses to use different fields:
+     * <pre>
+     * &#64;Override
+     * protected Object[] identity() {
+     *     return new Object[]{ getType(), getNumber() };
+     * }
+     * </pre>
+     * @return The field values that define this entity's identity.
+     */
+    protected Object[] identity() {
+        return new Object[]{ getId() };
+    }
+
+    /**
+     * Hashes by default the ID. Falls back to {@link System#identityHashCode(Object)} when all identity values are null.
      */
     @Override
     public int hashCode() {
-        return hashCode(BaseEntity::getId);
-    }
-
-	/**
-	 * Subclasses can use this convenience method to override the {@link #hashCode()} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param getters The property getters to determine the {@link #hashCode()} for.
-	 * @return The {@link #hashCode()} of the given property getters.
-	 */
-    @SafeVarargs
-    @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> int hashCode(final Function<E, Object>... getters) {
-        final var values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
-        return values.length > 0 ? Objects.hash(values) : super.hashCode();
+        var values = identity();
+        return Arrays.stream(values).allMatch(Objects::isNull) ? super.hashCode() : Arrays.hashCode(values);
     }
 
     /**
      * Compares by default by entity class (proxies taken into account) and ID.
+     * Returns {@code false} when all identity values are null.
      */
     @Override
     public boolean equals(final Object other) {
-        return equals(other, BaseEntity::getId);
-    }
-
-	/**
-	 * Subclasses can use this convenience method to override the {@link #equals(Object)} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param other The reference object with which to compare.
-	 * @param getters The property getters to determine the {@link #equals(Object)} for.
-	 * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
-	 */
-    @SafeVarargs
-    @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
         if (other == this) {
             return true;
         }
@@ -136,59 +116,48 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
             return false;
         }
 
-        final var values = stream(getters).map(getter -> getter.apply((E) this)).toArray();
+        var values = identity();
 
-        if (stream(values).allMatch(Objects::isNull)) {
+        if (Arrays.stream(values).allMatch(Objects::isNull)) {
             return false;
         }
 
-        final var otherValues = stream(getters).map(getter -> getter.apply((E) other)).toArray();
-        return Objects.deepEquals(values, otherValues);
+        return Arrays.equals(values, ((BaseEntity<?>) other).identity());
     }
 
     /**
      * Orders by default with "nulls last".
      */
     @Override
+    @SuppressWarnings("unchecked")
     public int compareTo(final BaseEntity<I> other) {
-        return compareTo(other, BaseEntity::getId);
-    }
-
-    /**
-     * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
-     * @param <E> The generic base entity type.
-     * @param other The object to be compared.
-     * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
-     * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
-     */
-    @SafeVarargs
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    protected final <E extends BaseEntity<I>> int compareTo(final Object other, final Function<E, Object>... getters) {
         if (other == null) {
             return -1;
         }
 
-        return stream(getters).map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
+        var a = identity();
+        var b = other.identity();
+
+        return IntStream.range(0, a.length).map(i -> {
+            if (a[i] == null && b[i] == null) return 0;
+            if (a[i] == null) return 1;  // nulls last
+            if (b[i] == null) return -1;
+            return ((Comparable<Object>) a[i]).compareTo(b[i]);
+        }).filter(c -> c != 0).findFirst().orElse(0);
     }
 
     /**
      * The default format is <code>ClassName[{id}]</code> where <code>{id}</code> defaults to <code>@hashcode</code> when null.
+     * When {@link #identity()} is overridden, the format is <code>ClassName[v1, v2, …]</code>.
      */
     @Override
     public String toString() {
-        return toString(e -> requireNonNullElseGet(e.getId(), () -> ("@" + e.hashCode())));
-    }
+        var values = identity();
 
-    /**
-	 * Subclasses can use this convenience method to override the {@link #toString()} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param getters The property getters to determine the {@link #toString()} for.
-     * @return The {@link Class#getSimpleName()}, then followed by {@code [}, then a comma separated string of the
-     * results of all given getters, and finally followed by {@code ]}.
-     */
-    @SafeVarargs
-    @SuppressWarnings("unchecked")
-    protected final <E extends BaseEntity<I>> String toString(final Function<E, Object>... getters) {
-        return stream(getters).map(getter -> Objects.toString(getter.apply((E) this))).collect(joining(", ", getClass().getSimpleName() + "[", "]"));
+        if (values.length == 1 && Objects.equals(values[0], getId())) {
+            return getClass().getSimpleName() + "[" + requireNonNullElseGet(getId(), () -> "@" + super.hashCode()) + "]";
+        }
+
+        return Arrays.stream(values).map(Objects::toString).collect(joining(", ", getClass().getSimpleName() + "[", "]"));
     }
 }
