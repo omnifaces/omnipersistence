@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright 2021 OmniFaces
+    Copyright OmniFaces
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -22,17 +22,9 @@
     <display-name>OmniPersistenceIT</display-name>
 
     <data-source>
-        <name>java:app/OmniPersistenceEJBIT</name>
+        <name>java:app/${persistenceUnitName}</name>
         <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
-        <url>jdbc:h2:mem:./target/h2-ejb-it;DB_CLOSE_DELAY=-1</url>
-        <transactional>true</transactional>
-        <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
-    </data-source>
-
-    <data-source>
-        <name>java:app/OmniPersistenceCDIIT</name>
-        <class-name>org.h2.jdbcx.JdbcDataSource</class-name>
-        <url>jdbc:h2:mem:./target/h2-cdi-it;DB_CLOSE_DELAY=-1</url>
+        <url>jdbc:h2:mem:${persistenceUnitName};DB_CLOSE_DELAY=-1</url>
         <transactional>true</transactional>
         <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
     </data-source>

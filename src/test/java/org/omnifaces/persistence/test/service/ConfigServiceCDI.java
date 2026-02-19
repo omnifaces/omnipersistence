@@ -17,40 +17,19 @@ import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
-import org.omnifaces.persistence.Database;
-import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.service.BaseEntityService;
-import org.omnifaces.persistence.test.model.Config;
-
 @ApplicationScoped
-public class ConfigServiceCDI extends BaseEntityService<Long, Config> {
+public class ConfigServiceCDI extends ConfigService {
 
-    public boolean isDatabaseH2() {
-        return getDatabase() == Database.H2;
-    }
-
-    public boolean isProviderHibernate() {
-        return getProvider() == Provider.HIBERNATE;
-    }
-
-    public boolean isProviderEclipseLink() {
-        return getProvider() == Provider.ECLIPSELINK;
-    }
-
-    public boolean isProviderOpenJPA() {
-        return getProvider() == Provider.OPENJPA;
-    }
-
+    @Override
     @Transactional(REQUIRED)
     public void updateValue(Long id, String newValue) {
-        var config = getById(id);
-        config.setValue(newValue);
+        super.updateValue(id, newValue);
     }
 
+    @Override
     @Transactional(REQUIRED)
     public void updateKey(Long id, String newKey) {
-        var config = getById(id);
-        config.setKey(newKey);
+        super.updateKey(id, newKey);
     }
 
 }

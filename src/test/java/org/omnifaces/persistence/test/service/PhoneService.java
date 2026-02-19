@@ -12,9 +12,19 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.utils.collection.PartialResultList;
 
-@ApplicationScoped
-public class PersonServiceCDI extends PersonService {
+public abstract class PhoneService extends BaseEntityService<Long, Phone> {
+
+    public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
+        return getPage(page, count, "owner");
+    }
+
+    public PartialResultList<Phone> getAllWithOwners() {
+        return getPageWithOwners(Page.ALL, false);
+    }
 
 }

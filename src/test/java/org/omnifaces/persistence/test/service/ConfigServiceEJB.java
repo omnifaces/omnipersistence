@@ -14,38 +14,7 @@ package org.omnifaces.persistence.test.service;
 
 import jakarta.ejb.Stateless;
 
-import org.omnifaces.persistence.Database;
-import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.service.BaseEntityService;
-import org.omnifaces.persistence.test.model.Config;
-
 @Stateless
-public class ConfigServiceEJB extends BaseEntityService<Long, Config> {
-
-    public boolean isDatabaseH2() {
-        return getDatabase() == Database.H2;
-    }
-
-    public boolean isProviderHibernate() {
-        return getProvider() == Provider.HIBERNATE;
-    }
-
-    public boolean isProviderEclipseLink() {
-        return getProvider() == Provider.ECLIPSELINK;
-    }
-
-    public boolean isProviderOpenJPA() {
-        return getProvider() == Provider.OPENJPA;
-    }
-
-    public void updateValue(Long id, String newValue) {
-        var config = getById(id);
-        config.setValue(newValue);
-    }
-
-    public void updateKey(Long id, String newKey) {
-        var config = getById(id);
-        config.setKey(newKey);
-    }
+public class ConfigServiceEJB extends ConfigService {
 
 }

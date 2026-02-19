@@ -183,7 +183,6 @@
                                     <header>license.txt</header>
                                     <excludes>
                                        <exclude>*.*</exclude> <!-- excludes files in root folder -->
-                                       <exclude>src/test/resources/*.*</exclude>
                                     </excludes>
                                 </licenseSet>
                             </licenseSets>

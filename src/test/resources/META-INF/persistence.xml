@@ -19,8 +19,8 @@
     xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
     version="3.0"
 >
-    <persistence-unit name="OmniPersistenceEJBIT">
-        <jta-data-source>java:app/OmniPersistenceEJBIT</jta-data-source>
+    <persistence-unit name="${persistenceUnitName}">
+        <jta-data-source>java:app/${persistenceUnitName}</jta-data-source>
 
         <!-- Needed for OpenJPA only! -->
         <class>org.omnifaces.persistence.model.BaseEntity</class>

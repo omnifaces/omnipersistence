@@ -69,7 +69,10 @@ public final class Numeric extends Criteria<Number> {
 
     private static Number parseNumber(Object searchValue, Class<?> targetType) throws NumberFormatException {
         try {
-            if (BigDecimal.class.isAssignableFrom(targetType)) {
+            if (targetType.isInstance(searchValue)) {
+                return (Number) searchValue;
+            }
+            else if (BigDecimal.class.isAssignableFrom(targetType)) {
                 return searchValue instanceof BigDecimal n ? n : new BigDecimal(searchValue.toString());
             }
             else if (BigInteger.class.isAssignableFrom(targetType)) {
