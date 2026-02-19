@@ -100,10 +100,6 @@ public abstract class OmniPersistenceIT {
     protected abstract BaseEntityService<String, Lookup> lookupService();
     protected abstract ConfigService configService();
 
-    protected static boolean isHibernate() {
-        return getenv("MAVEN_CMD_LINE_ARGS").contains("-hibernate");
-    }
-
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
     }
@@ -671,12 +667,7 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testProviderIs() {
-        if (isHibernate()) {
-            assertTrue(configService().isProviderHibernate(), "Provider is Hibernate");
-            assertFalse(configService().isProviderEclipseLink(), "Provider is not EclipseLink");
-            assertFalse(configService().isProviderOpenJPA(), "Provider is not OpenJPA");
-        }
-        else if (isEclipseLink()) {
+        if (isEclipseLink()) {
             assertFalse(configService().isProviderHibernate(), "Provider is not Hibernate");
             assertTrue(configService().isProviderEclipseLink(), "Provider is EclipseLink");
             assertFalse(configService().isProviderOpenJPA(), "Provider is not OpenJPA");
@@ -687,7 +678,9 @@ public abstract class OmniPersistenceIT {
             assertTrue(configService().isProviderOpenJPA(), "Provider is OpenJPA");
         }
         else {
-            throw new IllegalStateException();
+            assertTrue(configService().isProviderHibernate(), "Provider is Hibernate");
+            assertFalse(configService().isProviderEclipseLink(), "Provider is not EclipseLink");
+            assertFalse(configService().isProviderOpenJPA(), "Provider is not OpenJPA");
         }
     }
 
