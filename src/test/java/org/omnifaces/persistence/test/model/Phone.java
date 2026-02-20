@@ -21,7 +21,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 
-
+import org.omnifaces.persistence.model.BaseEntity;
 
 @Entity
 public class Phone extends LocalGeneratedIdEntity {
@@ -70,8 +70,23 @@ public class Phone extends LocalGeneratedIdEntity {
     }
 
 	@Override
-	protected Object[] identity() {
-		return new Object[]{ getType(), getNumber() };
+	public int hashCode() {
+		return hashCode(Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public boolean equals(Object other) {
+		return equals(other, Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public int compareTo(BaseEntity<Long> other) {
+		return compareTo(other, Phone::getType, Phone::getNumber);
+	}
+
+	@Override
+	public String toString() {
+		return toString(Phone::getType, Phone::getNumber);
 	}
 
 }

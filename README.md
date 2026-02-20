@@ -50,7 +50,7 @@ Pick the base class that matches what your entity needs:
 | `VersionedBaseEntity<I>` | — | ✅ | ✅ |
 | `VersionedEntity<I>` | ✅ | ✅ | ✅ |
 
-All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box. To base identity on specific fields instead, override the single `identity()` method — all four methods pick it up automatically:
+All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box. Override them using the protected helper methods to base identity on specific fields instead:
 
 ```java
 @Entity
@@ -61,10 +61,10 @@ public class Phone extends GeneratedIdEntity<Long> {
     private Person owner;
 
     // identity and ordering based on type + number rather than database ID
-    @Override
-    protected Object[] identity() {
-        return new Object[]{ getType(), getNumber() };
-    }
+    @Override public int hashCode()                    { return hashCode(Phone::getType, Phone::getNumber); }
+    @Override public boolean equals(Object other)      { return equals(other, Phone::getType, Phone::getNumber); }
+    @Override public int compareTo(BaseEntity<Long> o) { return compareTo(o, Phone::getType, Phone::getNumber); }
+    @Override public String toString()                 { return toString(Phone::getType, Phone::getNumber); }
 }
 ```
 
