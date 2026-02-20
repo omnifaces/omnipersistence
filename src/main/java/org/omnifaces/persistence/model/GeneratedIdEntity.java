@@ -40,6 +40,7 @@ import jakarta.persistence.MappedSuperclass;
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntity
  * @see TimestampedEntity
  * @see VersionedEntity

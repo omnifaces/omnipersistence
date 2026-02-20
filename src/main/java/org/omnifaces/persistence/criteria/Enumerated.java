@@ -30,6 +30,7 @@ import jakarta.persistence.criteria.Predicate;
  * </pre>
  *
  * @author Bauke Scholtz
+ * @since 1.0
  * @see Criteria
  */
 public final class Enumerated extends Criteria<Enum<?>> {

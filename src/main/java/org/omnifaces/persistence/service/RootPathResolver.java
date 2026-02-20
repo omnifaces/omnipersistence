@@ -31,6 +31,9 @@ import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Helper class of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 class RootPathResolver implements PathResolver {
 

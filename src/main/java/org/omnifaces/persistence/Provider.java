@@ -55,6 +55,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * and relationship mapping quirks. The {@link BaseEntityService} uses this internally to generate correct queries
  * across different providers.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see Database
  * @see BaseEntityService#getProvider()
  */

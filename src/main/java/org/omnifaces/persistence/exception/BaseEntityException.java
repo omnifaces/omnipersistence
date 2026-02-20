@@ -24,6 +24,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * (instead of wrapping it in an {@code EJBException}) and triggers a transaction rollback.
  * In CDI {@code @Transactional} contexts, the rollback happens automatically as this is a {@link RuntimeException}.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see IllegalEntityStateException
  * @see NonDeletableEntityException
  * @see NonSoftDeletableEntityException

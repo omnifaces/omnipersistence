@@ -63,9 +63,11 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  *
  * @author Sergey Kuntsel
+ * @since 1.0
  * @see BaseEntityService#softDelete(BaseEntity)
  * @see BaseEntityService#softUndelete(BaseEntity)
  * @see BaseEntityService#listSoftDeleted()
+ * @see NonSoftDeletableEntityException
  */
 @Target(value = { METHOD, FIELD })
 @Retention(RUNTIME)
@@ -73,7 +75,6 @@ public @interface SoftDeletable {
 
     /**
      * Defines the types of the soft delete column.
-     * @author Sergey Kuntsel
      */
     public enum Type {
 

@@ -54,8 +54,10 @@ import jakarta.persistence.Version;
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see VersionedEntity
  * @see TimestampedBaseEntity
+ * @see Versioned
  */
 @MappedSuperclass
 public abstract class VersionedBaseEntity<I extends Comparable<I> & Serializable> extends TimestampedBaseEntity<I> implements Versioned {

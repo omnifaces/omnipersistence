@@ -20,6 +20,8 @@ import org.omnifaces.persistence.model.BaseEntity;
  * persisted, or when trying to {@link org.omnifaces.persistence.service.BaseEntityService#update(BaseEntity) update}
  * an entity that has no ID.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityException
  */
 public class IllegalEntityStateException extends BaseEntityException {

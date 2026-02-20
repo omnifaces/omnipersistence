@@ -18,6 +18,8 @@ import org.omnifaces.persistence.model.BaseEntity;
  * Thrown when trying to {@link org.omnifaces.persistence.service.BaseEntityService#delete(BaseEntity) delete} an
  * entity that has the {@link org.omnifaces.persistence.model.NonDeletable} annotation.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityException
  * @see org.omnifaces.persistence.model.NonDeletable
  */

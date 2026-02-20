@@ -35,6 +35,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <li>{@link #POSTGRESQL}
  * </ul>
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see Provider
  * @see BaseEntityService#getDatabase()
  */

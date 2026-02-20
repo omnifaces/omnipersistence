@@ -29,6 +29,7 @@ import org.omnifaces.utils.data.Range;
  *
  * @param <T> The generic comparable type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see Criteria
  */
 public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {

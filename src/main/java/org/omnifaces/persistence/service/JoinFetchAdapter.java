@@ -24,6 +24,9 @@ import jakarta.persistence.metamodel.SingularAttribute;
 
 /**
  * This class adapts from {@link Join} to {@link Fetch}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see SubqueryRoot
  */
 class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {

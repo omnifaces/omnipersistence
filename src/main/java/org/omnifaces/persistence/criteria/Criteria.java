@@ -58,8 +58,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *
- * @author Bauke Scholtz
  * @param <T> The generic criteria value type.
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see Page
  * @see BaseEntityService
  */

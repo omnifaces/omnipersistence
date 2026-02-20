@@ -25,6 +25,9 @@ import jakarta.persistence.criteria.Root;
  * EclipseLink stubbornly refuses to perform a join when a range (offset/limit) is fetched, resulting in cartesian products.
  * This root will postpone all issued fetches so BaseEntityService can ultimately set them as an EclipseLink-specific query hint.
  * The only disadvantage is that you cannot anymore sort on them when used in a lazy model. This is a technical limitation.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see PostponedFetch
  */
 class EclipseLinkRoot<X> extends RootWrapper<X> {

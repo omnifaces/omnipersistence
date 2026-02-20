@@ -33,6 +33,7 @@ import jakarta.persistence.criteria.Predicate;
  *
  * @param <T> The generic comparable type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see Criteria
  * @see Between
  */

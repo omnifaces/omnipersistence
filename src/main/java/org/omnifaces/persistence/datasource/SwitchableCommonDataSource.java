@@ -50,6 +50,8 @@ import java.util.ServiceLoader;
  * password=mypassword
  * </pre>
  *
+ * @author Arjan Tijms
+ * @since 1.0
  * @see CommonDataSourceWrapper
  * @see SwitchableXADataSource
  * @see PropertiesFileLoader
@@ -129,7 +131,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
         // Set the properties on the wrapped data source that were loaded from the external file.
         for (Entry<String, String> property : properties.entrySet()) {
-            if (!property.getKey().equals("className")) {
+            if (!"className".equals(property.getKey())) {
                 setWithConversion(property.getKey(), property.getValue());
             }
         }

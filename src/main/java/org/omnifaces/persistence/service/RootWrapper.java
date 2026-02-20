@@ -42,8 +42,9 @@ import jakarta.persistence.metamodel.SingularAttribute;
  * <p>
  * A wrapper for {@link Root}, useful in case you intend to decorate it.
  *
- * @author Bauke Scholtz
  * @param <X> Generic entity type referenced by root.
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 public abstract class RootWrapper<X> implements Root<X> {
 

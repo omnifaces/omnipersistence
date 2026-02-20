@@ -18,6 +18,8 @@ import org.omnifaces.persistence.model.BaseEntity;
  * Thrown when trying to use soft delete operations on an entity that doesn't have the
  * {@link org.omnifaces.persistence.model.SoftDeletable} annotation on any of its fields.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityException
  * @see org.omnifaces.persistence.model.SoftDeletable
  */

@@ -23,6 +23,9 @@ import org.omnifaces.persistence.Provider;
 
 /**
  * Helper class of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 class Alias {
 
@@ -70,7 +73,7 @@ class Alias {
         String alias = inPredicate.getAlias();
         String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
         String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_')).replace('$', '.');
-        long count = Long.valueOf(fieldAndCount.substring(field.length() + 1));
+        long count = Long.parseLong(fieldAndCount.substring(field.length() + 1));
         return new SimpleEntry<>(field, count);
     }
 

@@ -40,6 +40,8 @@ import javax.sql.CommonDataSource;
  * Properties are set and retrieved by name using the wrapped data source's getter and setter methods.
  * Unknown properties are silently ignored.
  *
+ * @author Arjan Tijms
+ * @since 1.0
  * @see SwitchableCommonDataSource
  * @see SwitchableXADataSource
  */

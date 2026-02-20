@@ -24,6 +24,9 @@ import org.omnifaces.persistence.listener.BaseEntityListener;
 
 /**
  * Fired by {@link BaseEntityListener} when an entity is updated.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityListener
  */
 @Qualifier

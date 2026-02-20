@@ -16,6 +16,9 @@ import jakarta.persistence.criteria.Expression;
 
 /**
  * Helper functional interface of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 @FunctionalInterface
 interface PathResolver {

@@ -43,6 +43,7 @@ import jakarta.persistence.EntityListeners;
  * </pre>
  *
  * @author Bauke Scholtz
+ * @since 1.0
  * @see AuditListener
  * @see AuditedChange
  */

@@ -88,6 +88,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityService
  */
 @MappedSuperclass

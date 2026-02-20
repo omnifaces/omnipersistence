@@ -26,6 +26,8 @@ import jakarta.persistence.metamodel.SingularAttribute;
 /**
  * Fetch joins are not supported in subqueries, so delegate to normal joins.
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see JoinFetchAdapter
  */
 class SubqueryRoot<X> extends RootWrapper<X> {

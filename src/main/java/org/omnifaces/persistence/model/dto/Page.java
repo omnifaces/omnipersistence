@@ -71,6 +71,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  *
  * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityService
  * @see Criteria
  */
@@ -273,7 +274,8 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * The page builder. Use {@link Page#with()} to get started.
-     * @author Bauke Scholtz
+ * @author Bauke Scholtz
+ * @since 1.0
      */
     public static class Builder {
 

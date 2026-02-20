@@ -42,7 +42,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *
  * @param <I> The generic ID type, usually {@link Long}.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntity
+ * @see BaseEntityService
  */
 public interface Identifiable<I extends Comparable<I> & Serializable> {
 

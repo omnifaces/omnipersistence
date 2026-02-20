@@ -83,6 +83,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * long refs = JPA.countForeignKeyReferences(entityManager, Foo.class, Long.class, fooId);
  * </pre>
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityService
  */
 @Typed

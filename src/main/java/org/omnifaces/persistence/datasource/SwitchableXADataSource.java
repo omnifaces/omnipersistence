@@ -22,6 +22,8 @@ import javax.sql.XADataSource;
  * XA-capable variant of {@link SwitchableCommonDataSource}. Use this when you need XA (distributed) transactions.
  * The wrapped data source must implement {@link XADataSource}.
  *
+ * @author Arjan Tijms
+ * @since 1.0
  * @see SwitchableCommonDataSource
  */
 public class SwitchableXADataSource extends SwitchableCommonDataSource implements XADataSource {

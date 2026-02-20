@@ -46,6 +46,7 @@ import jakarta.persistence.criteria.Predicate;
  * search string and generate an IN predicate. For booleans, it delegates to {@link Bool}.
  *
  * @author Bauke Scholtz
+ * @since 1.0
  * @see Criteria
  * @see IgnoreCase
  */

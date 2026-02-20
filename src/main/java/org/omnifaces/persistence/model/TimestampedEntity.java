@@ -46,8 +46,10 @@ import jakarta.persistence.Transient;
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
+ * @since 1.0
  * @see TimestampedBaseEntity
  * @see VersionedEntity
+ * @see Timestamped
  */
 @MappedSuperclass
 public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> extends GeneratedIdEntity<I> implements Timestamped {

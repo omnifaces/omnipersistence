@@ -175,6 +175,8 @@ import org.omnifaces.utils.reflect.Getter;
  * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @param <I> The generic ID type.
  * @param <E> The generic base entity type.
  * @see BaseEntity

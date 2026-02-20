@@ -27,6 +27,9 @@ import org.omnifaces.persistence.model.SoftDeletable;
 
 /**
  * Helper class of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 class SoftDeleteData {
 

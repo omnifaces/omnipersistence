@@ -25,9 +25,10 @@ import jakarta.persistence.metamodel.SingularAttribute;
  * <p>
  * A wrapper for {@link Fetch}, useful in case you intend to decorate it.
  *
- * @author Bauke Scholtz
  * @param <Z> Generic entity type of fetch source.
  * @param <X> Generic entity type of fetch target.
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 public abstract class FetchWrapper<Z, X> implements Fetch<Z, X> {
 

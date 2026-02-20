@@ -33,6 +33,7 @@ import org.omnifaces.persistence.model.BaseEntity;
  * </pre>
  *
  * @author Bauke Scholtz
+ * @since 1.0
  * @see Audit
  * @see AuditListener
  */

@@ -17,6 +17,9 @@ import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
 
 /**
  * Helper class of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 class PageBuilder<T> {
 

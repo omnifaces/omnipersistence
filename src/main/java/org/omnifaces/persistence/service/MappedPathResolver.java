@@ -20,6 +20,9 @@ import jakarta.persistence.criteria.Root;
 
 /**
  * Helper class of {@link BaseEntityService}.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  */
 class MappedPathResolver extends RootPathResolver {
 

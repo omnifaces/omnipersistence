@@ -18,6 +18,9 @@ import jakarta.persistence.criteria.Fetch;
 
 /**
  * This class postpones all {@link Fetch#fetch(String)} calls.
+ *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see EclipseLinkRoot
  */
 class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {

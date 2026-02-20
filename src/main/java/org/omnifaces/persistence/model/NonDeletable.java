@@ -36,6 +36,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * }
  * </pre>
  *
+ * @author Bauke Scholtz
+ * @since 1.0
  * @see BaseEntityService#delete(BaseEntity)
  * @see NonDeletableEntityException
  */

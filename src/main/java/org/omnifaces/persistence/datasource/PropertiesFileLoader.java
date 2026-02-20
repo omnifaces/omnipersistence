@@ -22,10 +22,12 @@ import java.util.Map;
  * If no implementation is found via ServiceLoader, the default behavior is to load the properties file from
  * <code>META-INF/</code> on the classpath.
  *
+ * @author Arjan Tijms
+ * @since 1.0
  * @see SwitchableCommonDataSource
  */
 public interface PropertiesFileLoader {
 
     Map<String, String> loadFromFile(String fileName);
-    
+
 }
