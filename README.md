@@ -50,7 +50,9 @@ Pick the base class that matches what your entity needs:
 | `VersionedBaseEntity<I>` | — | ✅ | ✅ |
 | `VersionedEntity<I>` | ✅ | ✅ | ✅ |
 
-All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box. Override them using the protected helper methods to base identity on specific fields instead:
+All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box.
+
+**Override `identityGetters()`** to base all four on specific business-key fields — this is the preferred approach, as a single override keeps all four methods consistent:
 
 ```java
 @Entity
@@ -60,11 +62,35 @@ public class Phone extends GeneratedIdEntity<Long> {
     private String number;
     private Person owner;
 
-    // identity and ordering based on type + number rather than database ID
-    @Override public int hashCode()                    { return hashCode(Phone::getType, Phone::getNumber); }
-    @Override public boolean equals(Object other)      { return equals(other, Phone::getType, Phone::getNumber); }
-    @Override public int compareTo(BaseEntity<Long> o) { return compareTo(o, Phone::getType, Phone::getNumber); }
-    @Override public String toString()                 { return toString(Phone::getType, Phone::getNumber); }
+    // equals, hashCode, compareTo and toString all use type + number instead of database ID
+    @Override
+    protected Stream<Function<Phone, Object>> identityGetters() {
+        return Stream.of(Phone::getType, Phone::getNumber);
+    }
+}
+```
+
+**Use the protected final helpers only for fine-tuning**, when individual methods must behave differently from each other. The most common case is `compareTo` needing a different sort order than the fields that define equality:
+
+```java
+@Entity
+public class Person extends GeneratedIdEntity<Long> {
+
+    private String email;
+    private String lastName;
+    private String firstName;
+
+    // equals, hashCode and toString identify by email (business key)
+    @Override
+    protected Stream<Function<Person, Object>> identityGetters() {
+        return Stream.of(Person::getEmail);
+    }
+
+    // compareTo orders by last name then first name (for sorted collections and display)
+    @Override
+    public int compareTo(BaseEntity<Long> other) {
+        return compareTo(other, Person::getLastName, Person::getFirstName);
+    }
 }
 ```
 

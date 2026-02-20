@@ -12,9 +12,11 @@
  */
 package org.omnifaces.persistence.test;
 
+import static java.lang.Integer.toHexString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -23,6 +25,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -236,6 +240,26 @@ public class BaseEntityTest {
 			set.add(person3);
 			assertEquals(2, set.size());
 		}
+
+		@Test
+		void compareToSelfIsZero() {
+			var person = createPerson(1L);
+			assertEquals(0, person.compareTo(person));
+		}
+
+		@Test
+		void compareToIsConsistentWithEquals() {
+			var person1 = createPerson(5L);
+			var person2 = createPerson(5L);
+			assertEquals(person1.equals(person2), person1.compareTo(person2) == 0);
+		}
+
+		@Test
+		void compareToIsAntisymmetric() {
+			var person1 = createPerson(1L);
+			var person2 = createPerson(2L);
+			assertEquals(Integer.signum(person1.compareTo(person2)), -Integer.signum(person2.compareTo(person1)));
+		}
 	}
 
 	@Nested
@@ -250,7 +274,7 @@ public class BaseEntityTest {
 		@Test
 		void nullIdFallsBackToHashCode() {
 			var person = new Person();
-			assertEquals("Person[@" + person.hashCode() + "]", person.toString());
+			assertEquals("Person[@" + toHexString(person.hashCode()) + "]", person.toString());
 		}
 
 		@Test
@@ -504,6 +528,42 @@ public class BaseEntityTest {
 			set.add(phone3);
 			assertEquals(2, set.size());
 		}
+
+		@Test
+		void bothNullCustomPropertiesIsZero() {
+			var phone1 = new Phone();
+			var phone2 = new Phone();
+			assertEquals(0, phone1.compareTo(phone2));
+		}
+
+		@Test
+		void nullTypeTiesBrokenByNumber() {
+			// Both have null type; ordering falls through to number.
+			var phone1 = createPhone(1L, null, "123");
+			var phone2 = createPhone(2L, null, "456");
+			assertTrue(phone1.compareTo(phone2) < 0);
+			assertTrue(phone2.compareTo(phone1) > 0);
+		}
+
+		@Test
+		void compareToSelfIsZero() {
+			var phone = createPhone(1L, Type.HOME, "123");
+			assertEquals(0, phone.compareTo(phone));
+		}
+
+		@Test
+		void compareToIsConsistentWithEquals() {
+			var phone1 = createPhone(1L, Type.HOME, "123");
+			var phone2 = createPhone(2L, Type.HOME, "123");
+			assertEquals(phone1.equals(phone2), phone1.compareTo(phone2) == 0);
+		}
+
+		@Test
+		void compareToIsAntisymmetric() {
+			var phone1 = createPhone(1L, Type.HOME, "123");
+			var phone2 = createPhone(2L, Type.MOBILE, "123");
+			assertEquals(Integer.signum(phone1.compareTo(phone2)), -Integer.signum(phone2.compareTo(phone1)));
+		}
 	}
 
 	@Nested
@@ -516,9 +576,11 @@ public class BaseEntityTest {
 		}
 
 		@Test
-		void nullPropertiesShowAsNull() {
+		void allNullPropertiesFallBackToHashCode() {
+			// When all identity getter values are null, toString falls back to identity hash code
+			// (consistent with hashCode() falling back to super.hashCode() in the same case).
 			var phone = new Phone();
-			assertEquals("Phone[null, null]", phone.toString());
+			assertEquals("Phone[@" + toHexString(phone.hashCode()) + "]", phone.toString());
 		}
 
 		@Test
@@ -532,6 +594,69 @@ public class BaseEntityTest {
 			var phone1 = createPhone(1L, Type.HOME, "123");
 			var phone2 = createPhone(99L, Type.HOME, "123");
 			assertEquals(phone1.toString(), phone2.toString());
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Non-Comparable identity getter tests
+	// ----------------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Tests for when identity getters return a type that is NOT {@link Comparable}.
+	 * <p>
+	 * {@link BaseEntity#hashCode()} and {@link BaseEntity#equals(Object)} handle non-Comparable types just fine,
+	 * but {@link BaseEntity#compareTo(BaseEntity)} uses {@link java.util.Comparator#naturalOrder()} internally
+	 * which casts to {@link Comparable} at comparison time. This means:
+	 * <ul>
+	 * <li>Two non-null non-Comparable values → {@link ClassCastException} at runtime.
+	 * <li>Two null values → 0 (null-safe short-circuit in {@code nullsLast}).
+	 * <li>One null, one non-null → null sorts last (null-safe short-circuit, no cast attempted).
+	 * </ul>
+	 */
+	@Nested
+	class CompareToWithNonComparableGetters {
+
+		@Test
+		void bothNonNullNonComparableThrowsClassCastException() {
+			var a = new TaggedEntity(1L, new Tag("x"));
+			var b = new TaggedEntity(2L, new Tag("y"));
+			assertThrows(ClassCastException.class, () -> a.compareTo(b));
+		}
+
+		@Test
+		void bothNullIsZero() {
+			var a = new TaggedEntity(1L, null);
+			var b = new TaggedEntity(2L, null);
+			assertEquals(0, a.compareTo(b));
+		}
+
+		@Test
+		void nonNullSortsBeforeNull() {
+			// nullsLast short-circuits without invoking naturalOrder, so no ClassCastException.
+			var withTag = new TaggedEntity(1L, new Tag("x"));
+			var withoutTag = new TaggedEntity(2L, null);
+			assertTrue(withTag.compareTo(withoutTag) < 0);
+			assertTrue(withoutTag.compareTo(withTag) > 0);
+		}
+
+		@Test
+		void nullEntitySortsLast() {
+			var a = new TaggedEntity(1L, new Tag("x"));
+			assertTrue(a.compareTo(null) < 0);
+		}
+
+		@Test
+		void hashCodeWorksWithNonComparable() {
+			var a = new TaggedEntity(1L, new Tag("x"));
+			var b = new TaggedEntity(2L, new Tag("x"));
+			assertEquals(a.hashCode(), b.hashCode());
+		}
+
+		@Test
+		void equalsWorksWithNonComparable() {
+			var a = new TaggedEntity(1L, new Tag("x"));
+			var b = new TaggedEntity(2L, new Tag("x"));
+			assertTrue(a.equals(b));
 		}
 	}
 
@@ -551,6 +676,43 @@ public class BaseEntityTest {
 		phone.setType(type);
 		phone.setNumber(number);
 		return phone;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Inner types for non-Comparable identity getter tests
+	// ----------------------------------------------------------------------------------------------------------------
+
+	/** A deliberately non-{@link Comparable} value object used to test runtime behaviour under {@code compareTo}. */
+	private static class Tag {
+		final String value;
+		Tag(String value) { this.value = value; }
+
+		@Override
+		public boolean equals(Object o) {
+			return o instanceof Tag t && value.equals(t.value);
+		}
+
+		@Override
+		public int hashCode() {
+			return value.hashCode();
+		}
+	}
+
+	/** Minimal {@link BaseEntity} whose identity is defined by a non-{@link Comparable} {@link Tag}. */
+	private static class TaggedEntity extends BaseEntity<Long> {
+		private static final long serialVersionUID = 1L;
+		private Long id;
+		private Tag tag;
+
+		TaggedEntity(Long id, Tag tag) { this.id = id; this.tag = tag; }
+
+		@Override public Long getId() { return id; }
+		@Override public void setId(Long id) { this.id = id; }
+
+		@Override
+		protected Stream<Function<TaggedEntity, Object>> identityGetters() {
+			return Stream.of(e -> e.tag);
+		}
 	}
 
 }

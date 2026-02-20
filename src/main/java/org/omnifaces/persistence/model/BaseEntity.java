@@ -12,17 +12,19 @@
  */
 package org.omnifaces.persistence.model;
 
+import static java.lang.Integer.toHexString;
+import static java.lang.System.identityHashCode;
 import static java.util.Arrays.stream;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsLast;
-import static java.util.Objects.requireNonNullElseGet;
 import static java.util.stream.Collectors.joining;
 
 import java.io.Serializable;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
@@ -60,22 +62,27 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * }
  * </pre>
  * <p>
- * Subclasses can override {@link #hashCode()}, {@link #equals(Object)}, {@link #compareTo(BaseEntity)} and {@link #toString()}
- * based on custom property getters using the provided convenience methods:
+ * Override {@link #identityGetters()} to base all four identity methods ({@code equals}, {@code hashCode},
+ * {@code compareTo} and {@code toString}) on custom business-key properties — this is the preferred approach:
  * <pre>
  * &#64;Override
- * public int hashCode() {
- *     return hashCode(YourEntity::getEmail);
+ * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
+ *     return Stream.of(YourEntity::getEmail);
+ * }
+ * </pre>
+ * <p>
+ * Use the protected final helpers ({@link #hashCode(Function...)}, {@link #equals(Object, Function...)},
+ * {@link #compareTo(Object, Function...)}, {@link #toString(Function...)}) only when individual methods must behave
+ * differently — for example when {@code compareTo} should order by different fields than those used for equality:
+ * <pre>
+ * &#64;Override
+ * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
+ *     return Stream.of(YourEntity::getEmail); // equals, hashCode and toString identify by email
  * }
  *
  * &#64;Override
- * public boolean equals(Object other) {
- *     return equals(other, YourEntity::getEmail);
- * }
- *
- * &#64;Override
- * public String toString() {
- *     return toString(YourEntity::getName, YourEntity::getEmail);
+ * public int compareTo(BaseEntity&lt;I&gt; other) {
+ *     return compareTo(other, YourEntity::getLastName, YourEntity::getFirstName); // sort by name for display
  * }
  * </pre>
  *
@@ -90,11 +97,26 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     private static final long serialVersionUID = 1L;
 
     /**
+     * Returns the getters that define entity identity (default = just ID).
+     * <p>
+     * Override to use natural/business key(s), e.g.:
+     * <pre>
+     * &#64;Override
+     * protected Stream&lt;Function&lt;Phone, Object&gt;&gt; identityGetters() {
+     *     return Stream.of(Phone::getCountryCode, Phone::getNumber);
+     * }
+     * </pre>
+     */
+    protected Stream<? extends Function<?, Object>> identityGetters() {
+        return Stream.<Function<BaseEntity<I>, Object>>of(BaseEntity::getId);
+    }
+
+    /**
      * Hashes by default the ID.
      */
     @Override
     public int hashCode() {
-        return hashCode(BaseEntity::getId);
+        return hashCode(identityGetters());
     }
 
 	/**
@@ -104,9 +126,13 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 * @return The {@link #hashCode()} of the given property getters.
 	 */
     @SafeVarargs
-    @SuppressWarnings("unchecked")
     protected final <E extends BaseEntity<I>> int hashCode(final Function<E, Object>... getters) {
-        final var values = stream(getters).map(getter -> getter.apply((E) this)).filter(Objects::nonNull).toArray();
+        return hashCode(Stream.of(getters));
+    }
+
+    @SuppressWarnings("unchecked")
+    private int hashCode(final Stream<? extends Function<?, Object>> getters) {
+        final var values = getters.map(getter -> ((Function<Object, Object>) getter).apply(this)).filter(Objects::nonNull).toArray();
         return values.length > 0 ? Objects.hash(values) : super.hashCode();
     }
 
@@ -115,7 +141,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @Override
     public boolean equals(final Object other) {
-        return equals(other, BaseEntity::getId);
+        return equals(other, identityGetters());
     }
 
 	/**
@@ -126,8 +152,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 	 * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
 	 */
     @SafeVarargs
-    @SuppressWarnings("unchecked")
     protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
+        return equals(other, Stream.of(getters));
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean equals(final Object other, final Stream<? extends Function<?, Object>> getters) {
         if (other == this) {
             return true;
         }
@@ -136,13 +166,14 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
             return false;
         }
 
-        final var values = stream(getters).map(getter -> getter.apply((E) this)).toArray();
+        final var gettersList = getters.toList();
+        final var values = gettersList.stream().map(getter -> ((Function<Object, Object>) getter).apply(this)).toArray();
 
         if (stream(values).allMatch(Objects::isNull)) {
             return false;
         }
 
-        final var otherValues = stream(getters).map(getter -> getter.apply((E) other)).toArray();
+        final var otherValues = gettersList.stream().map(getter -> ((Function<Object, Object>) getter).apply(other)).toArray();
         return Objects.deepEquals(values, otherValues);
     }
 
@@ -151,7 +182,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @Override
     public int compareTo(final BaseEntity<I> other) {
-        return compareTo(other, BaseEntity::getId);
+        return compareTo(other, identityGetters());
     }
 
     /**
@@ -162,13 +193,17 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
      */
     @SafeVarargs
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     protected final <E extends BaseEntity<I>> int compareTo(final Object other, final Function<E, Object>... getters) {
+        return compareTo(other, Stream.of(getters));
+    }
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private int compareTo(final Object other, final Stream<? extends Function<?, Object>> getters) {
         if (other == null) {
             return -1;
         }
 
-        return stream(getters).map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
+        return getters.map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
     }
 
     /**
@@ -176,7 +211,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     @Override
     public String toString() {
-        return toString(e -> requireNonNullElseGet(e.getId(), () -> ("@" + e.hashCode())));
+        return toString(identityGetters());
     }
 
     /**
@@ -187,8 +222,13 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * results of all given getters, and finally followed by {@code ]}.
      */
     @SafeVarargs
-    @SuppressWarnings("unchecked")
     protected final <E extends BaseEntity<I>> String toString(final Function<E, Object>... getters) {
-        return stream(getters).map(getter -> Objects.toString(getter.apply((E) this))).collect(joining(", ", getClass().getSimpleName() + "[", "]"));
+        return toString(Stream.of(getters));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String toString(final Stream<? extends Function<?, Object>> getters) {
+        final var values = getters.map(getter -> ((Function<Object, Object>) getter).apply(this)).toArray();
+        return getClass().getSimpleName() + "[" + (stream(values).allMatch(Objects::isNull) ? "@" + toHexString(identityHashCode(this)) : stream(values).map(Objects::toString).collect(joining(", "))) + "]";
     }
 }
