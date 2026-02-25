@@ -36,7 +36,7 @@ import jakarta.persistence.criteria.Predicate;
 public final class Enumerated extends Criteria<Enum<?>> {
 
     private Enumerated(Enum<?> value) {
-        super(value);
+        super(value, false, true);
     }
 
     public static Enumerated value(Enum<?> value) {
@@ -63,10 +63,16 @@ public final class Enumerated extends Criteria<Enum<?>> {
             return (Enum<?>) searchValue;
         }
         else if (targetType.isEnum()) {
+            var criteria = searchValue instanceof Criteria c ? c : IgnoreCase.value(searchValue.toString());
+
             for (Enum<?> enumConstant : ((Class<Enum<?>>) targetType).getEnumConstants()) {
-                if (enumConstant.name().equalsIgnoreCase(searchValue.toString())) {
+                if (criteria.applies(enumConstant.name())) {
                     return enumConstant;
                 }
+            }
+
+            if (searchValue instanceof Criteria) {
+                return null;
             }
         }
 

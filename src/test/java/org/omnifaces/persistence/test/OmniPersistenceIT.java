@@ -56,6 +56,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Text;
@@ -417,6 +418,44 @@ public abstract class OmniPersistenceIT {
         var result = personService().getAllWithGroups();
         assertEquals(TOTAL_RECORDS, result.size(), "All persons returned");
         result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Each person has at least one group"));
+    }
+
+    @Test
+    void testPageWithPhonesAndPagination() {
+        var firstPage = personService().getPageWithPhones(Page.of(0, 10), true);
+        assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
+        assertEquals(TOTAL_RECORDS, firstPage.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        firstPage.forEach(p -> assertFalse(p.getPhones().isEmpty(), "Phones collection is populated after detachment"));
+
+        var secondPage = personService().getPageWithPhones(Page.of(10, 10), true);
+        assertEquals(10, secondPage.size(), "Second page also returns exactly 10 persons");
+        assertFalse(firstPage.get(0).getId().equals(secondPage.get(0).getId()), "Pages contain different persons");
+    }
+
+    @Test
+    void testPageWithGroupsAndPagination() {
+        var firstPage = personService().getPageWithGroups(Page.of(0, 10), true);
+        assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
+        assertEquals(TOTAL_RECORDS, firstPage.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        firstPage.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated after detachment"));
+
+        var secondPage = personService().getPageWithGroups(Page.of(10, 10), true);
+        assertEquals(10, secondPage.size(), "Second page also returns exactly 10 persons");
+        assertFalse(firstPage.get(0).getId().equals(secondPage.get(0).getId()), "Pages contain different persons");
+    }
+
+    @Test
+    void testPageWithGroupsAndOptionalElementCollectionFilter() {
+        var firstPage = personService().getPageWithGroups(Page.with().range(0, 10).anyMatch(Map.of("groups", Like.contains("user"))).build(), true);
+        assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
+        firstPage.forEach(p -> assertTrue(p.getGroups().contains(Group.USER), "Groups collection is populated after detachment"));
+    }
+
+    @Test
+    void testPageWithGroupsAndRequiredElementCollectionFilter() {
+        var firstPage = personService().getPageWithGroups(Page.with().range(0, 10).allMatch(Map.of("groups", List.of(Group.USER, Group.DEVELOPER))).build(), true);
+        assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
+        firstPage.forEach(p -> assertTrue(p.getGroups().contains(Group.USER) && p.getGroups().contains(Group.DEVELOPER), "Groups collection is populated after detachment"));
     }
 
     @Test

@@ -38,7 +38,7 @@ import jakarta.persistence.criteria.Predicate;
 public final class Not extends Criteria<Object> {
 
     private Not(Object value) {
-        super(value, true);
+        super(value, true, true);
     }
 
     public static Not value(Object value) {

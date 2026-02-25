@@ -74,15 +74,15 @@ public abstract class Criteria<T> {
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
     protected Criteria(T value) {
-        this(value, false);
+        this(value, false, false);
     }
 
-    Criteria(T value, boolean nestable) {
+    Criteria(T value, boolean nestable, boolean nullable) {
         if (value instanceof Criteria && (!nestable || value.getClass() == getClass())) {
             throw new IllegalArgumentException("You cannot nest " + value + " in " + this);
         }
 
-        if (!nestable && value == null) {
+        if (!nullable && value == null) {
             throw new NullPointerException("value");
         }
 

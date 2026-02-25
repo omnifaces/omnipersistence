@@ -12,12 +12,14 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static org.omnifaces.persistence.JPA.concat;
 
 import java.util.LinkedHashMap;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
+import jakarta.transaction.Transactional;
 
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -34,10 +36,12 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPage(page, count, "address");
     }
 
+    @Transactional(REQUIRED)
     public PartialResultList<Person> getPageWithPhones(Page page, boolean count) {
         return getPage(page, count, "phones");
     }
 
+    @Transactional(REQUIRED)
     public PartialResultList<Person> getPageWithGroups(Page page, boolean count) {
         return getPage(page, count, "groups");
     }

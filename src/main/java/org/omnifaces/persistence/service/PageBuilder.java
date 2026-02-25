@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.service;
 
+import jakarta.persistence.criteria.Root;
+
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
 
@@ -28,6 +30,7 @@ class PageBuilder<T> {
     private final Class<T> resultType;
     private final MappedQueryBuilder<T> queryBuilder;
 
+    private Root<?> entityQueryRoot;
     private boolean shouldBuildCountSubquery;
     private boolean canBuildValueBasedPagingPredicate;
 
@@ -37,6 +40,14 @@ class PageBuilder<T> {
         this.resultType = resultType;
         this.queryBuilder = queryBuilder;
         this.canBuildValueBasedPagingPredicate = page.getLast() != null && page.getOffset() > 0;
+    }
+
+    public Root<?> getEntityQueryRoot() {
+        return entityQueryRoot;
+    }
+
+    public void setEntityQueryRoot(Root<?> entityQueryRoot) {
+        this.entityQueryRoot = entityQueryRoot;
     }
 
     public void shouldBuildCountSubquery(boolean yes) {
@@ -70,5 +81,4 @@ class PageBuilder<T> {
     public MappedQueryBuilder<T> getQueryBuilder() {
         return queryBuilder;
     }
-
 }

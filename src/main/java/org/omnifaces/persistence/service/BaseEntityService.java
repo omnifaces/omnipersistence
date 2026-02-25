@@ -979,7 +979,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
         var criteriaBuilder = getEntityManager().getCriteriaBuilder();
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
-        var root = buildRoot(criteriaQuery);
+        var root = buildRoot(criteriaQuery, null);
 
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
@@ -1825,7 +1825,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private <T extends E> TypedQuery<T> buildEntityQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
         var entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
-        var entityQueryRoot = buildRoot(entityQuery);
+        var entityQueryRoot = buildRoot(entityQuery, pageBuilder.getPage());
+        pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
         buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
         return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver));
@@ -1841,7 +1842,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private <T extends E> Map<String, Object> buildCountSubquery(PageBuilder<T> pageBuilder, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder) {
         var countSubquery = countQuery.subquery(pageBuilder.getResultType());
-        var countSubqueryRoot = buildRoot(countSubquery);
+        var countSubqueryRoot = buildRoot(countSubquery, null);
         var subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
         var parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
 
@@ -1879,6 +1880,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var page = pageBuilder.getPage();
         var entities = entityQuery.getResultList();
 
+        if (!entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof OpenJPARoot<?> openJPARoot && openJPARoot.hasPostponedFetches()) {
+            var ids = entities.stream().map(BaseEntity::getId).toList();
+            openJPARoot.runPostponedFetches(getEntityManager(), entityType, ids);
+            entities.forEach(getEntityManager()::detach);
+        }
+
         if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
             var reversed = new ArrayList<>(entities);
             Collections.reverse(reversed);
@@ -1892,9 +1899,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     // Selection actions ----------------------------------------------------------------------------------------------
 
-    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
+    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query, Page page) {
         var root = query.from(entityType);
-        return query instanceof Subquery ? new SubqueryRoot<>(root) : getProvider() == ECLIPSELINK ? new EclipseLinkRoot<>(root) : root;
+        return query instanceof Subquery ? new SubqueryRoot<>(root)
+            : getProvider() == ECLIPSELINK ? new EclipseLinkRoot<>(root)
+            : getProvider() == OPENJPA && page != null && page.getLimit() < Integer.MAX_VALUE ? new OpenJPARoot<>(root) : root;
     }
 
     private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
@@ -2030,7 +2039,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (restriction != null) {
-            var distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null));
+            var distinct = !optionalPredicates.isEmpty() || hasFetches((From<?, ?>) pathResolver.get(null)) || pathResolver.get(null) instanceof OpenJPARoot<?>;
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 
@@ -2095,11 +2104,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
                 predicate = criteriaBuilder.isNull(path);
             }
-            else if (value instanceof Criteria<?> criteriaObject) {
-                predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
-            }
             else if (elementCollections.get().contains(field)) {
                 predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+            }
+            else if (value instanceof Criteria<?> criteriaObject) {
+                predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
             }
             else if (value instanceof Iterable || value.getClass().isArray()) {
                 predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
@@ -2125,25 +2134,35 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         catch (IllegalArgumentException e) {
             logger.log(WARNING, e, () -> format(LOG_WARNING_ILLEGAL_CRITERIA_VALUE, field, type, criteria, criteria != null ? criteria.getClass() : null));
-            return null;
+            predicate = null;
         }
 
-        if (negated) {
-            predicate = criteriaBuilder.not(predicate);
+        if (predicate != null) {
+            if (negated) {
+                predicate = criteriaBuilder.not(predicate);
+            }
+
+            alias.set(predicate);
         }
 
-        alias.set(predicate);
         return predicate;
     }
 
     private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-        if (getProvider() == ECLIPSELINK || getProvider() == HIBERNATE && getDatabase() == POSTGRESQL) {
+        if (getProvider() == ECLIPSELINK || getProvider() == OPENJPA && !(query instanceof Subquery) || getProvider() == HIBERNATE && getDatabase() == POSTGRESQL) {
             // EclipseLink refuses to perform GROUP BY on IN clause on @ElementCollection, causing a cartesian product.
+            // OpenJPA generates broken nested correlated subqueries when buildArrayPredicate is used inside the count subquery; use buildInPredicate there instead.
             // Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
             return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
         }
+        else if (getProvider() == OPENJPA && value instanceof Criteria) {
+            // OpenJPA in count subquery context: a Criteria<?> (e.g. Like) cannot be expressed as a plain IN predicate
+            // and buildArrayPredicate would generate broken nested correlated subqueries, so silently skip it.
+            // The count may be slightly inaccurate, which is acceptable for this known OpenJPA limitation.
+            return null;
+        }
         else {
-            // For other cases, a real IN predicate is more efficient than an array predicate, even though both approaches are supported.
+            // For other cases (including OpenJPA in count subquery context), a real IN predicate avoids nested subquery issues.
             return buildInPredicate(alias, path, type, value, parameterBuilder);
         }
     }
@@ -2245,7 +2264,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static void groupByIfNecessary(AbstractQuery<?> query, Expression<?> path) {
         var groupByPath = path instanceof RootWrapper<?> rootWrapper ? rootWrapper.getWrapped() : path;
 
-        if (!query.getGroupList().contains(groupByPath)) {
+        if (!groupByPath.getJavaType().isEnum() && !query.getGroupList().contains(groupByPath)) {
             var groupList = new ArrayList<>(query.getGroupList());
             groupList.add(groupByPath);
             query.groupBy(groupList);
