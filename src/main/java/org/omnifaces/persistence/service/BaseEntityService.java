@@ -1958,7 +1958,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var root = pathResolver.get(null);
         var skipOneToManyOrdering = root instanceof PostponedFetchRoot<?>; // PostponedFetchRoot is only created when page.getLimit() < MAX_VALUE (OpenJPA) or always for EclipseLink; non-paged queries don't suffer from join row inflation.
         criteriaQuery.orderBy(stream(ordering)
-            .filter(order -> !skipOneToManyOrdering || !oneToManys.test(order.getKey())) // @OneToMany ordering is handled in-memory by buildAndSortPostponedFetches; skip it here to avoid adding a join that inflates the row count.
+            .filter(order -> !skipOneToManyOrdering || !oneToManys.test(order.getKey())) // @OneToMany ordering is handled in-memory by runPostponedFetches in executeQuery; skip it here to avoid adding a join that inflates the row count.
             .map(order -> buildOrder(order, criteriaBuilder, pathResolver, reversed))
             .collect(toList()));
     }

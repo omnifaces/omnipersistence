@@ -67,12 +67,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return !postponedFetches.isEmpty();
     }
 
-    public Set<String> getPostponedFetches() {
-        return postponedFetches;
-    }
-
     public <E extends BaseEntity<?>, T extends E> List<T> runPostponedFetches(Page page, EntityManager entityManager, Class<E> entityType, List<T> entities) {
-        var fetchPaths = List.copyOf(getPostponedFetches());
+        var fetchPaths = List.copyOf(postponedFetches);
         var ids = entities.stream().map(BaseEntity::getId).toList();
 
         for (var fetchPath : fetchPaths) {
