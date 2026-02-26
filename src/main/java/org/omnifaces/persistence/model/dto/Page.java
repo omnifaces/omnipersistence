@@ -79,7 +79,9 @@ public final class Page { // This class MAY NOT be mutable!
 
     // Constants ------------------------------------------------------------------------------------------------------
 
+    /** All pages. */
     public final static Page ALL = Page.of(0, MAX_VALUE);
+    /** One record (the first one). */
     public final static Page ONE = Page.of(0, 1);
 
 

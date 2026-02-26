@@ -44,14 +44,31 @@ public final class Numeric extends Criteria<Number> {
         super(value);
     }
 
+    /**
+     * Returns a new numeric criteria for the given value.
+     * @param value The numeric value.
+     * @return A new numeric criteria.
+     */
     public static Numeric value(Number value) {
         return new Numeric(value);
     }
 
+    /**
+     * Returns a new numeric criteria for the given search value, parsed against the given target numeric type.
+     * @param searchValue The search value to parse (usually a String).
+     * @param targetType The target numeric class (e.g. Long.class, BigDecimal.class).
+     * @return A new numeric criteria.
+     * @throws IllegalArgumentException If the search value cannot be parsed to the target type.
+     */
     public static Numeric parse(Object searchValue, Class<Number> targetType) {
         return new Numeric(parseNumber(searchValue, targetType));
     }
 
+    /**
+     * Returns true if the given type is a numeric type.
+     * @param type The type to check.
+     * @return True if the given type is a numeric type.
+     */
     public static boolean is(Class<?> type) {
         return isOneOf(type, byte.class, short.class, int.class, long.class, float.class, double.class) || Number.class.isAssignableFrom(type);
     }

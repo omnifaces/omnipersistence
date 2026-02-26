@@ -35,13 +35,24 @@ public abstract class BaseEntityException extends PersistenceException {
 
     private static final long serialVersionUID = 1L;
 
+    /** The entity associated with this exception. */
     private BaseEntity<?> entity;
 
+    /**
+     * Constructs a new base entity exception for the given entity and message.
+     * @param entity The entity associated with this exception.
+     * @param message The detail message.
+     */
     public BaseEntityException(BaseEntity<?> entity, String message) {
         super(message);
         this.entity = entity;
     }
 
+    /**
+     * Returns the entity associated with this exception.
+     * @param <E> The generic base entity type.
+     * @return The entity associated with this exception.
+     */
     @SuppressWarnings("unchecked")
     public <E extends BaseEntity<?>> E getEntity() {
         return (E) entity;

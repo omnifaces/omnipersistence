@@ -38,10 +38,23 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
         super(value);
     }
 
+    /**
+     * Creates a new BETWEEN criteria for the given {@link Range}.
+     * @param <T> The generic comparable type.
+     * @param value The range value.
+     * @return A new BETWEEN criteria.
+     */
     public static <T extends Comparable<T>> Between<T> value(Range<T> value) {
         return new Between<>(value);
     }
 
+    /**
+     * Creates a new BETWEEN criteria for the given min and max values.
+     * @param <T> The generic comparable type.
+     * @param min The minimum value (inclusive).
+     * @param max The maximum value (inclusive).
+     * @return A new BETWEEN criteria.
+     */
     public static <T extends Comparable<T>> Between<T> range(T min, T max) {
         return new Between<>(Range.ofClosed(min, max));
     }

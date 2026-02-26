@@ -92,10 +92,15 @@ public final class JPA {
 
     // Public constants -------------------------------------------------------------------------------------------------------------------
 
+    /** Returns the JPA-specific "load graph" query hint constant: {@value}. */
     public static final String QUERY_HINT_LOAD_GRAPH = "jakarta.persistence.loadgraph";
+    /** Returns the JPA-specific "fetch graph" query hint constant: {@value}. */
     public static final String QUERY_HINT_FETCH_GRAPH = "jakarta.persistence.fetchgraph";
+    /** Returns the JPA-specific "2nd level cache store mode" query hint constant: {@value}. */
     public static final String QUERY_HINT_CACHE_STORE_MODE = "jakarta.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
+    /** Returns the JPA-specific "2nd level cache retrieve mode" query hint constant: {@value}. */
     public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "jakarta.persistence.cache.retrieveMode"; // USE | BYPASS
+    /** Returns the JPA-specific "validation mode" persistence.xml property: {@value}. */
     public static final String PROPERTY_VALIDATION_MODE = "jakarta.persistence.validation.mode"; // AUTO | CALLBACK | NONE
 
     // Constructors -----------------------------------------------------------------------------------------------------------------------

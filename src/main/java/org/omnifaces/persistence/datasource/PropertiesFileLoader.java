@@ -28,6 +28,11 @@ import java.util.Map;
  */
 public interface PropertiesFileLoader {
 
+    /**
+     * Loads a map of properties from the given file name.
+     * @param fileName The name of the properties file to load.
+     * @return A map of property keys and values.
+     */
     Map<String, String> loadFromFile(String fileName);
 
 }

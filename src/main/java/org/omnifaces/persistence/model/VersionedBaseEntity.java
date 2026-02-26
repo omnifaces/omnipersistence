@@ -67,6 +67,7 @@ public abstract class VersionedBaseEntity<I extends Comparable<I> & Serializable
     /** The JPA field name of the {@link #getVersion() version} property, to be used in JPQL queries and criteria maps. */
     public static final String VERSION = "version";
 
+    /** The version for optimistic locking, automatically managed by JPA. */
     @Version
     @Column(nullable = false)
     private Long version;

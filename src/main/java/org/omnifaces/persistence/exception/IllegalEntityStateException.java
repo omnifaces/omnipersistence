@@ -28,6 +28,11 @@ public class IllegalEntityStateException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Constructs a new illegal entity state exception for the given entity and message.
+     * @param entity The entity which is in an illegal state.
+     * @param message The detail message.
+     */
     public IllegalEntityStateException(BaseEntity<?> entity, String message) {
         super(entity, message);
     }

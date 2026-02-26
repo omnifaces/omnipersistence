@@ -34,10 +34,18 @@ public abstract class FetchWrapper<Z, X> implements Fetch<Z, X> {
 
     private Fetch<Z, X> wrapped;
 
+    /**
+     * Constructs a new fetch wrapper around the given wrapped fetch.
+     * @param wrapped The wrapped fetch.
+     */
     public FetchWrapper(Fetch<Z, X> wrapped) {
         this.wrapped = wrapped;
     }
 
+    /**
+     * Returns the wrapped fetch.
+     * @return The wrapped fetch.
+     */
     public Fetch<Z, X> getWrapped() {
         return wrapped;
     }

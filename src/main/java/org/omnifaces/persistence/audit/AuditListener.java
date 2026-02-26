@@ -13,8 +13,6 @@
 package org.omnifaces.persistence.audit;
 
 import static java.beans.Introspector.getBeanInfo;
-import static java.util.Optional.empty;
-import static java.util.Optional.ofNullable;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toConcurrentMap;
 import static java.util.stream.Collectors.toSet;
@@ -33,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Inject;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
@@ -88,13 +87,25 @@ public class AuditListener {
 
     private static final Map<Class<?>, Map<PropertyDescriptor, Map<Serializable, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
 
+    @Inject
+    private BeanManager beanManager;
+
     private Optional<BeanManager> optionalBeanManager;
 
+    /**
+     * Snapshots the initial values of auditable properties after the entity is loaded from the database.
+     * @param entity The entity that was loaded.
+     */
     @PostLoad
     public void beforeUpdate(BaseEntity<?> entity) {
         getAuditableProperties(entity).forEach((property, values) -> values.put(entity.getId(), invokeMethod(entity, property.getReadMethod())));
     }
 
+    /**
+     * Compares current values with the snapshot taken during {@link PostLoad} and fires
+     * an {@link AuditedChange} event if a difference is detected.
+     * @param entity The entity being updated.
+     */
     @PreUpdate
     public void afterUpdate(BaseEntity<?> entity) {
         getAuditableProperties(entity).forEach((property, values) -> {
@@ -130,22 +141,29 @@ public class AuditListener {
     }
 
     private void fireAuditedChangeEvent(BaseEntity<?> entity, String propertyName, Object oldValue, Object newValue) {
-        findBeanManager().ifPresent(beanManager -> {
-            var entityName = entity.getClass().getSimpleName();
-            beanManager.getEvent().fire(new AuditedChange(entity, entityName, propertyName, oldValue, newValue));
-        });
+        findBeanManager().ifPresent(beanManager ->
+            beanManager.getEvent()
+                       .fire(new AuditedChange(entity, entity.getClass().getSimpleName(), propertyName, oldValue, newValue)));
     }
 
     private Optional<BeanManager> findBeanManager() {
         if (optionalBeanManager == null) {
-            try {
-                optionalBeanManager = ofNullable(CDI.current().getBeanManager());
-            }
-            catch (IllegalStateException ignore) {
-                optionalBeanManager = empty();
-            }
+            optionalBeanManager = Optional.ofNullable(getBeanManager());
         }
 
         return optionalBeanManager;
+    }
+
+    private BeanManager getBeanManager() {
+        if (beanManager == null) {
+            try {
+                beanManager = CDI.current().getBeanManager(); // Work around for CDI @Inject not working in JPA EntityListener (as observed in OpenJPA).
+            }
+            catch (IllegalStateException ignore) {
+                beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
+            }
+        }
+
+        return beanManager;
     }
 }

@@ -73,15 +73,21 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
     /** The JPA field name of the {@link #getLastModified() lastModified} property, to be used in JPQL queries and criteria maps. */
     public static final String LAST_MODIFIED = "lastModified";
 
+    /** The timestamp when this entity was first persisted. */
     @Column(nullable = false)
     private Instant created;
 
+    /** The timestamp when this entity was last modified. */
     @Column(nullable = false)
     private Instant lastModified;
 
+    /** Internal flag to skip the automatic adjustment of the last modified timestamp during {@link #onPreUpdate()}. */
     @Transient
     private boolean skipAdjustLastModified;
 
+    /**
+     * Sets the created and lastModified timestamps to the current time before persisting.
+     */
     @PrePersist
     public void onPrePersist() {
         Instant timestamp = now();
@@ -89,6 +95,9 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
         setLastModified(timestamp);
     }
 
+    /**
+     * Sets the lastModified timestamp to the current time before updating, unless skipped.
+     */
     @PreUpdate
     public void onPreUpdate() {
         if (!skipAdjustLastModified) {

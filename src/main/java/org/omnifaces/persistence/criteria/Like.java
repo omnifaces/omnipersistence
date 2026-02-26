@@ -65,26 +65,53 @@ public final class Like extends Criteria<String> {
         this.type = type;
     }
 
+    /**
+     * Returns a new LIKE criteria that matches values starting with the given string.
+     * @param value The string value.
+     * @return A new STARTS_WITH LIKE criteria.
+     */
     public static Like startsWith(String value) {
         return new Like(Type.STARTS_WITH, value);
     }
 
+    /**
+     * Returns a new LIKE criteria that matches values ending with the given string.
+     * @param value The string value.
+     * @return A new ENDS_WITH LIKE criteria.
+     */
     public static Like endsWith(String value) {
         return new Like(Type.ENDS_WITH, value);
     }
 
+    /**
+     * Returns a new LIKE criteria that matches values containing the given string.
+     * @param value The string value.
+     * @return A new CONTAINS LIKE criteria.
+     */
     public static Like contains(String value) {
         return new Like(Type.CONTAINS, value);
     }
 
+    /**
+     * Returns whether this criteria is a STARTS_WITH type.
+     * @return True if STARTS_WITH, false otherwise.
+     */
     public boolean startsWith() {
         return type == Type.STARTS_WITH;
     }
 
+    /**
+     * Returns whether this criteria is an ENDS_WITH type.
+     * @return True if ENDS_WITH, false otherwise.
+     */
     public boolean endsWith() {
         return type == Type.ENDS_WITH;
     }
 
+    /**
+     * Returns whether this criteria is a CONTAINS type.
+     * @return True if CONTAINS, false otherwise.
+     */
     public boolean contains() {
         return type == Type.CONTAINS;
     }

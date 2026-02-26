@@ -27,6 +27,11 @@ public class NonSoftDeletableEntityException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Constructs a new non-soft-deletable entity exception for the given entity and message.
+     * @param entity The entity which is not marked as soft-deletable.
+     * @param message The detail message.
+     */
     public NonSoftDeletableEntityException(BaseEntity<?> entity, String message) {
         super(entity, message);
     }

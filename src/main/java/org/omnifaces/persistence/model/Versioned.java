@@ -23,6 +23,10 @@ package org.omnifaces.persistence.model;
  */
 public interface Versioned {
 
+    /**
+     * Returns the version for optimistic locking.
+     * @return The version.
+     */
     Long getVersion();
 
 }

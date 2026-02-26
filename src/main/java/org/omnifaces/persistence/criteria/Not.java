@@ -41,6 +41,11 @@ public final class Not extends Criteria<Object> {
         super(value, true, true);
     }
 
+    /**
+     * Returns a new NOT criteria for the given value.
+     * @param value The value or {@link Criteria} to negate.
+     * @return A new NOT criteria.
+     */
     public static Not value(Object value) {
         return new Not(value);
     }

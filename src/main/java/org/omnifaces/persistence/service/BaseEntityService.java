@@ -537,6 +537,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @FunctionalInterface
     protected interface CriteriaQueryBuilder<E> {
+
+        /**
+         * Builds the JPA criteria query.
+         * @param criteriaBuilder The criteria builder to use.
+         * @param query The criteria query to build upon.
+         * @param root The root of the entity to query.
+         */
         void build(CriteriaBuilder criteriaBuilder, CriteriaQuery<E> query, Root<E> root);
     }
 
@@ -1515,6 +1522,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @FunctionalInterface
     protected interface QueryBuilder<E> {
+
+        /**
+         * Builds the JPA criteria query.
+         * @param criteriaBuilder The criteria builder to use.
+         * @param query The abstract query to build upon, which can be a {@link CriteriaQuery} or {@link Subquery}.
+         * @param root The root of the entity to query.
+         */
         void build(CriteriaBuilder criteriaBuilder, AbstractQuery<E> query, Root<E> root);
     }
 
@@ -1565,6 +1579,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @FunctionalInterface
     protected interface MappedQueryBuilder<T> {
+
+        /**
+         * Builds the JPA criteria query and returns a mapping of DTO getters to criteria expressions.
+         * @param criteriaBuilder The criteria builder to use.
+         * @param query The criteria query to build upon.
+         * @param root The root of the entity to query.
+         * @return A linked hash map representing the mapping of the result type's properties to the query's selection expressions.
+         */
         LinkedHashMap<Getter<T>, Expression<?>> build(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<? super T> root);
     }
 

@@ -63,32 +63,38 @@ public class BaseEntityListener {
 
     private Optional<BeanManager> optionalBeanManager;
 
+    /**
+     * Fires the {@link Created} event after the entity has been persisted.
+     * @param entity The entity that was persisted.
+     */
     @PostPersist
     public void onPostPersist(BaseEntity<?> entity) {
         fireOptionalEvent(entity, Created.class);
     }
 
+    /**
+     * Fires the {@link Updated} event after the entity has been updated.
+     * @param entity The entity that was updated.
+     */
     @PostUpdate
     public void onPostUpdate(BaseEntity<?> entity) {
         fireOptionalEvent(entity, Updated.class);
     }
 
+    /**
+     * Fires the {@link Deleted} event after the entity has been removed.
+     * @param entity The entity that was removed.
+     */
     @PostRemove
     public void onPostRemove(BaseEntity<?> entity) {
         fireOptionalEvent(entity, Deleted.class);
     }
 
-    private BeanManager getBeanManager() {
-        if (beanManager == null) {
-            try {
-                beanManager = CDI.current().getBeanManager(); // Work around for CDI inject not working in JPA EntityListener (as observed in OpenJPA).
-            }
-            catch (IllegalStateException ignore) {
-                beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
-            }
-        }
-
-        return beanManager;
+    private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
+        findBeanManager().ifPresent(beanManager ->
+            beanManager.getEvent()
+                       .select(createAnnotationInstance(eventType))
+                       .fire(entity));
     }
 
     private Optional<BeanManager> findBeanManager() {
@@ -99,11 +105,16 @@ public class BaseEntityListener {
         return optionalBeanManager;
     }
 
-    private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
-        findBeanManager().ifPresent(beanManager ->
-            beanManager.getEvent()
-                       .select(createAnnotationInstance(eventType))
-                       .fire(entity));
-    }
+    private BeanManager getBeanManager() {
+        if (beanManager == null) {
+            try {
+                beanManager = CDI.current().getBeanManager(); // Work around for CDI @Inject not working in JPA EntityListener (as observed in OpenJPA).
+            }
+            catch (IllegalStateException ignore) {
+                beanManager = null; // Can happen when actually not in CDI environment, e.g. local unit test.
+            }
+        }
 
+        return beanManager;
+    }
 }

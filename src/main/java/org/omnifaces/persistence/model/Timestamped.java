@@ -25,10 +25,27 @@ import java.time.Instant;
  */
 public interface Timestamped {
 
+    /**
+     * Sets the "created" timestamp.
+     * @param created The created timestamp.
+     */
     void setCreated(Instant created);
+
+    /**
+     * Returns the "created" timestamp.
+     * @return The created timestamp.
+     */
     Instant getCreated();
 
+    /**
+     * Sets the "last modified" timestamp.
+     * @param lastModified The last modified timestamp.
+     */
     void setLastModified(Instant lastModified);
-    Instant getLastModified();
 
+    /**
+     * Returns the "last modified" timestamp.
+     * @return The last modified timestamp.
+     */
+    Instant getLastModified();
 }

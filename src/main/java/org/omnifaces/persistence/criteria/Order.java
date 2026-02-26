@@ -53,34 +53,74 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
         this.type = type;
     }
 
+    /**
+     * Returns a new comparison criteria for <code>path &lt; value</code>.
+     * @param <T> The generic comparable type.
+     * @param value The value to compare against.
+     * @return A new less-than criteria.
+     */
     public static <T extends Comparable<T>> Order<T> lessThan(T value) {
         return new Order<>(Type.LT, value);
     }
 
+    /**
+     * Returns a new comparison criteria for <code>path &lt;= value</code>.
+     * @param <T> The generic comparable type.
+     * @param value The value to compare against.
+     * @return A new less-than-or-equal criteria.
+     */
     public static <T extends Comparable<T>> Order<T> lessThanOrEqualTo(T value) {
         return new Order<>(Type.LTE, value);
     }
 
+    /**
+     * Returns a new comparison criteria for <code>path &gt;= value</code>.
+     * @param <T> The generic comparable type.
+     * @param value The value to compare against.
+     * @return A new greater-than-or-equal criteria.
+     */
     public static <T extends Comparable<T>> Order<T> greaterThanOrEqualTo(T value) {
         return new Order<>(Type.GTE, value);
     }
 
+    /**
+     * Returns a new comparison criteria for <code>path &gt; value</code>.
+     * @param <T> The generic comparable type.
+     * @param value The value to compare against.
+     * @return A new greater-than criteria.
+     */
     public static <T extends Comparable<T>> Order<T> greaterThan(T value) {
         return new Order<>(Type.GT, value);
     }
 
+    /**
+     * Returns whether this criteria is a less-than comparison.
+     * @return True if LT, false otherwise.
+     */
     public boolean lessThan() {
         return type == Type.LT;
     }
 
+    /**
+     * Returns whether this criteria is a less-than-or-equal comparison.
+     * @return True if LTE, false otherwise.
+     */
     public boolean lessThanOrEqualTo() {
         return type == Type.LTE;
     }
 
+    /**
+     * Returns whether this criteria is a greater-than-or-equal comparison.
+     * @return True if GTE, false otherwise.
+     */
     public boolean greaterThanOrEqualTo() {
         return type == Type.GTE;
     }
 
+    /**
+     * Returns whether this criteria is a greater-than comparison.
+     * @return True if GT, false otherwise.
+     */
     public boolean greaterThan() {
         return type == Type.GT;
     }

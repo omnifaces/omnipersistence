@@ -50,10 +50,18 @@ public abstract class RootWrapper<X> implements Root<X> {
 
     private Root<X> wrapped;
 
+    /**
+     * Constructs a new root wrapper around the given wrapped root.
+     * @param wrapped The wrapped root.
+     */
     public RootWrapper(Root<X> wrapped) {
         this.wrapped = wrapped;
     }
 
+    /**
+     * Returns the wrapped root.
+     * @return The wrapped root.
+     */
     public Root<X> getWrapped() {
         return wrapped;
     }

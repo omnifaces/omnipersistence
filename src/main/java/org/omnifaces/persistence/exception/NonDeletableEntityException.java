@@ -27,6 +27,10 @@ public class NonDeletableEntityException extends BaseEntityException {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Constructs a new non-deletable entity exception for the given entity.
+     * @param entity The entity which is marked as non-deletable.
+     */
     public NonDeletableEntityException(BaseEntity<?> entity) {
         super(entity, null);
     }

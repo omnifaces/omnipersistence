@@ -42,14 +42,30 @@ public final class Bool extends Criteria<Boolean> {
         super(value);
     }
 
+    /**
+     * Returns a new boolean criteria for the given value.
+     * @param value The boolean value.
+     * @return A new boolean criteria.
+     */
     public static Bool value(Boolean value) {
         return new Bool(value);
     }
 
+    /**
+     * Returns a new boolean criteria for the given search value, parsed as truthy.
+     * @param searchValue The search value to parse.
+     * @return A new boolean criteria.
+     * @see #isTruthy(Object)
+     */
     public static Bool parse(Object searchValue) {
         return new Bool(isTruthy(searchValue));
     }
 
+    /**
+     * Returns true if the given type is a boolean.
+     * @param type The type to check.
+     * @return True if the given type is a boolean.
+     */
     public static boolean is(Class<?> type) {
         return type == boolean.class || Boolean.class.isAssignableFrom(type);
     }
@@ -66,6 +82,19 @@ public final class Bool extends Criteria<Boolean> {
         return Objects.equals(isTruthy(modelValue), getValue());
     }
 
+    /**
+     * Returns whether the given value is considered "truthy".
+     * <p>
+     * A value is truthy if:
+     * <ul>
+     * <li>It is a {@link Boolean} and is {@code true}.</li>
+     * <li>It is a {@link Number} and is greater than 0.</li>
+     * <li>It is a {@link String} representing a number greater than 0.</li>
+     * <li>It is a {@link String} that {@link Boolean#parseBoolean(String)} evaluates to {@code true}.</li>
+     * </ul>
+     * @param value The value to check.
+     * @return True if the value is truthy, false otherwise.
+     */
     public static Boolean isTruthy(Object value) {
         if (value == null) {
             return false;

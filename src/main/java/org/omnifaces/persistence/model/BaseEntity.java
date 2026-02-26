@@ -98,7 +98,8 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     private static final long serialVersionUID = 1L;
 
     /**
-     * Returns the getters that define entity identity (default = just ID).
+     * Returns the getters that define entity identity.
+     * The default implementation returns {@link BaseEntity#getId()}.
      * <p>
      * Override to use natural/business key(s), e.g.:
      * <pre>
@@ -107,6 +108,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      *     return Stream.of(Phone::getCountryCode, Phone::getNumber);
      * }
      * </pre>
+     * @return The getters that define entity identity.
      */
     protected Stream<? extends Function<?, Object>> identityGetters() {
         return Stream.<Function<BaseEntity<I>, Object>>of(BaseEntity::getId);

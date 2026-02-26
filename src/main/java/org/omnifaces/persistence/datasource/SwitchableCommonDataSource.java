@@ -81,10 +81,19 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
         }
     }
 
+    /**
+     * Returns the configuration file name.
+     * @return The configuration file name.
+     */
     public String getConfigFile() {
         return configFile;
     }
 
+
+    /**
+     * Sets the configuration file name.
+     * @param configFile The name of the properties file to load configuration from.
+     */
     public void setConfigFile(String configFile) {
         this.configFile = configFile;
 
@@ -93,6 +102,13 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
         doInit();
     }
 
+    /**
+     * Initializes the underlying data source by loading the properties file.
+     * <p>
+     * This method uses the {@link PropertiesFileLoader} SPI to load the file, instantiates the
+     * data source class specified by the <code>className</code> property, and applies all
+     * other properties to it.
+     */
     public void doInit() {
 
         // Get the properties that were defined separately from the @DataSourceDefinition/data-source element

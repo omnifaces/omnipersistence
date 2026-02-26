@@ -39,10 +39,24 @@ public final class Enumerated extends Criteria<Enum<?>> {
         super(value, false, true);
     }
 
+    /**
+     * Returns a new enumerated criteria for the given enum constant.
+     * @param value The enum constant.
+     * @return A new enumerated criteria.
+     */
     public static Enumerated value(Enum<?> value) {
         return new Enumerated(value);
     }
 
+    /**
+     * Returns a new enumerated criteria for the given search value, parsed against the given target enum type.
+     * <p>
+     * Parsing is case-insensitive by default.
+     * @param searchValue The search value to parse (usually a String).
+     * @param targetType The target enum class.
+     * @return A new enumerated criteria.
+     * @throws IllegalArgumentException If the search value cannot be mapped to an enum constant.
+     */
     public static Enumerated parse(Object searchValue, Class<Enum<?>> targetType) {
         return new Enumerated(parseEnum(searchValue, targetType));
     }

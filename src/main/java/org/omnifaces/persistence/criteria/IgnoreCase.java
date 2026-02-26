@@ -40,6 +40,11 @@ public final class IgnoreCase extends Criteria<String> {
         super(value);
     }
 
+    /**
+     * Returns a new case-insensitive criteria for the given value.
+     * @param value The string value.
+     * @return A new case-insensitive criteria.
+     */
     public static IgnoreCase value(String value) {
         return new IgnoreCase(value);
     }
