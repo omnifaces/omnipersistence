@@ -136,11 +136,6 @@ class RootPathResolver implements PathResolver {
     private static Map<String, Path<?>> getJoins(From<?, ?> from) {
         Map<String, Path<?>> joins = new HashMap<>();
         collectJoins(from, joins);
-
-        if (from instanceof EclipseLinkRoot) {
-            ((EclipseLinkRoot<?>) from).collectPostponedFetches(joins);
-        }
-
         return joins;
     }
 

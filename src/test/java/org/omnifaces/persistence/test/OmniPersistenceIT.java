@@ -29,8 +29,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
@@ -59,6 +61,7 @@ import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
+import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
@@ -456,6 +459,57 @@ public abstract class OmniPersistenceIT {
         var firstPage = personService().getPageWithGroups(Page.with().range(0, 10).allMatch(Map.of("groups", List.of(Group.USER, Group.DEVELOPER))).build(), true);
         assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
         firstPage.forEach(p -> assertTrue(p.getGroups().contains(Group.USER) && p.getGroups().contains(Group.DEVELOPER), "Groups collection is populated after detachment"));
+    }
+
+    @Test
+    void testPageWithPhonesFilteredByTypeSet() {
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
+        assertFalse(result.isEmpty(), "Some persons have MOBILE phones");
+        if (!isOpenJPA()) {
+            assertTrue(result.getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones"); // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context, so the count is inaccurate there.
+        }
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
+        if (isOpenJPA() || isEclipseLink()) { // Hibernate JOIN FETCH returns all phone types; in-memory filtering of postponed fetches only applies to OpenJPA/EclipseLink.
+            result.forEach(person -> person.getPhones().forEach(phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")));
+        }
+    }
+
+    @Test
+    void testPageWithPhonesFilteredByNumberLike() {
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), true);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
+        result.forEach(person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain after in-memory filtering of postponed fetch")));
+    }
+
+    @Test
+    void testPageWithPhonesSortedByNumberAscending() {
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).orderBy("phones.number", true).build(), false);
+        assertEquals(10, result.size(), "Page has 10 records");
+        result.forEach(person -> {
+            var numbers = person.getPhones().stream().map(Phone::getNumber).toList();
+            assertEquals(numbers.stream().sorted().toList(), numbers, "Phones within person are sorted ascending by number");
+        });
+        var firstNumbers = result.stream().filter(p -> !p.getPhones().isEmpty()).map(p -> p.getPhones().get(0).getNumber()).toList();
+        for (var i = 0; i < firstNumbers.size() - 1; i++) {
+            assertTrue(firstNumbers.get(i).compareTo(firstNumbers.get(i + 1)) <= 0, "Entities are ordered ascending by representative phone number");
+        }
+    }
+
+    @Test
+    void testPageWithPhonesFilteredAndSortedDescending() {
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).orderBy("phones.number", false).build(), true);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(person -> {
+            assertFalse(person.getPhones().isEmpty(), "Filtered person has phones");
+            person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain after filtering"));
+            var numbers = person.getPhones().stream().map(Phone::getNumber).toList();
+            assertEquals(numbers.stream().sorted(Comparator.reverseOrder()).toList(), numbers, "Phones within person are sorted descending by number");
+        });
+        var firstNumbers = result.stream().filter(p -> !p.getPhones().isEmpty()).map(p -> p.getPhones().get(0).getNumber()).toList();
+        for (var i = 0; i < firstNumbers.size() - 1; i++) {
+            assertTrue(firstNumbers.get(i).compareTo(firstNumbers.get(i + 1)) >= 0, "Entities are ordered descending by representative phone number");
+        }
     }
 
     @Test

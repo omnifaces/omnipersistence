@@ -21,7 +21,7 @@ import jakarta.persistence.criteria.Fetch;
  *
  * @author Bauke Scholtz
  * @since 1.0
- * @see EclipseLinkRoot
+ * @see PostponedFetchRoot
  */
 class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {
 
