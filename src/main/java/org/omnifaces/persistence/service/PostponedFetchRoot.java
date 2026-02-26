@@ -163,14 +163,14 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return rowComparator;
     }
 
-    @SuppressWarnings("rawtypes")
+    @SuppressWarnings("unchecked")
     private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering) {
         return ordering.entrySet().stream()
                 .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
                 .map(entry -> {
                     var subField = entry.getKey().substring(fetchPath.length() + 1);
                     var ascending = entry.getValue();
-                    var fieldComp = comparing(obj -> (Comparable) invokeGetter(obj, subField), nullsLast(naturalOrder()));
+                    var fieldComp = comparing(obj -> (Comparable<Object>) invokeGetter(obj, subField), nullsLast(naturalOrder()));
                     return ascending ? fieldComp : fieldComp.reversed();
                 })
                 .reduce(Comparator::thenComparing)
