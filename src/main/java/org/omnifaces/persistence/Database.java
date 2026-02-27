@@ -63,6 +63,11 @@ public enum Database {
     SQLSERVER,
 
     /**
+     * DB2 database.
+     */
+    DB2,
+
+    /**
      * Database is unknown.
      */
     UNKNOWN;
