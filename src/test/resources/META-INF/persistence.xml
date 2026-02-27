@@ -27,7 +27,7 @@
 
         <properties>
             <!-- JPA -->
-            <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" /> <!-- ignored by OpenJPA! it instead uses openjpa.jdbc.SynchronizeMappings property -->
+            <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
             <property name="jakarta.persistence.schema-generation.create-source" value="metadata-then-script" />
             <property name="jakarta.persistence.schema-generation.create-script-source" value="META-INF/sql/create-test.sql" />
             <property name="jakarta.persistence.schema-generation.drop-source" value="metadata-then-script" />
@@ -47,7 +47,6 @@
             <property name="eclipselink.logging.session" value="false" />
 
             <!-- OpenJPA -->
-            <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(foreignKeys=true,schemaAction='dropDB,add')" />
             <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=INFO, SQL=TRACE" />
 
             <!-- WildFly -->
