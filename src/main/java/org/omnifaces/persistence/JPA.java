@@ -340,16 +340,22 @@ public final class JPA {
             throw new IllegalArgumentException("There must be at least 2 expressions or strings");
         }
 
-        List<Expression<? extends Object>> expressions = stream(expressionsOrStrings).map(expressionOrString -> {
+        List<Expression<String>> expressions = stream(expressionsOrStrings).map(expressionOrString -> {
             if (expressionOrString instanceof Expression) {
                 return castAsString(builder, (Expression<?>) expressionOrString);
             }
             else {
-                return builder.literal(expressionOrString);
+                return builder.<String>literal(expressionOrString.toString());
             }
         }).collect(toList());
 
-        return builder.function("CONCAT", String.class, expressions.toArray(new Expression[expressions.size()]));
+        Expression<String> result = expressions.get(0);
+
+        for (int i = 1; i < expressions.size(); i++) {
+            result = builder.concat(result, expressions.get(i));
+        }
+
+        return result;
     }
 
     /**
