@@ -2083,9 +2083,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private <T extends E> Predicate buildPredicate(Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters) {
         var field = parameter.getKey();
         var criteria = parameter.getValue();
-        var effectiveCriteria = Criteria.unwrap(criteria);
+        var value = Criteria.unwrap(criteria);
 
-        if (oneToManys.test(field) && (effectiveCriteria instanceof Iterable || effectiveCriteria != null && effectiveCriteria.getClass().isArray())) {
+        if (oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())) {
             // For @OneToMany fields with collection values, avoid pathResolver.get(field) which adds an unwanted JOIN to the main query root.
             return buildTypedPredicate(pathResolver.get(null), null, field, criteria, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
         }
@@ -2186,7 +2186,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .collect(toList());
 
         if (in.isEmpty()) {
-            throw new IllegalArgumentException(value.toString());
+            return null;
         }
 
         alias.in(in.size());
@@ -2227,6 +2227,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .collect(toList());
 
         if (predicates.isEmpty()) {
+            if (elementCollectionField) {
+                return null;
+            }
+
             throw new IllegalArgumentException(value.toString());
         }
 

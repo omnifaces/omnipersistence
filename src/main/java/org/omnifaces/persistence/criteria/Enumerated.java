@@ -63,12 +63,12 @@ public final class Enumerated extends Criteria<Enum<?>> {
 
     @Override
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
+        return getValue() == null ? null : criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
     }
 
     @Override
     public boolean applies(Object modelValue) {
-        return modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getClass()), getValue());
+        return getValue() == null ? modelValue == null : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getClass()), getValue());
     }
 
     @SuppressWarnings("unchecked")
