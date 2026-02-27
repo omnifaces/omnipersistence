@@ -29,6 +29,7 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
+import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
@@ -199,12 +200,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
     private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
     private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+    private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(s) = %s, skipping! The estimatedTotalNumberOfResults may be slightly inaccurate. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
-
-    private static final String ERROR_ILLEGAL_MAPPING =
-        "You must return a getter-path mapping from MappedQueryBuilder";
-    private static final String ERROR_UNSUPPORTED_CRITERIA =
-        "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
+    private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
+    private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 
     @SuppressWarnings("rawtypes")
     private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
@@ -1944,7 +1943,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return new RootPathResolver(root, elementCollections.get(), manyOrOneToOnes.get());
         }
         else {
-            throw new IllegalArgumentException(ERROR_ILLEGAL_MAPPING);
+            throw new IllegalArgumentException(EXCEPTION_ILLEGAL_MAPPING);
         }
     }
 
@@ -2088,7 +2087,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         if (oneToManys.test(field) && (effectiveCriteria instanceof Iterable || effectiveCriteria != null && effectiveCriteria.getClass().isArray())) {
             // For @OneToMany fields with collection values, avoid pathResolver.get(field) which adds an unwanted JOIN to the main query root.
-            // buildArrayPredicate creates its own correlated subquery for the filter and derives the field type from there.
             return buildTypedPredicate(pathResolver.get(null), null, field, criteria, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
         }
 
@@ -2137,7 +2135,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
             }
             else {
-                throw new UnsupportedOperationException(format(ERROR_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
+                throw new UnsupportedOperationException(format(EXCEPTION_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
             }
         }
         catch (IllegalArgumentException e) {
@@ -2157,19 +2155,25 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private <T extends E> Predicate buildElementCollectionPredicate(Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder) {
-        if (getProvider() == ECLIPSELINK || getProvider() == OPENJPA && !(query instanceof Subquery) || getProvider() == HIBERNATE && getDatabase() == POSTGRESQL) {
-            // EclipseLink refuses to perform GROUP BY on IN clause on @ElementCollection, causing a cartesian product.
-            // OpenJPA generates broken nested correlated subqueries when buildArrayPredicate is used inside the count subquery; use buildInPredicate there instead.
-            // Hibernate + PostgreSQL bugs on IN clause on @ElementCollection as PostgreSQL strictly requires an additional GROUP BY, but Hibernate didn't set it.
+        boolean isBrokenSubqueryProvider = getProvider() == OPENJPA || (getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER));
+
+        if (getProvider() == ECLIPSELINK || isBrokenSubqueryProvider && !(query instanceof Subquery)) {
+            // EclipseLink: plain IN on @ElementCollection causes a cartesian product; buildArrayPredicate handles it correctly.
+            // OpenJPA and Hibernate+PostgreSQL/SQLServer (data query only): Criteria (e.g. Like) values cannot be expressed as plain IN;
+            // PostgreSQL/SQLServer also enforce strict GROUP BY that Hibernate doesn't add for plain IN on @ElementCollection.
+            // In the count subquery context, buildArrayPredicate generates broken nested correlated subqueries for these providers, so it's excluded there.
             return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
         }
-        else if (getProvider() == OPENJPA && query instanceof Subquery && value instanceof Criteria) {
-            // OpenJPA in count subquery context: a Criteria<?> (e.g. Like) cannot be expressed as a plain IN predicate and buildArrayPredicate would generate broken nested correlated subqueries, so silently skip it.
-            // The count may be slightly inaccurate, which is acceptable for this known OpenJPA limitation.
+        else if (isBrokenSubqueryProvider && value instanceof Criteria) {
+            // Count subquery context (implied by falling through previous branch): Criteria (e.g. Like) cannot be expressed as plain IN,
+            // and buildArrayPredicate generates broken nested correlated subqueries that OpenJPA and Hibernate+PostgreSQL/SQL Server cannot resolve correctly.
+            // Silently skip; the count may be slightly inaccurate, which is an accepted known limitation.
+            logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
         else {
-            // For other cases (including OpenJPA in count subquery context), a real IN predicate avoids nested subquery issues.
+            // Hibernate with other databases handles plain IN on @ElementCollection correctly.
+            // OpenJPA and Hibernate+PostgreSQL/SQLServer in count subquery context with non-Criteria values also use plain IN safely.
             return buildInPredicate(alias, path, type, value, parameterBuilder);
         }
     }
@@ -2193,7 +2197,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var oneToManyField = oneToManys.test(field);
 
         if (oneToManyField && getProvider() == OPENJPA && query instanceof Subquery) {
-            return null; // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context; count may be slightly inaccurate, which is acceptable for this known OpenJPA limitation.
+            // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context; count may be slightly inaccurate, which is acceptable for this known OpenJPA limitation.
+            logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
+            return null;
         }
 
         var elementCollectionField = elementCollections.get().contains(field);
