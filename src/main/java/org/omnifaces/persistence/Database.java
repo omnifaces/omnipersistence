@@ -58,6 +58,11 @@ public enum Database {
     POSTGRESQL("POSTGRES"),
 
     /**
+     * SQL Server database.
+     */
+    SQLSERVER,
+
+    /**
      * Database is unknown.
      */
     UNKNOWN;
