@@ -34,6 +34,7 @@ Requires a _minimum_ of **Java 17** and **Jakarta EE 10**.
 9. [Provider and database detection](#9-provider-and-database-detection)
 10. [JPA utilities](#10-jpa-utilities)
 11. [Switchable DataSource](#11-switchable-datasource)
+12. [Comparison with Jakarta Data](#12-comparison-with-jakarta-data)
 
 ---
 
@@ -481,3 +482,217 @@ Swap the file (or override via a custom `PropertiesFileLoader` SPI) to point at 
 ## Integration tests and further examples
 
 More detailed usage — including JSF/DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading JSF components directly on top of `BaseEntityService` and `Page`.
+
+---
+
+## 12. Comparison with Jakarta Data
+
+[Jakarta Data](https://jakarta.ee/specifications/data/1.0/) is a new specification introduced in Jakarta EE 11 that standardises a repository-pattern API for data access across relational and NoSQL databases. Both OmniPersistence and Jakarta Data aim to reduce persistence boilerplate, but they make very different architectural choices. Understanding those differences helps you pick the right tool for your project.
+
+### Programming model
+
+OmniPersistence uses **service-class inheritance**. You extend `BaseEntityService<I, E>` and get a concrete, injectable service bean. All persistence logic lives in an ordinary Java class that you can customise by overriding methods.
+
+Jakarta Data uses **annotated repository interfaces**. You declare an interface, annotate it with `@Repository`, and the runtime (or an annotation processor) generates the implementation. You never write an implementation class.
+
+```java
+// OmniPersistence — concrete service class
+@ApplicationScoped // or @Stateless
+public class BookService extends BaseEntityService<Long, Book> { }
+
+// Jakarta Data — interface-only repository
+@Repository
+public interface Books extends CrudRepository<Book, Long> { }
+```
+
+### Persistence context and entity state
+
+This is the deepest architectural difference.
+
+OmniPersistence operates through a **full, stateful JPA `EntityManager`**. Entities returned from service methods are managed — the persistence context tracks changes (dirty checking), transparent lazy loading works, and explicit `flush()` calls propagate changes. This is the standard JPA programming model.
+
+Jakarta Data uses a **stateless session** (Hibernate's `StatelessSession` in the reference implementation). Entities are always detached. There is no dirty checking, no transparent lazy loading, and no implicit cascade. Every write requires an explicit `@Insert`, `@Update`, `@Save`, or `@Delete` call.
+
+| Capability | OmniPersistence | Jakarta Data |
+|---|---|---|
+| Dirty checking (auto-save on flush) | ✅ | ❌ |
+| Transparent lazy loading | ✅ | ❌ |
+| Cascade operations | ✅ via JPA `CascadeType` | ❌ never cascades |
+| Optimistic locking | ✅ `@Version` honored | ✅ honored on `@Update`/`@Delete` |
+| Pessimistic locking | ✅ via `EntityManager` | ❌ |
+| Entity graphs | ✅ `@NamedEntityGraph` + `getByIdWithLoadGraph` | ❌ |
+
+### Entity requirements
+
+OmniPersistence **requires entities to extend one of its base classes** (`BaseEntity`, `GeneratedIdEntity`, `TimestampedEntity`, etc.). This gives you `equals`, `hashCode`, `compareTo` and `toString` out of the box but couples your entity model to the library.
+
+Jakarta Data works with **any `@Entity` class**. No supertype or interface is required. This makes it easier to introduce into an existing JPA model without modification.
+
+### Querying
+
+OmniPersistence exposes three query paths:
+
+1. **Named queries** declared on the entity with `@NamedQuery`.
+2. **JPQL fragment shortcuts** — `list("WHERE e.active = true")`, `find("WHERE e.email = ?1", email)`.
+3. **Programmatic Criteria API** inside `getPage()` via a `CriteriaBuilder` callback for complex joins, projections, and aggregations.
+
+Jakarta Data exposes three query paths:
+
+1. **`@Find`** — maps method parameters to entity fields by name (no method-name parsing required).
+2. **`@Query`** — accepts JDQL or JPQL strings, validated at compile time by the annotation processor.
+3. **Method-name conventions** — e.g. `findByLastNameAndFirstName`, supported as a deprecated migration path from Spring Data.
+
+```java
+// OmniPersistence — JPQL fragment (alias e is predefined)
+List<Book> books = bookService.list("WHERE e.year > ?1 ORDER BY e.title", 2020);
+
+// Jakarta Data — @Find (parameter name matches entity field)
+@Find
+@OrderBy("title")
+List<Book> booksAfter(int year);
+
+// Jakarta Data — @Query
+@Query("where year > :year order by title")
+List<Book> booksAfter(int year);
+```
+
+A practical distinction: Jakarta Data validates `@Query` strings at **compile time** (assuming a supporting annotation processor). OmniPersistence JPQL strings are only validated at **runtime** when the query is first executed.
+
+### Pagination and search criteria
+
+OmniPersistence's `Page` + `PartialResultList` system is particularly rich. Criteria are expressed as a `Map<String, Object>` where values are plain objects (exact-equality) or typed wrappers that translate to the appropriate SQL predicate:
+
+```java
+Map<String, Object> criteria = Map.of(
+    "lastName",  Like.contains("smith"),
+    "age",       Between.range(18, 65),
+    "status",    Not.value("BANNED")
+);
+Page page = Page.with().range(0, 20).allMatch(criteria).orderBy("lastName", true).build();
+PartialResultList<Person> result = personService.getPage(page, true);
+result.getEstimatedTotalNumberOfResults(); // total count
+```
+
+The `allMatch` map produces AND conditions; `anyMatch` produces OR conditions. DTO projections and join-fetch eager loading are also handled inside `getPage`.
+
+Jakarta Data's `PageRequest` + `Page<T>` covers offset pagination and the total count, and `CursoredPage<T>` covers keyset (cursor-based) pagination. However, **filtering criteria are not built into the pagination object** — conditions must be expressed in the query method signature itself. There is no equivalent to the rich `Criteria` wrappers (`Like`, `Between`, `Not`, etc.); range or partial-match conditions require a `@Query` string or query-by-method-name keywords.
+
+| Feature | OmniPersistence | Jakarta Data |
+|---|---|---|
+| Offset pagination | ✅ `Page` + `PartialResultList` | ✅ `PageRequest` + `Page<T>` |
+| Cursor/keyset pagination | ✅ `Page.with().last(entity)` | ✅ `CursoredPage<T>` |
+| Total count | ✅ `getEstimatedTotalNumberOfResults()` | ✅ `page.totalElements()` |
+| Criteria wrappers (Like, Between, Not…) | ✅ built-in | ❌ |
+| AND / OR condition grouping in pagination | ✅ `allMatch` / `anyMatch` | ❌ |
+| DTO projection inside pagination | ✅ via `CriteriaBuilder` callback | ❌ |
+| Eager join-fetch in pagination | ✅ varargs join-fetch names | ❌ |
+
+### Soft delete
+
+OmniPersistence has first-class soft-delete support. Annotate any boolean field with `@SoftDeletable` and every read method (`findById`, `list`, `getPage`, …) automatically excludes soft-deleted rows. Dedicated service methods handle the soft side:
+
+```java
+commentService.softDelete(comment);
+commentService.softUndelete(comment);
+List<Comment> gone = commentService.listSoftDeleted();
+```
+
+Jakarta Data has no soft-delete concept. Implementing it requires writing explicit `@Query` methods with a `WHERE deleted = false` clause in every query, plus manual exclusion from pagination.
+
+### Non-deletable entities
+
+OmniPersistence's `@NonDeletable` entity annotation causes `delete()` to throw `NonDeletableEntityException` as a safety guard. Jakarta Data has no equivalent.
+
+### Auditing
+
+OmniPersistence provides field-level change auditing. Annotate a field with `@Audit`, add `@EntityListeners(AuditListener.class)` to the entity, and every real field change fires a CDI `AuditedChange` event carrying the entity, field name, old value, and new value:
+
+```java
+public void onAuditedChange(@Observes AuditedChange change) {
+    log.info("{}.{}: {} → {}", change.getEntityName(),
+        change.getPropertyName(), change.getOldValue(), change.getNewValue());
+}
+```
+
+Jakarta Data has no auditing API.
+
+### CDI lifecycle events
+
+`BaseEntity` registers a `BaseEntityListener` that fires CDI events after persistence operations. Any CDI bean can observe entity changes application-wide:
+
+```java
+public void onCreated(@Observes @Created Person p) { … }
+public void onUpdated(@Observes @Updated Person p) { … }
+public void onDeleted(@Observes @Deleted Person p) { … }
+```
+
+Jakarta Data fires no CDI events for entity lifecycle changes.
+
+### Lazy collection helpers
+
+Because OmniPersistence works with a stateful `EntityManager`, lazy associations can be loaded on demand:
+
+```java
+person = personService.fetchLazyCollections(person, Person::getPhones, Person::getGroups);
+person = personService.fetchLazyBlobs(person);
+```
+
+Jakarta Data's stateless model means there is nothing to lazily load — associations are never transparently fetched, and the spec provides no fetch helper API.
+
+### Entity model utilities
+
+OmniPersistence provides **ready-made base classes** with `equals`/`hashCode`/`compareTo`/`toString` driven by a single `identityGetters()` override, plus automatic timestamp and version column management. Jakarta Data has no such base classes; those concerns remain the developer's responsibility (or can be addressed by JPA `@MappedSuperclass` patterns as before).
+
+### DataSource configuration
+
+OmniPersistence's `SwitchableCommonDataSource` / `SwitchableXADataSource` externalises JDBC connection properties to a properties file so the target database can be changed without touching deployment descriptors. Jakarta Data has no equivalent feature.
+
+### Provider and database detection
+
+Every `BaseEntityService` detects the active JPA provider (`HIBERNATE`, `ECLIPSELINK`, `OPENJPA`) and underlying database (`H2`, `MYSQL`, `POSTGRESQL`, `SQLSERVER`, `DB2`) at startup, enabling provider-specific or database-specific branches in service code. Jakarta Data has no equivalent.
+
+### NoSQL / multi-datastore support
+
+Jakarta Data is **datastore-agnostic by design**. The same `@Repository`, `@Find`, `@Query`, `@Insert`, etc. annotations work against both JPA (relational) and Jakarta NoSQL (document, key-value, wide-column) databases. The common query language, JDQL, is a carefully constrained subset of JPQL that avoids relational-only constructs so it can be translated to NoSQL query languages.
+
+OmniPersistence is **exclusively JPA (relational)**. It exposes full JPA Criteria API, JPQL, named queries, entity graphs, and the EntityManager directly — none of which apply to a NoSQL store.
+
+### Summary table
+
+| Feature | OmniPersistence | Jakarta Data 1.0 |
+|---|---|---|
+| **Model** | Service-class inheritance | Annotated repository interface |
+| **Entity requirement** | Must extend `BaseEntity` hierarchy | Any `@Entity`, no supertype required |
+| **Persistence context** | Stateful `EntityManager` | Stateless session |
+| **Dirty checking** | ✅ | ❌ |
+| **Transparent lazy loading** | ✅ | ❌ |
+| **Cascade** | ✅ via JPA `CascadeType` | ❌ |
+| **Entity graphs** | ✅ `@NamedEntityGraph` | ❌ |
+| **Pessimistic locking** | ✅ | ❌ |
+| **Optimistic locking** | ✅ | ✅ |
+| **JPQL queries** | ✅ (full JPQL) | ✅ (JDQL + JPQL, provider may restrict) |
+| **Criteria API queries** | ✅ programmatic | ❌ |
+| **Compile-time query validation** | ❌ | ✅ (`@Query` strings) |
+| **Named queries** | ✅ | ❌ |
+| **Method-name query derivation** | ❌ | ✅ (deprecated extension) |
+| **Rich pagination criteria** (`Like`, `Between`, `Not`…) | ✅ | ❌ |
+| **AND / OR filter grouping in pagination** | ✅ | ❌ |
+| **DTO projection in pagination** | ✅ | ❌ |
+| **Cursor-based pagination** | ✅ | ✅ |
+| **Soft delete** | ✅ | ❌ |
+| **Non-deletable guard** | ✅ | ❌ |
+| **Field-level auditing** | ✅ | ❌ |
+| **CDI lifecycle events** | ✅ | ❌ |
+| **Lazy collection helpers** | ✅ | ❌ |
+| **Provider/database detection** | ✅ | ❌ |
+| **Switchable DataSource** | ✅ | ❌ |
+| **Entity base classes** (ID, timestamps, version) | ✅ | ❌ |
+| **Business-key identity helpers** | ✅ | ❌ |
+| **NoSQL / non-relational datastores** | ❌ | ✅ |
+| **Jakarta EE target** | EE 10 | EE 11 |
+
+### When to use which
+
+**Choose OmniPersistence** when you are building a Jakarta EE 10 (or later) application that uses a relational database through JPA, and you want a rich, immediately productive toolkit: stateful entities with lazy loading and cascades, built-in soft delete, auditing, flexible paginated search with typed criteria, and CDI lifecycle hooks — all without any annotation-processor tooling requirements.
+
+**Choose Jakarta Data** when you need to target both relational and NoSQL datastores from a single programming model, when you want the compile-time safety of validated query strings, when your architecture calls for a strict stateless data layer, or when you are starting a Jakarta EE 11 greenfield project that will benefit from a standard specification with multiple vendor implementations.
