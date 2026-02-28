@@ -7,7 +7,7 @@
 
 Utilities for Jakarta Persistence, JDBC and DataSources.
 
-OmniPersistence reduces boilerplate in the Jakarta Persistence layer by providing a rich base service class, declarative soft-delete, auditing, structured pagination with search criteria, and flexible datasource configuration — compatible with Hibernate, EclipseLink and OpenJPA on any Jakarta EE 10 runtime.
+OmniPersistence reduces boilerplate in the Jakarta Persistence (JPA) layer by providing a rich base service class, declarative soft-delete, auditing, structured pagination with search criteria, and flexible datasource configuration — compatible with Hibernate, EclipseLink and OpenJPA on any Jakarta EE 10 runtime.
 
 ```xml
 <dependency>
