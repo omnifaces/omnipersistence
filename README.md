@@ -243,10 +243,17 @@ PartialResultList<PersonCard> cards = personService.getPage(
 PartialResultList<Person> result = personService.getPage(page, true, "phones", "address");
 ```
 
-**Cursor-based paging** — pass the last seen entity for keyset pagination on large datasets:
+**Cursor-based paging** — pass the last seen entity for keyset pagination on large datasets. Bypasses SQL `OFFSET`, so performance stays stable regardless of page depth:
 
 ```java
-Page nextPage = Page.with().range(0, 10).orderBy("id", true).last(lastEntity).build();
+// Page 1 — ordinary offset paging
+Page page1 = Page.with().range(0, 10).orderBy("id", true).build();
+PartialResultList<Person> first = personService.getPage(page1, false);
+
+// Page 2 — cursor-based: lastSeen drives the WHERE predicate instead of OFFSET
+Person lastSeen = first.get(first.size() - 1);
+Page page2 = Page.with().range(lastSeen, 10, false).orderBy("id", true).build();
+PartialResultList<Person> second = personService.getPage(page2, false);
 ```
 
 ---

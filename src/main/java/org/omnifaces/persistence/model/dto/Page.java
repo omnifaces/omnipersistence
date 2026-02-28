@@ -69,6 +69,15 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *     .anyMatch(optionalCriteria)
  *     .build();
  * </pre>
+ * <pre>
+ * // Cursor-based (keyset) paging: avoids SQL OFFSET for stable performance on large datasets.
+ * Page page1 = Page.with().range(0, 10).orderBy("id", true).build();
+ * PartialResultList&lt;Foo&gt; first = fooService.getPage(page1, false);
+ *
+ * Foo lastSeen = first.get(first.size() - 1);
+ * Page page2 = Page.with().range(lastSeen, 10, false).orderBy("id", true).build();
+ * PartialResultList&lt;Foo&gt; second = fooService.getPage(page2, false);
+ * </pre>
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -283,24 +292,49 @@ public final class Page { // This class MAY NOT be mutable!
 
         private Integer offset;
         private Integer limit;
+        private Identifiable<?> last;
+        private boolean reversed;
         private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
         private Map<String, Object> requiredCriteria;
         private Map<String, Object> optionalCriteria;
 
         /**
-         * Set the range.
+         * Set the range for offset-based paging.
+         * Mutually exclusive with {@link #range(Identifiable, int, boolean)}.
          * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
-         * @throws IllegalStateException When another offset and limit is already set in this builder.
+         * @throws IllegalStateException When a range is already set in this builder.
          * @return This builder.
          */
         public Builder range(int offset, int limit) {
-            if (this.offset != null) {
-                throw new IllegalStateException("Offset and limit are already set");
+            if (this.offset != null || this.last != null) {
+                throw new IllegalStateException("Range is already set");
             }
 
             this.offset = offset;
             this.limit = limit;
+            return this;
+        }
+
+        /**
+         * Set the range for cursor-based (value-based) paging.
+         * Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the last entity,
+         * keeping performance stable regardless of page depth.
+         * Mutually exclusive with {@link #range(int, int)}.
+         * @param last Last entity of the previous page.
+         * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+         * @param reversed Whether to navigate in reverse order (i.e. towards the previous page).
+         * @throws IllegalStateException When a range is already set in this builder.
+         * @return This builder.
+         */
+        public Builder range(Identifiable<?> last, int limit, boolean reversed) {
+            if (this.offset != null || this.last != null) {
+                throw new IllegalStateException("Range is already set");
+            }
+
+            this.last = last;
+            this.limit = limit;
+            this.reversed = reversed;
             return this;
         }
 
@@ -352,7 +386,7 @@ public final class Page { // This class MAY NOT be mutable!
          * @return The built page.
          */
         public Page build() {
-            return new Page(offset, limit, ordering, requiredCriteria, optionalCriteria);
+            return new Page(offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
         }
 
     }

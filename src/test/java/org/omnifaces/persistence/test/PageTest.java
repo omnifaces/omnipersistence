@@ -24,6 +24,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.criteria.Like;
+import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
@@ -208,8 +209,47 @@ public class PageTest {
 		}
 
 		@Test
+		void buildsWithCursorRange() {
+			var entity = new TestEntity();
+			entity.setId(42L);
+			var page = Page.with().range(entity, 10, false).orderBy("id", true).build();
+			assertEquals(entity, page.getLast());
+			assertEquals(10, page.getLimit());
+			assertFalse(page.isReversed());
+		}
+
+		@Test
+		void buildsWithCursorRangeReversed() {
+            var entity = new TestEntity();
+			entity.setId(42L);
+			var page = Page.with().range(entity, 10, true).build();
+			assertTrue(page.isReversed());
+		}
+
+		@Test
 		void doubleRangeThrowsException() {
 			assertThrows(IllegalStateException.class, () -> Page.with().range(0, 10).range(5, 20));
+		}
+
+		@Test
+		void cursorRangeAfterOffsetRangeThrowsException() {
+            var entity = new TestEntity();
+			entity.setId(1L);
+			assertThrows(IllegalStateException.class, () -> Page.with().range(0, 10).range(entity, 10, false));
+		}
+
+		@Test
+		void offsetRangeAfterCursorRangeThrowsException() {
+            var entity = new TestEntity();
+			entity.setId(1L);
+			assertThrows(IllegalStateException.class, () -> Page.with().range(entity, 10, false).range(0, 10));
+		}
+
+		@Test
+		void doubleCursorRangeThrowsException() {
+            var entity = new TestEntity();
+			entity.setId(1L);
+			assertThrows(IllegalStateException.class, () -> Page.with().range(entity, 10, false).range(entity, 10, false));
 		}
 
 		@Test
@@ -282,7 +322,7 @@ public class PageTest {
 		@SuppressWarnings("unlikely-arg-type")
 		@Test
 		void notEqualToDifferentType() {
-			assertFalse(Page.of(0, 10).equals("not a page"));
+			assertFalse("not a page".equals(Page.of(0, 10)));
 		}
 
 		@Test
@@ -317,4 +357,7 @@ public class PageTest {
 		}
 	}
 
+	static class TestEntity extends GeneratedIdEntity<Long> {
+	    private static final long serialVersionUID = 1L;
+	}
 }
