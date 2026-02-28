@@ -483,6 +483,13 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPageWithGroupsSortedAscending() {
+        var result = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("groups", true).build(), false);
+        assertEquals(10, result.size(), "Page with groups sorted ascending returns 10 persons");
+        result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated"));
+    }
+
+    @Test
     void testPageWithPhonesSortedByNumberAscending() {
         var result = personService().getPageWithPhones(Page.with().range(0, 10).orderBy("phones.number", true).build(), false);
         assertEquals(10, result.size(), "Page has 10 records");
@@ -542,6 +549,65 @@ public abstract class OmniPersistenceIT {
         var page = personService().getPageOfPersonCards(Page.of(0, 5), true);
         assertEquals(5, page.size(), "Page returns 5 cards");
         assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+    }
+
+
+    // Page with cursor-based paging ----------------------------------------------------------------------------------
+
+    @Test
+    void testCursorBasedPaging() {
+        var page1 = personService().getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        assertEquals(10, page1.size(), "First page has 10 persons");
+
+        var lastSeen = page1.get(page1.size() - 1);
+        var page2 = personService().getPage(Page.with().range(lastSeen, 10, false).orderBy("id", true).build(), false);
+        assertEquals(10, page2.size(), "Second page has 10 persons");
+
+        var page1Ids = page1.stream().map(Person::getId).toList();
+        var page2Ids = page2.stream().map(Person::getId).toList();
+        assertTrue(Collections.disjoint(page1Ids, page2Ids), "Pages do not overlap");
+        assertTrue(page2.get(0).getId() > page1.get(page1.size() - 1).getId(), "Second page starts after first page");
+    }
+
+    @Test
+    void testCursorBasedPagingReversed() {
+        var page1 = personService().getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        var lastSeen = page1.get(page1.size() - 1);
+        var page2 = personService().getPage(Page.with().range(lastSeen, 10, false).orderBy("id", true).build(), false);
+        assertEquals(10, page2.size(), "Second page via cursor has 10 persons");
+
+        var firstOfPage2 = page2.get(0);
+        var backToPage1 = personService().getPage(Page.with().range(firstOfPage2, 10, true).orderBy("id", true).build(), false);
+        assertEquals(10, backToPage1.size(), "Reversed cursor returns 10 persons");
+        assertEquals(page1.stream().map(Person::getId).toList(),
+                     backToPage1.stream().map(Person::getId).toList(),
+                     "Reversed cursor returns same persons as original page 1 in same order");
+    }
+
+    @Test
+    void testCursorBasedPagingWithPhones() {
+        var page1 = personService().getPageWithPhones(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        assertEquals(10, page1.size(), "First page has 10 persons with phones");
+
+        var lastSeen = page1.get(page1.size() - 1);
+        var page2 = personService().getPageWithPhones(Page.with().range(lastSeen, 10, false).orderBy("id", true).build(), false);
+        assertEquals(10, page2.size(), "Second page has 10 persons with phones, not fewer due to join row inflation");
+
+        assertTrue(Collections.disjoint(page1.stream().map(Person::getId).toList(), page2.stream().map(Person::getId).toList()), "Pages do not overlap");
+        page2.forEach(p -> assertFalse(p.getPhones().isEmpty(), "Phones collection is populated after cursor-based paging"));
+    }
+
+    @Test
+    void testCursorBasedPagingWithGroups() {
+        var page1 = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        assertEquals(10, page1.size(), "First page has 10 persons with groups");
+
+        var lastSeen = page1.get(page1.size() - 1);
+        var page2 = personService().getPageWithGroups(Page.with().range(lastSeen, 10, false).orderBy("id", true).build(), false);
+        assertEquals(10, page2.size(), "Second page has 10 persons with groups, not fewer due to join row inflation");
+
+        assertTrue(Collections.disjoint(page1.stream().map(Person::getId).toList(), page2.stream().map(Person::getId).toList()), "Pages do not overlap");
+        page2.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated after cursor-based paging"));
     }
 
 

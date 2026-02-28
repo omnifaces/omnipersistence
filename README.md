@@ -705,5 +705,15 @@ OmniPersistence is **exclusively JPA (relational)**. It exposes full JPA Criteri
 
 ## 13. Integration tests and further examples
 
-More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `BaseEntityService` and `Page`.
+OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@Stateless` EJB beans and once with services as `@ApplicationScoped` CDI beans — and the full suite is run against three server/provider combinations:
+
+| Server | JPA Provider |
+|---|---|
+| WildFly | Hibernate |
+| GlassFish | EclipseLink |
+| TomEE | OpenJPA |
+
+The tests cover CRUD, paginated queries, all `Criteria` types, `@OneToMany` and `@ElementCollection` filtering and ordering, cursor-based paging, DTO projection, soft delete, `@NonDeletable`, auditing, and provider/database detection.
+
+More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `BaseEntityService` and `Page`. OptimusFaces also carries a more elaborate integration test suite that exercises the full DataTable behaviour against all supported databases: **H2**, **MySQL**, **PostgreSQL**, **SQL Server** and **DB2** (OmniPersistence itself only runs its own integration tests against H2).
 
