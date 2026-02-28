@@ -420,12 +420,14 @@ Provider provider = personService.getProvider();
 Database database = personService.getDatabase();
 ```
 
-| `Provider` | `Database` |
-|---|---|
-| `HIBERNATE` | `H2` |
-| `ECLIPSELINK` | `MYSQL` |
-| `OPENJPA` | `POSTGRESQL` |
-| `UNKNOWN` | `UNKNOWN` |
+| `Provider` | | `Database` |
+|---|---|---|
+| `HIBERNATE` | | `H2` |
+| `ECLIPSELINK` | | `MYSQL` |
+| `OPENJPA` | | `POSTGRESQL` |
+| `UNKNOWN` | | `SQLSERVER` |
+| | | `DB2` |
+| | | `UNKNOWN` |
 
 Useful for writing provider- or database-specific query logic without hard-coding strings.
 
