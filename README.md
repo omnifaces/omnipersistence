@@ -705,5 +705,5 @@ OmniPersistence is **exclusively JPA (relational)**. It exposes full JPA Criteri
 
 ## 13. Integration tests and further examples
 
-More detailed usage — including JSF/DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading JSF components directly on top of `BaseEntityService` and `Page`.
+More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `BaseEntityService` and `Page`.
 
