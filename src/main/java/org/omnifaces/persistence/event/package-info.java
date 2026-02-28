@@ -16,7 +16,7 @@
  * <p>
  * Observe {@code @}{@link Created},
  * {@code @}{@link Updated} or
- * {@code @}{@link Deleted} to react to JPA
+ * {@code @}{@link Deleted} to react to Jakarta Persistence
  * {@code @PrePersist}, {@code @PreUpdate} and {@code @PreRemove} lifecycle callbacks respectively.
  *
  * @see org.omnifaces.persistence.listener.BaseEntityListener

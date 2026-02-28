@@ -16,7 +16,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
- * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a JPA
+ * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a Jakarta Persistence
  * {@code @PreUpdate} lifecycle callback.
  * <p>
  * Usage example:
@@ -62,8 +62,8 @@ public class AuditedChange {
     }
 
     /**
-     * Returns the JPA entity name.
-     * @return The JPA entity name.
+     * Returns the Jakarta Persistence entity name.
+     * @return The Jakarta Persistence entity name.
      */
     public String getEntityName() {
         return entityName;

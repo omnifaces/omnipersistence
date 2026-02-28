@@ -56,10 +56,10 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
 
     private static final long serialVersionUID = 1L;
 
-    /** The JPA field name of the {@link #getCreated() created} property, to be used in JPQL queries and criteria maps. */
+    /** The Jakarta Persistence field name of the {@link #getCreated() created} property, to be used in JPQL queries and criteria maps. */
     public static final String CREATED = "created";
 
-    /** The JPA field name of the {@link #getLastModified() lastModified} property, to be used in JPQL queries and criteria maps. */
+    /** The Jakarta Persistence field name of the {@link #getLastModified() lastModified} property, to be used in JPQL queries and criteria maps. */
     public static final String LAST_MODIFIED = "lastModified";
 
     /** The timestamp when this entity was first persisted. */

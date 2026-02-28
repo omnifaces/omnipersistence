@@ -65,7 +65,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * JPA utilities for common operations such as getting optional/first results, converting results to maps,
+ * Jakarta Persistence utilities for common operations such as getting optional/first results, converting results to maps,
  * counting foreign key references, and building criteria expressions.
  * <p>
  * Usage examples:
@@ -92,15 +92,15 @@ public final class JPA {
 
     // Public constants -------------------------------------------------------------------------------------------------------------------
 
-    /** Returns the JPA-specific "load graph" query hint constant: {@value}. */
+    /** Returns the Jakarta Persistence-specific "load graph" query hint constant: {@value}. */
     public static final String QUERY_HINT_LOAD_GRAPH = "jakarta.persistence.loadgraph";
-    /** Returns the JPA-specific "fetch graph" query hint constant: {@value}. */
+    /** Returns the Jakarta Persistence-specific "fetch graph" query hint constant: {@value}. */
     public static final String QUERY_HINT_FETCH_GRAPH = "jakarta.persistence.fetchgraph";
-    /** Returns the JPA-specific "2nd level cache store mode" query hint constant: {@value}. */
+    /** Returns the Jakarta Persistence-specific "2nd level cache store mode" query hint constant: {@value}. */
     public static final String QUERY_HINT_CACHE_STORE_MODE = "jakarta.persistence.cache.storeMode"; // USE | BYPASS | REFRESH
-    /** Returns the JPA-specific "2nd level cache retrieve mode" query hint constant: {@value}. */
+    /** Returns the Jakarta Persistence-specific "2nd level cache retrieve mode" query hint constant: {@value}. */
     public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "jakarta.persistence.cache.retrieveMode"; // USE | BYPASS
-    /** Returns the JPA-specific "validation mode" persistence.xml property: {@value}. */
+    /** Returns the Jakarta Persistence-specific "validation mode" persistence.xml property: {@value}. */
     public static final String PROPERTY_VALIDATION_MODE = "jakarta.persistence.validation.mode"; // AUTO | CALLBACK | NONE
 
     // Constructors -----------------------------------------------------------------------------------------------------------------------
@@ -368,7 +368,7 @@ public final class JPA {
     @SuppressWarnings("unchecked")
     public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
 
-        // NOTE: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
+        // TODO: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
 
         if (getCurrentBaseEntityService().getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);

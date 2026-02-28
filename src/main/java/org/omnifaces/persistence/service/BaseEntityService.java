@@ -355,8 +355,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Getters --------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns the JPA provider being used. This is immutable (you can't override the method to change the internally used value).
-     * @return The JPA provider being used.
+     * Returns the Jakarta Persistence provider being used. This is immutable (you can't override the method to change the internally used value).
+     * @return The Jakarta Persistence provider being used.
      */
     public Provider getProvider() {
         return provider;
@@ -516,7 +516,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Select actions -------------------------------------------------------------------------------------------------
 
     /**
-     * Functional interface to fine-grain a JPA criteria query for any of
+     * Functional interface to fine-grain a Jakarta Persistence criteria query for any of
      * {@link #list(CriteriaQueryBuilder, Consumer)} or {@link #find(CriteriaQueryBuilder, Consumer)} methods.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
@@ -538,7 +538,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected interface CriteriaQueryBuilder<E> {
 
         /**
-         * Builds the JPA criteria query.
+         * Builds the Jakarta Persistence criteria query.
          * @param criteriaBuilder The criteria builder to use.
          * @param query The criteria query to build upon.
          * @param root The root of the entity to query.
@@ -608,7 +608,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         }
      * );
      * </pre>
-     * @param queryBuilder This creates the JPA criteria query.
+     * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters To put the mapped query parameters in.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
@@ -692,7 +692,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         }
      * );
      * </pre>
-     * @param queryBuilder This creates the JPA criteria query.
+     * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters To put the mapped query parameters in.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
@@ -938,7 +938,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         }
      * );
      * </pre>
-     * @param queryBuilder This creates the JPA criteria query.
+     * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters To put the mapped query parameters in.
      * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
@@ -1502,7 +1502,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Paging actions -------------------------------------------------------------------------------------------------
 
     /**
-     * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods.
+     * Functional interface to fine-grain a Jakarta Persistence criteria query for any of {@link #getPage(Page, boolean)} methods.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
      * <pre>
@@ -1523,7 +1523,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected interface QueryBuilder<E> {
 
         /**
-         * Builds the JPA criteria query.
+         * Builds the Jakarta Persistence criteria query.
          * @param criteriaBuilder The criteria builder to use.
          * @param query The abstract query to build upon, which can be a {@link CriteriaQuery} or {@link Subquery}.
          * @param root The root of the entity to query.
@@ -1532,7 +1532,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Functional interface to fine-grain a JPA criteria query for any of {@link #getPage(Page, boolean)} methods taking
+     * Functional interface to fine-grain a Jakarta Persistence criteria query for any of {@link #getPage(Page, boolean)} methods taking
      * a specific result type, such as an entity subclass (DTO). You must return a {@link LinkedHashMap} with
      * {@link Getter} as key and {@link Expression} as value. The mapping must be in exactly the same order as
      * constructor arguments of your DTO.
@@ -1580,7 +1580,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected interface MappedQueryBuilder<T> {
 
         /**
-         * Builds the JPA criteria query and returns a mapping of DTO getters to criteria expressions.
+         * Builds the Jakarta Persistence criteria query and returns a mapping of DTO getters to criteria expressions.
          * @param criteriaBuilder The criteria builder to use.
          * @param query The criteria query to build upon.
          * @param root The root of the entity to query.
@@ -1602,7 +1602,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
      * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
-     * The default implementation sets Hibernate, EclipseLink and JPA 2.0 cache-related hints. When <code>cacheable</code> argument is
+     * The default implementation sets Hibernate, EclipseLink and Jakarta Persistence cache-related hints. When <code>cacheable</code> argument is
      * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
      * this is not supported by OpenJPA.
      * @param <T> The generic type of the entity or a DTO subclass thereof.
@@ -1739,7 +1739,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
      * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
-     * @param queryBuilder This allows fine-graining the JPA criteria query.
+     * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
      * @see Page
      * @see Criteria
@@ -1757,7 +1757,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
      * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param cacheable Whether the results should be cacheable.
-     * @param queryBuilder This allows fine-graining the JPA criteria query.
+     * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
      * @see Page
      * @see Criteria
@@ -1780,7 +1780,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be
      * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
-     * @param mappedQueryBuilder This allows fine-graining the JPA criteria query and must return a mapping of
+     * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of
      * getters-paths.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
      * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
@@ -1802,7 +1802,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * available by {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param cacheable Whether the results should be cacheable.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
-     * @param queryBuilder This allows fine-graining the JPA criteria query and must return a mapping of
+     * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of
      * getters-paths when result type does not equal entity type.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
      * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.

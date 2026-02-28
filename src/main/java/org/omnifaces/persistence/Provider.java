@@ -42,7 +42,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Enumeration of all supported JPA providers. The provider is automatically detected from the {@link EntityManager}'s
+ * Enumeration of all supported Jakarta Persistence providers. The provider is automatically detected from the {@link EntityManager}'s
  * delegate class.
  * <p>
  * Currently supported providers:

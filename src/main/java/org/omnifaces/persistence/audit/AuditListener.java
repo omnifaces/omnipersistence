@@ -41,7 +41,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
- * JPA entity listener that tracks changes to fields annotated with {@link Audit} and fires a CDI {@link AuditedChange}
+ * Jakarta Persistence entity listener that tracks changes to fields annotated with {@link Audit} and fires a CDI {@link AuditedChange}
  * event for each detected change.
  * <p>
  * Usage:

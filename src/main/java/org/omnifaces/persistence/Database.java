@@ -26,7 +26,7 @@ import jakarta.persistence.EntityManager;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Enumeration of all supported databases. The database is automatically detected from the JPA provider's dialect.
+ * Enumeration of all supported databases. The database is automatically detected from the Jakarta Persistence provider's dialect.
  * <p>
  * Currently supported databases:
  * <ul>
@@ -78,7 +78,7 @@ public enum Database {
 
     /**
      * Internal constructor to define a database and its associated dialect name aliases.
-     * @param aliases Optional aliases that might appear in the JPA dialect name.
+     * @param aliases Optional aliases that might appear in the Jakarta Persistence dialect name.
      */
     Database(String... aliases) {
         this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
@@ -86,7 +86,7 @@ public enum Database {
 
     /**
      * Returns the {@link Database} associated with the given entity manager.
-     * This is determined by inspecting the dialect name provided by the underlying JPA {@link Provider}.
+     * This is determined by inspecting the dialect name provided by the underlying Jakarta Persistence {@link Provider}.
      * @param entityManager The entity manager to detect the database for.
      * @return The detected {@link Database}, or {@link #UNKNOWN} if detection fails or is unsupported.
      */

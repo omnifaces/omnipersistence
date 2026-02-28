@@ -23,9 +23,9 @@ import jakarta.persistence.Version;
  * Mapped superclass for versioned entity with generated ID.
  * It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}, and implements {@link Versioned}.
  * In addition to the "id", "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
- * On pre persist, JPA will automatically set version to 0.
- * On pre update, JPA will automatically increment version with 1.
- * This is useful for optimistic locking; JPA will throw {@link jakarta.persistence.OptimisticLockException} when
+ * On pre persist, Jakarta Persistence will automatically set version to 0.
+ * On pre update, Jakarta Persistence will automatically increment version with 1.
+ * This is useful for optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when
  * a concurrent update is detected.
  * <p>
  * Usage example:
@@ -53,10 +53,10 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
 
     private static final long serialVersionUID = 1L;
 
-    /** The JPA field name of the {@link #getVersion() version} property, to be used in JPQL queries and criteria maps. */
+    /** The Jakarta Persistence field name of the {@link #getVersion() version} property, to be used in JPQL queries and criteria maps. */
     public static final String VERSION = "version";
 
-    /** The version for optimistic locking, automatically managed by JPA. */
+    /** The version for optimistic locking, automatically managed by Jakarta Persistence. */
     @Version
     @Column(nullable = false)
     private Long version;
@@ -66,5 +66,5 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
         return version;
     }
 
-    // No setter! JPA takes care of this.
+    // No setter! Jakarta Persistence takes care of this.
 }

@@ -13,9 +13,9 @@
 /**
  * Root package of OmniPersistence.
  * <p>
- * Contains {@link org.omnifaces.persistence.JPA}, a static utility class complementing the JPA Criteria API,
+ * Contains {@link org.omnifaces.persistence.JPA}, a static utility class complementing the Jakarta Persistence Criteria API,
  * and the {@link org.omnifaces.persistence.Provider} and {@link org.omnifaces.persistence.Database} enums
- * representing the JPA provider and underlying database detected at runtime by
+ * representing the Jakarta Persistence provider and underlying database detected at runtime by
  * {@link org.omnifaces.persistence.service.BaseEntityService}.
  *
  * @see org.omnifaces.persistence.service.BaseEntityService

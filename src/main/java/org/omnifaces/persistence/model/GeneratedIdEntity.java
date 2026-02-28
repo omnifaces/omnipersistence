@@ -25,7 +25,7 @@ import jakarta.persistence.MappedSuperclass;
  * Mapped superclass for entity with generated ID.
  * It extends from {@link BaseEntity}.
  * It specifies a {@link Id} column, named "id", with {@link GeneratedValue} strategy {@link jakarta.persistence.GenerationType#IDENTITY IDENTITY}.
- * JPA will automatically take care of the ID.
+ * Jakarta Persistence will automatically take care of the ID.
  * <p>
  * Usage example:
  * <pre>
@@ -50,7 +50,7 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
 
     private static final long serialVersionUID = 1L;
 
-    /** The JPA field name of the {@link #getId() id} property, to be used in JPQL queries and criteria maps. */
+    /** The Jakarta Persistence field name of the {@link #getId() id} property, to be used in JPQL queries and criteria maps. */
     public static final String ID = "id";
 
     /** The generated ID of this entity. */

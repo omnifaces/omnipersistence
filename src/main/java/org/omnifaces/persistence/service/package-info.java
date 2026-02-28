@@ -11,7 +11,7 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Service layer for JPA entities.
+ * Service layer for Jakarta Persistence entities.
  * <p>
  * The sole public entry point is {@link BaseEntityService}, a generic CRUD service
  * that supports lookup, persist, update, delete, soft-delete, batch operations, JPQL shortcuts, lazy collection

@@ -79,7 +79,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
         var fetchedEntityProperties = new ArrayList<List<Object>>();
         distinctEntities = buildAndSortPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntityProperties);
-        entityManager.clear(); // Detach all managed entities to prevent JPA provider from flushing spurious UPDATEs for entities loaded by the postponed fetch.
+        entityManager.clear(); // Detach all managed entities to prevent Jakarta Persistence provider from flushing spurious UPDATEs for entities loaded by the postponed fetch.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
     }
@@ -210,7 +210,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {
         for (var i = 0; i < entities.size(); i++) {
             for (var j = 0; j < fetchPaths.size(); j++) {
-                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j)); // Set copy onto the detached entity, bypassing JPA tracking.
+                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j)); // Set copy onto the detached entity, bypassing Jakarta Persistence tracking.
             }
         }
     }
