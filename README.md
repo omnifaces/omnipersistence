@@ -35,6 +35,7 @@ Requires a _minimum_ of **Java 17** and **Jakarta EE 10**.
 10. [JPA utilities](#10-jpa-utilities)
 11. [Switchable DataSource](#11-switchable-datasource)
 12. [Comparison with Jakarta Data](#12-comparison-with-jakarta-data)
+13. [Integration tests and further examples](#13-integration-tests-and-further-examples)
 
 ---
 
@@ -488,12 +489,6 @@ Swap the file (or override via a custom `PropertiesFileLoader` SPI) to point at 
 
 ---
 
-## Integration tests and further examples
-
-More detailed usage — including JSF/DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading JSF components directly on top of `BaseEntityService` and `Page`.
-
----
-
 ## 12. Comparison with Jakarta Data
 
 [Jakarta Data](https://jakarta.ee/specifications/data/1.0/) is a new specification introduced in Jakarta EE 11 that standardises a repository-pattern API for data access across relational and NoSQL databases. Both OmniPersistence and Jakarta Data aim to reduce persistence boilerplate, but they make very different architectural choices. Understanding those differences helps you pick the right tool for your project.
@@ -705,3 +700,10 @@ OmniPersistence is **exclusively JPA (relational)**. It exposes full JPA Criteri
 **Choose OmniPersistence** when you are building a Jakarta EE 10 (or later) application that uses a relational database through JPA, and you want a rich, immediately productive toolkit: stateful entities with lazy loading and cascades, built-in soft delete, auditing, flexible paginated search with typed criteria, and CDI lifecycle hooks — all without any annotation-processor tooling requirements.
 
 **Choose Jakarta Data** when you need to target both relational and NoSQL datastores from a single programming model, when you want the compile-time safety of validated query strings, when your architecture calls for a strict stateless data layer, or when you are starting a Jakarta EE 11 greenfield project that will benefit from a standard specification with multiple vendor implementations.
+
+---
+
+## 13. Integration tests and further examples
+
+More detailed usage — including JSF/DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading JSF components directly on top of `BaseEntityService` and `Page`.
+
