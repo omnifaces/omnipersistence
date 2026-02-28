@@ -12,7 +12,7 @@
     <packaging>jar</packaging>
 
     <name>OmniPersistence</name>
-    <description>Utilities for JPA, JDBC and DataSources</description>
+    <description>Utilities for Jakarta Persistence, JDBC and DataSources</description>
     <url>https://github.com/omnifaces/omnipersistence</url>
     <organization>
         <name>OmniFaces</name>
