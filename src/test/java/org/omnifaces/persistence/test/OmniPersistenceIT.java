@@ -527,6 +527,23 @@ public abstract class OmniPersistenceIT {
         result.forEach(p -> assertNotNull(p.getOwner().getEmail(), "Owner email is accessible"));
     }
 
+    @Test
+    void testPhonePageSortedByTransientEmail() {
+        var result = phoneService().getPageWithOwners(Page.with().range(0, 10).orderBy("email", true).build(), false);
+        assertEquals(10, result.size(), "Page has 10 phones");
+        result.forEach(p -> assertNotNull(p.getOwner(), "Owner is fetched"));
+        var emails = result.stream().map(Phone::getEmail).toList();
+        assertEquals(emails.stream().sorted().toList(), emails, "Phones are sorted ascending by transient owner email");
+    }
+
+    @Test
+    void testPhonePageFilteredByTransientEmail() {
+        var expectedEmail = "name0@example.com";
+        var result = phoneService().getPageWithOwners(Page.with().allMatch(Map.of("email", expectedEmail)).build(), false);
+        assertEquals(TOTAL_PHONES_PER_PERSON_0, result.size(), "Only phones of person 0 match the owner email filter");
+        result.forEach(p -> assertEquals(expectedEmail, p.getEmail(), "All matching phones belong to the expected owner"));
+    }
+
 
     // Page with DTO mapping ------------------------------------------------------------------------------------------
 

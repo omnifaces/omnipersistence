@@ -13,11 +13,14 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.String.format;
+import static org.omnifaces.utils.reflect.Reflections.findField;
+import static org.omnifaces.utils.reflect.Reflections.findGetter;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.persistence.Transient;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
@@ -89,6 +92,9 @@ class RootPathResolver implements PathResolver {
                     else if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
                         path = guessManyOrOneToOnePath(attribute);
                     }
+                    else {
+                        path = null;
+                    }
 
                     if (depth != 1 || path == null) {
                         throw new IllegalArgumentException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
@@ -101,8 +107,9 @@ class RootPathResolver implements PathResolver {
         return path;
     }
 
-    private boolean isTransient(Class<?> type, String property) {
-        return true; // TODO implement?
+    private static boolean isTransient(Class<?> type, String property) {
+        return findField(type, property).map(f -> f.isAnnotationPresent(Transient.class)).orElse(false)
+            || findGetter(type, property).map(m -> m.isAnnotationPresent(Transient.class)).orElse(false);
     }
 
     private static Path<?> getSupertypePath(Path<?> path, String attribute) {

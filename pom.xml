@@ -97,7 +97,7 @@
         <dependency>
             <groupId>org.omnifaces</groupId>
             <artifactId>omniutils</artifactId>
-            <version>0.16</version>
+            <version>0.17</version>
         </dependency>
 
         <!-- Test dependencies. -->
