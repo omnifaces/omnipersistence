@@ -511,7 +511,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Functional interface to fine-grain a Jakarta Persistence criteria query for any of
-     * {@link #list(CriteriaQueryBuilder, Consumer)} or {@link #find(CriteriaQueryBuilder, Consumer)} methods.
+     * {@link #list(CriteriaQueryBuilder, Map)} or {@link #find(CriteriaQueryBuilder, Map)} methods.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
      * <pre>
@@ -521,7 +521,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *     public List&lt;YourEntity&gt; getFooByType(Type type) {
      *         return list((criteriaBuilder, query, root) -&gt; {
      *             query.where(criteriaBuilder.equal(root.get("type"), type));
-     *         }, noop());
+     *         }, emptyMap());
      *     }
      *
      * }
@@ -566,25 +566,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * Usage example:
      * <pre>
-     * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
      * <pre>
-     * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * @param jpql The Java Persistence Query Language statement.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
      * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
      */
-    protected Optional<E> find(String jpql, Consumer<Map<String, Object>> parameters) {
+    protected Optional<E> find(String jpql, Map<String, Object> parameters) {
         return findSingleResult(list(jpql, parameters));
     }
 
@@ -597,17 +591,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         (criteriaBuilder, query, root) -&gt; {
      *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
      *         },
-     *         params -&gt; {
-     *             params.put("foo", Type.FOO);
-     *         }
+     *         Map.of("foo", Type.FOO)
      * );
      * </pre>
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
      */
-    protected Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+    protected Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return findSingleResult(list(queryBuilder, parameters));
     }
 
@@ -646,34 +638,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Find first entity by the given query and mapped parameters, if any.
-     * The difference with {@link #find(String, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * The difference with {@link #find(String, Map)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
      * <p>
      * Usage example:
      * <pre>
-     * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
      * <pre>
-     * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * @param jpql The Java Persistence Query Language statement.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
      */
-    protected Optional<E> findFirst(String jpql, Consumer<Map<String, Object>> parameters) {
+    protected Optional<E> findFirst(String jpql, Map<String, Object> parameters) {
         return findFirstResult(createQuery(select(jpql), parameters));
     }
 
     /**
      * Find first entity by {@link CriteriaQueryBuilder} and mapped parameters, if any.
-     * The difference with {@link #find(CriteriaQueryBuilder, Consumer)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * The difference with {@link #find(CriteriaQueryBuilder, Map)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
      * <p>
      * Usage example:
      * <pre>
@@ -681,16 +667,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         (criteriaBuilder, query, root) -&gt; {
      *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
      *         },
-     *         params -&gt; {
-     *             params.put("foo", Type.FOO);
-     *         }
+     *         Map.of("foo", Type.FOO)
      * );
      * </pre>
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
-    protected Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+    protected Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return findFirstResult(createQuery(queryBuilder, parameters));
     }
 
@@ -808,15 +792,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         String paramNames;
-        Consumer<Map<String, Object>> paramValues;
+        Map<String, Object> paramValues;
 
         if (getProvider() == ECLIPSELINK) {
             paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
-            paramValues = p -> range(0, copyOfIds.size()).forEach(i -> p.put("id" + i, copyOfIds.get(i)));
+            var map = new HashMap<String, Object>(copyOfIds.size());
+            range(0, copyOfIds.size()).forEach(i -> map.put("id" + i, copyOfIds.get(i)));
+            paramValues = map;
         }
         else {
             paramNames = ":ids";
-            paramValues = p -> p.put("ids", copyOfIds);
+            paramValues = Map.of("ids", copyOfIds);
         }
 
         var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
@@ -897,24 +883,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * Usage example:
      * <pre>
-     * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
      * <pre>
-     * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * @param jpql The Java Persistence Query Language statement.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return List of entities matching the given query and mapped parameters, if any.
      */
-    protected List<E> list(String jpql, Consumer<Map<String, Object>> parameters) {
+    protected List<E> list(String jpql, Map<String, Object> parameters) {
         return createQuery(select(jpql), parameters).getResultList();
     }
 
@@ -927,16 +907,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         (criteriaBuilder, query, root) -&gt; {
      *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
      *         },
-     *         params -&gt; {
-     *             params.put("foo", Type.FOO);
-     *         }
+     *         Map.of("foo", Type.FOO)
      * );
      * </pre>
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
-     * @param parameters To put the mapped query parameters in.
+     * @param parameters The mapped query parameters.
      * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
-    protected List<E> list(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+    protected List<E> list(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return createQuery(queryBuilder, parameters).getResultList();
     }
 
@@ -964,20 +942,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return query;
     }
 
-    private TypedQuery<E> createQuery(String jpql, Consumer<Map<String, Object>> parameters) {
+    private TypedQuery<E> createQuery(String jpql, Map<String, Object> parameters) {
         var query = getEntityManager().createQuery(jpql, entityType);
-        setSuppliedParameters(query, parameters);
+        setMappedParameters(query, parameters);
         return query;
     }
 
-    private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Consumer<Map<String, Object>> parameters) {
+    private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         var criteriaBuilder = getEntityManager().getCriteriaBuilder();
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
         var root = buildRoot(criteriaQuery, null);
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
         var query = getEntityManager().createQuery(criteriaQuery);
-        setSuppliedParameters(query, parameters);
+        setMappedParameters(query, parameters);
         return query;
     }
 
@@ -1121,25 +1099,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * Usage example:
      * <pre>
-     * int affectedRows = update("UPDATE Foo f SET f.bar = :bar WHERE f.baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * int affectedRows = update("UPDATE Foo f SET f.bar = :bar WHERE f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
      * <pre>
-     * int affectedRows = update("SET bar = :bar WHERE baz = :baz", params -&gt; {
-     *     params.put("bar", bar);
-     *     params.put("baz", baz);
-     * });
+     * int affectedRows = update("SET bar = :bar WHERE baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * @param jpql The Java Persistence Query Language statement.
-     * @param parameters To put the mapped query parameters in, if any.
+     * @param parameters The mapped query parameters.
      * @return The number of entities updated or deleted.
      * @see Query#executeUpdate()
      */
-    protected int update(String jpql, Consumer<Map<String, Object>> parameters) {
+    protected int update(String jpql, Map<String, Object> parameters) {
         return createQuery(update(jpql), parameters).executeUpdate();
     }
 
@@ -1852,12 +1824,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static <Q> void setMappedParameters(TypedQuery<Q> typedQuery, Map<String, Object> mappedParameters) {
         logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, mappedParameters));
         mappedParameters.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
-    }
-
-    private static <Q> void setSuppliedParameters(TypedQuery<Q> typedQuery, Consumer<Map<String, Object>> suppliedParameters) {
-        var mappedParameters = new HashMap<String, Object>();
-        suppliedParameters.accept(mappedParameters);
-        setMappedParameters(typedQuery, mappedParameters);
     }
 
     private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {

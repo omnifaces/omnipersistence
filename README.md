@@ -170,7 +170,7 @@ personService.delete(List.of(a, b, c));
 Optional<Person> p = personService.find("SELECT p FROM Person p WHERE p.email = ?1", email);
 Optional<Person> p = personService.find("WHERE e.email = ?1", email);
 
-List<Person> list  = personService.list("WHERE e.gender = :g", params -> params.put("g", MALE));
+List<Person> list  = personService.list("WHERE e.gender = :g", Map.of("g", MALE));
 int affected       = personService.update("SET e.active = false WHERE e.lastLogin < ?1", cutoff);
 ```
 
