@@ -13,7 +13,7 @@ OmniPersistence reduces boilerplate in the Jakarta Persistence (JPA) layer by pr
 <dependency>
     <groupId>org.omnifaces</groupId>
     <artifactId>omnipersistence</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
 </dependency>
 ```
 
