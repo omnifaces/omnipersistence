@@ -31,7 +31,6 @@ import static java.util.stream.IntStream.range;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
-import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.JPA.findFirstResult;
@@ -39,9 +38,6 @@ import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
-import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE;
-import static org.omnifaces.persistence.Provider.QUERY_HINT_ECLIPSELINK_REFRESH;
-import static org.omnifaces.persistence.Provider.QUERY_HINT_HIBERNATE_CACHEABLE;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.coalesce;
@@ -81,8 +77,6 @@ import java.util.stream.StreamSupport;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
-import jakarta.persistence.CacheRetrieveMode;
-import jakarta.persistence.CacheStoreMode;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
@@ -1602,9 +1596,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
      * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint.
-     * The default implementation sets Hibernate, EclipseLink and Jakarta Persistence cache-related hints. When <code>cacheable</code> argument is
-     * <code>true</code>, then it reads from cache where applicable, else it will read from DB and force a refresh of cache. Note that
-     * this is not supported by OpenJPA.
+     * The default implementation delegates to {@link Provider#configureSecondLevelCache(Query, boolean)}.
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param cacheable Whether the results should be cacheable.
@@ -1612,24 +1604,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * to be executed.
      */
     protected <T extends E> Consumer<TypedQuery<?>> onPage(Class<T> resultType, boolean cacheable) {
-        return typedQuery -> {
-            if (getProvider() == HIBERNATE) {
-                typedQuery
-                    .setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable);
-            }
-            else if (getProvider() == ECLIPSELINK) {
-                typedQuery
-                    .setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
-                    .setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
-            }
-
-            if (getProvider() != OPENJPA) {
-                // OpenJPA doesn't support 2nd level cache.
-                typedQuery
-                    .setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
-                    .setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
-            }
-        };
+        return typedQuery -> getProvider().configureSecondLevelCache(typedQuery, cacheable);
     }
 
     /**
@@ -2084,14 +2059,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var field = parameter.getKey();
         var criteria = parameter.getValue();
         var value = Criteria.unwrap(criteria);
+        Expression<?> path = null;
+        Class<?> type = null;
 
         if (oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())) {
             // For @OneToMany fields with collection values, avoid pathResolver.get(field) which adds an unwanted JOIN to the main query root.
-            return buildTypedPredicate(pathResolver.get(null), null, field, criteria, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
+            path = pathResolver.get(null);
+        }
+        else {
+            path = pathResolver.get(elementCollections.get().contains(field) ? pathResolver.join(field) : field);
+            type = ID.equals(field) ? identifierType : path.getJavaType();
         }
 
-        var path = pathResolver.get(elementCollections.get().contains(field) ? pathResolver.join(field) : field);
-        var type = ID.equals(field) ? identifierType : path.getJavaType();
         return buildTypedPredicate(path, type, field, criteria, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters));
     }
 

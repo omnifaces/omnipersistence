@@ -16,6 +16,8 @@ import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.EL
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
+import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.Lang.isOneOf;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
@@ -29,10 +31,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import jakarta.persistence.CacheRetrieveMode;
+import jakarta.persistence.CacheStoreMode;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Query;
 import jakarta.persistence.Table;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.metamodel.Attribute;
@@ -117,6 +122,12 @@ public enum Provider {
             return invokeOnProxy(entity, "getIdentifier", super::getIdentifier);
         }
 
+        @Override
+        public void configureSecondLevelCache(Query query, boolean cacheable) {
+            query.setHint(QUERY_HINT_HIBERNATE_CACHEABLE, cacheable);
+            super.configureSecondLevelCache(query, cacheable);
+        }
+
         @SuppressWarnings("unchecked")
         private <T, I extends Comparable<I> & Serializable, E extends BaseEntity<I>> T invokeOnProxy(E entity, String methodName, Function<E, T> fallback) {
             return isProxy(entity) ? (T) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), methodName) : fallback.apply(entity);
@@ -137,6 +148,14 @@ public enum Provider {
         @Override
         public boolean isAggregation(Expression<?> expression) {
             return ECLIPSELINK_FUNCTION_EXPRESSION_IMPL.get().isInstance(expression) && AGGREGATE_FUNCTIONS.contains(invokeMethod(expression, "getOperation"));
+        }
+
+        @Override
+        public void configureSecondLevelCache(Query query, boolean cacheable) {
+            query
+                .setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
+                .setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
+            super.configureSecondLevelCache(query, cacheable);
         }
     },
 
@@ -168,6 +187,12 @@ public enum Provider {
             // For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
             return !isElementCollection(attribute) && super.isOneToMany(attribute);
         }
+
+        @Override
+        public void configureSecondLevelCache(Query query, boolean cacheable) {
+            var openJpaQuery = OPENJPA_QUERY.map(query::unwrap).orElse(query);
+            invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
+        }
     },
 
     /**
@@ -196,6 +221,7 @@ public enum Provider {
     private static final Optional<Class<Object>> HIBERNATE_5_2_0_COMPARISON_PREDICATE = findClass("org.hibernate.query.criteria.internal.predicate.ComparisonPredicate");
     private static final Optional<Class<Object>> HIBERNATE_COMPARISON_PREDICATE = Stream.of(HIBERNATE_5_2_0_COMPARISON_PREDICATE, HIBERNATE_4_3_0_COMPARISON_PREDICATE, HIBERNATE_3_5_0_COMPARISON_PREDICATE).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
     private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
+    private static final Optional<Class<Object>> OPENJPA_QUERY = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
@@ -369,6 +395,20 @@ public enum Provider {
         Class<E> entityType = getEntityType(entity);
         var table = entityType.getAnnotation(Table.class);
         return table != null ? table.name() : entityType.getSimpleName().toUpperCase();
+    }
+
+    /**
+     * Applies 2nd level cache-related hints to the given query. The default implementation sets the standard Jakarta
+     * Persistence {@code jakarta.persistence.cache.storeMode} and {@code jakarta.persistence.cache.retrieveMode} hints.
+     * When {@code cacheable} is {@code true}, results are read from and stored in the 2nd level cache; otherwise
+     * results are read from the DB and the cache is force-refreshed.
+     * @param query The query to apply 2nd level cache hints to.
+     * @param cacheable Whether results should be read from and stored in the 2nd level cache.
+     */
+    public void configureSecondLevelCache(Query query, boolean cacheable) {
+        query
+            .setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
+            .setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
     }
 
 }
