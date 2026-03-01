@@ -12,9 +12,21 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import static jakarta.transaction.Transactional.TxType.REQUIRED;
+
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+
+import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.utils.collection.PartialResultList;
 
 @ApplicationScoped
 public class PhoneServiceCDI extends PhoneService {
 
+    @Override
+    @Transactional(REQUIRED)
+    public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
+        return super.getPageWithOwners(page, count);
+    }
 }
