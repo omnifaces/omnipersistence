@@ -29,7 +29,6 @@ import java.lang.reflect.Field;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import jakarta.persistence.CacheRetrieveMode;
 import jakarta.persistence.CacheStoreMode;
@@ -76,25 +75,12 @@ public enum Provider {
         @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
             var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
-
-            if (HIBERNATE_SESSION_FACTORY.get().isInstance(unwrappedEntityManagerFactory)) {
-                // 5.2+ has merged hibernate-entitymanager into hibernate-core, and made EntityManagerFactory impl an instance of SessionFactory, and removed getDialect() shortcut method.
-                return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
-            }
-            else {
-                return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getSessionFactory"), "getDialect").getClass().getSimpleName();
-            }
+            return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
         }
 
         @Override
         public boolean isAggregation(Expression<?> expression) {
-            if (HIBERNATE_6_0_0_AGGREGATE_FUNCTION.isPresent()) {
-                return HIBERNATE_6_0_0_AGGREGATE_FUNCTION.get().isInstance(expression);
-            }
-            else {
-                return HIBERNATE_BASIC_FUNCTION_EXPRESSION.get().isInstance(expression) && (boolean) invokeMethod(expression, "isAggregation")
-                    || HIBERNATE_COMPARISON_PREDICATE.get().isInstance(expression) && (isAggregation(invokeMethod(expression, "getLeftHandOperand")) || isAggregation(invokeMethod(expression, "getRightHandOperand")));
-            }
+            return HIBERNATE_AGGREGATE_FUNCTION.get().isInstance(expression);
         }
 
         @Override
@@ -190,7 +176,7 @@ public enum Provider {
 
         @Override
         public void configureSecondLevelCache(Query query, boolean cacheable) {
-            var openJpaQuery = OPENJPA_QUERY.map(query::unwrap).orElse(query);
+            var openJpaQuery = OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query);
             invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
         }
     },
@@ -210,18 +196,9 @@ public enum Provider {
     public static final String QUERY_HINT_ECLIPSELINK_REFRESH = "eclipselink.refresh"; // true | false
 
     private static final Optional<Class<Object>> HIBERNATE_PROXY = findClass("org.hibernate.proxy.HibernateProxy");
-    private static final Optional<Class<Object>> HIBERNATE_SESSION_FACTORY = findClass("org.hibernate.SessionFactory");
-    private static final Optional<Class<Object>> HIBERNATE_3_5_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.ejb.criteria.expression.function.BasicFunctionExpression");
-    private static final Optional<Class<Object>> HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.jpa.criteria.expression.function.BasicFunctionExpression");
-    private static final Optional<Class<Object>> HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION = findClass("org.hibernate.query.criteria.internal.expression.function.BasicFunctionExpression");
-    private static final Optional<Class<Object>> HIBERNATE_BASIC_FUNCTION_EXPRESSION = Stream.of(HIBERNATE_5_2_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_4_3_0_BASIC_FUNCTION_EXPRESSION, HIBERNATE_3_5_0_BASIC_FUNCTION_EXPRESSION).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
-    private static final Optional<Class<Object>> HIBERNATE_6_0_0_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
-    private static final Optional<Class<Object>> HIBERNATE_3_5_0_COMPARISON_PREDICATE = findClass("org.hibernate.ejb.criteria.predicate.ComparisonPredicate");
-    private static final Optional<Class<Object>> HIBERNATE_4_3_0_COMPARISON_PREDICATE = findClass("org.hibernate.jpa.criteria.predicate.ComparisonPredicate");
-    private static final Optional<Class<Object>> HIBERNATE_5_2_0_COMPARISON_PREDICATE = findClass("org.hibernate.query.criteria.internal.predicate.ComparisonPredicate");
-    private static final Optional<Class<Object>> HIBERNATE_COMPARISON_PREDICATE = Stream.of(HIBERNATE_5_2_0_COMPARISON_PREDICATE, HIBERNATE_4_3_0_COMPARISON_PREDICATE, HIBERNATE_3_5_0_COMPARISON_PREDICATE).filter(Optional::isPresent).findFirst().orElse(Optional.empty());
+    private static final Optional<Class<Object>> HIBERNATE_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
     private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
-    private static final Optional<Class<Object>> OPENJPA_QUERY = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
+    private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
