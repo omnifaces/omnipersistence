@@ -102,10 +102,10 @@ The ID type `I` can be any `Comparable & Serializable` — `Long`, `String`, `UU
 
 ## 2. BaseEntityService
 
-Extend `BaseEntityService<I, E>` to get a full CRUD service for your entity. Works as both an EJB (`@Stateless`) and a CDI bean (`@ApplicationScoped`). The default persistence unit is injected automatically — no boilerplate needed:
+Extend `BaseEntityService<I, E>` to get a full CRUD service for your entity. Works as both a CDI bean (`@ApplicationScoped`) and an EJB (`@Stateless`). The default persistence unit is injected automatically — no boilerplate needed:
 
 ```java
-@Stateless  // or @ApplicationScoped
+@ApplicationScoped // or @Stateless if you're still on EJB
 public class PersonService extends BaseEntityService<Long, Person> {
     // nothing required — default @PersistenceContext is injected by BaseEntityService
 }
@@ -114,7 +114,7 @@ public class PersonService extends BaseEntityService<Long, Person> {
 Override `getEntityManager()` only when you need a non-default persistence unit:
 
 ```java
-@Stateless
+@ApplicationScoped
 public class PersonService extends BaseEntityService<Long, Person> {
 
     @PersistenceContext(unitName = "secondary")
@@ -584,7 +584,7 @@ Jakarta Data's `PageRequest` + `Page<T>` covers offset pagination and the total 
 | Feature | OmniPersistence | Jakarta Data |
 |---|---|---|
 | Offset pagination | ✅ `Page` + `PartialResultList` | ✅ `PageRequest` + `Page<T>` |
-| Cursor/keyset pagination | ✅ `Page.with().last(entity)` | ✅ `CursoredPage<T>` |
+| Cursor/keyset pagination | ✅ `Page.with().range(entity, limit, reversed)` | ✅ `CursoredPage<T>` |
 | Total count | ✅ `getEstimatedTotalNumberOfResults()` | ✅ `page.totalElements()` |
 | Criteria wrappers (Like, Between, Not…) | ✅ built-in | ❌ |
 | AND / OR condition grouping in pagination | ✅ `allMatch` / `anyMatch` | ❌ |
@@ -705,7 +705,7 @@ OmniPersistence is **exclusively Jakarta Persistence (relational)**. It exposes 
 
 ## 13. Integration tests and further examples
 
-OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@Stateless` EJB beans and once with services as `@ApplicationScoped` CDI beans — and the full suite is run against three server/provider combinations:
+OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations:
 
 | Server | JPA Provider |
 |---|---|
