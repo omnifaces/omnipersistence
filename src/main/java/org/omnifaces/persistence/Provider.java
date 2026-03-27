@@ -46,8 +46,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Enumeration of all supported Jakarta Persistence providers. The provider is automatically detected from the {@link EntityManager}'s
- * delegate class.
+ * Enumeration of all supported Jakarta Persistence providers. The provider is automatically detected from the {@link EntityManager}'s delegate class.
  * <p>
  * Currently supported providers:
  * <ul>
@@ -56,9 +55,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <li>{@link #OPENJPA}
  * </ul>
  * <p>
- * Each provider has specific handling for aggregation detection, proxy resolution, dialect name resolution,
- * and relationship mapping quirks. The {@link BaseEntityService} uses this internally to generate correct queries
- * across different providers.
+ * Each provider has specific handling for aggregation detection, proxy resolution, dialect name resolution, and relationship mapping quirks. The
+ * {@link BaseEntityService} uses this internally to generate correct queries across different providers.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -75,7 +73,8 @@ public enum Provider {
         @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
             var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
-            return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass().getSimpleName();
+            return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass()
+                .getSimpleName();
         }
 
         @Override
@@ -118,6 +117,7 @@ public enum Provider {
         private <T, I extends Comparable<I> & Serializable, E extends BaseEntity<I>> T invokeOnProxy(E entity, String methodName, Function<E, T> fallback) {
             return isProxy(entity) ? (T) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), methodName) : fallback.apply(entity);
         }
+
     },
 
     /**
@@ -143,6 +143,7 @@ public enum Provider {
                 .setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
             super.configureSecondLevelCache(query, cacheable);
         }
+
     },
 
     /**
@@ -158,7 +159,8 @@ public enum Provider {
 
         @Override
         public boolean isAggregation(Expression<?> expression) {
-            // We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not trivial to get here.
+            // We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not
+            // trivial to get here.
             return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase());
         }
 
@@ -179,6 +181,7 @@ public enum Provider {
             var openJpaQuery = OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query);
             invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
         }
+
     },
 
     /**
@@ -197,7 +200,9 @@ public enum Provider {
 
     private static final Optional<Class<Object>> HIBERNATE_PROXY = findClass("org.hibernate.proxy.HibernateProxy");
     private static final Optional<Class<Object>> HIBERNATE_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
-    private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass("org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl");
+    private static final Optional<Class<Object>> ECLIPSELINK_FUNCTION_EXPRESSION_IMPL = findClass(
+        "org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl"
+    );
     private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
 
@@ -214,6 +219,7 @@ public enum Provider {
 
     /**
      * Returns the {@link Provider} associated with the given entity manager.
+     * 
      * @param entityManager The entity manager to detect the provider for.
      * @return The {@link Provider} associated with the given entity manager.
      */
@@ -235,8 +241,8 @@ public enum Provider {
     }
 
     /**
-     * Returns the dialect name of the given entity manager factory.
-     * The default implementation throws {@link UnsupportedOperationException}.
+     * Returns the dialect name of the given entity manager factory. The default implementation throws {@link UnsupportedOperationException}.
+     * 
      * @param entityManagerFactory The entity manager factory to get the dialect name for.
      * @return The dialect name of the given entity manager factory.
      */
@@ -245,8 +251,8 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given expression is an aggregation.
-     * The default implementation throws {@link UnsupportedOperationException}.
+     * Returns whether the given expression is an aggregation. The default implementation throws {@link UnsupportedOperationException}.
+     * 
      * @param expression The expression to check.
      * @return Whether the given expression is an aggregation.
      */
@@ -255,8 +261,9 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given attribute is an element collection.
-     * The default implementation returns {@code true} if {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ELEMENT_COLLECTION}.
+     * Returns whether the given attribute is an element collection. The default implementation returns {@code true} if
+     * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ELEMENT_COLLECTION}.
+     * 
      * @param attribute The attribute to check.
      * @return Whether the given attribute is an element collection.
      */
@@ -265,8 +272,9 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given attribute is a one-to-many relationship.
-     * The default implementation returns {@code true} if {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ONE_TO_MANY}.
+     * Returns whether the given attribute is a one-to-many relationship. The default implementation returns {@code true} if
+     * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ONE_TO_MANY}.
+     * 
      * @param attribute The attribute to check.
      * @return Whether the given attribute is a one-to-many relationship.
      */
@@ -275,8 +283,9 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given attribute is a many-to-one or one-to-one relationship.
-     * The default implementation returns {@code true} if {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#MANY_TO_ONE} or {@link PersistentAttributeType#ONE_TO_ONE}.
+     * Returns whether the given attribute is a many-to-one or one-to-one relationship. The default implementation returns {@code true} if
+     * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#MANY_TO_ONE} or {@link PersistentAttributeType#ONE_TO_ONE}.
+     * 
      * @param attribute The attribute to check.
      * @return Whether the given attribute is a many-to-one or one-to-one relationship.
      */
@@ -285,8 +294,8 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given entity is a proxy.
-     * The default implementation returns {@code false}.
+     * Returns whether the given entity is a proxy. The default implementation returns {@code false}.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to check.
@@ -297,8 +306,8 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given entity is an uninitialized proxy.
-     * The default implementation returns {@code false}.
+     * Returns whether the given entity is an uninitialized proxy. The default implementation returns {@code false}.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to check.
@@ -309,8 +318,9 @@ public enum Provider {
     }
 
     /**
-     * Returns the dereferenced entity of the given entity. If it is a proxy, then the actual implementation will be returned.
-     * The default implementation directly returns the given entity.
+     * Returns the dereferenced entity of the given entity. If it is a proxy, then the actual implementation will be returned. The default implementation
+     * directly returns the given entity.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to dereference.
@@ -321,8 +331,9 @@ public enum Provider {
     }
 
     /**
-     * Returns the actual entity type of the given entity. If it is a proxy, then the type of the actual implementation will be returned.
-     * The default implementation returns the first class in the hierarchy having the {@link Entity} annotation.
+     * Returns the actual entity type of the given entity. If it is a proxy, then the type of the actual implementation will be returned. The default
+     * implementation returns the first class in the hierarchy having the {@link Entity} annotation.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the type for.
@@ -336,8 +347,7 @@ public enum Provider {
 
         Class<? extends BaseEntity> entityType = entity.getClass();
 
-        while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null)
-        {
+        while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null) {
             entityType = (Class<? extends BaseEntity>) entityType.getSuperclass();
         }
 
@@ -345,8 +355,9 @@ public enum Provider {
     }
 
     /**
-     * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy.
-     * The default implementation returns {@link BaseEntity#getId()}.
+     * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy. The default implementation returns
+     * {@link BaseEntity#getId()}.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the identifier for.
@@ -357,8 +368,9 @@ public enum Provider {
     }
 
     /**
-     * Returns the table name of the given entity.
-     * The default implementation returns the {@link Table} annotation of {@link #getEntityType(BaseEntity)} or else defaults to entity class' simple name in upper cased form.
+     * Returns the table name of the given entity. The default implementation returns the {@link Table} annotation of {@link #getEntityType(BaseEntity)} or else
+     * defaults to entity class' simple name in upper cased form.
+     * 
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the table name for.
@@ -375,10 +387,10 @@ public enum Provider {
     }
 
     /**
-     * Applies 2nd level cache-related hints to the given query. The default implementation sets the standard Jakarta
-     * Persistence {@code jakarta.persistence.cache.storeMode} and {@code jakarta.persistence.cache.retrieveMode} hints.
-     * When {@code cacheable} is {@code true}, results are read from and stored in the 2nd level cache; otherwise
-     * results are read from the DB and the cache is force-refreshed.
+     * Applies 2nd level cache-related hints to the given query. The default implementation sets the standard Jakarta Persistence
+     * {@code jakarta.persistence.cache.storeMode} and {@code jakarta.persistence.cache.retrieveMode} hints. When {@code cacheable} is {@code true}, results are
+     * read from and stored in the 2nd level cache; otherwise results are read from the DB and the cache is force-refreshed.
+     * 
      * @param query The query to apply 2nd level cache hints to.
      * @param cacheable Whether results should be read from and stored in the 2nd level cache.
      */

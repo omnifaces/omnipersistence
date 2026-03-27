@@ -36,14 +36,15 @@ import jakarta.persistence.criteria.Predicate;
  * </ul>
  * <p>
  * Usage examples:
+ * 
  * <pre>
- * criteria.put("name", Like.contains("john"));     // LOWER(name) LIKE '%john%'
- * criteria.put("name", Like.startsWith("john"));   // LOWER(name) LIKE 'john%'
+ * criteria.put("name", Like.contains("john")); // LOWER(name) LIKE '%john%'
+ * criteria.put("name", Like.startsWith("john")); // LOWER(name) LIKE 'john%'
  * criteria.put("email", Like.endsWith("@foo.com")); // LOWER(email) LIKE '%@foo.com'
  * </pre>
  * <p>
- * This also works on enum and boolean fields. For enums, it will match enum constants whose name contains the
- * search string and generate an IN predicate. For booleans, it delegates to {@link Bool}.
+ * This also works on enum and boolean fields. For enums, it will match enum constants whose name contains the search string and generate an IN predicate. For
+ * booleans, it delegates to {@link Bool}.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -53,9 +54,7 @@ import jakarta.persistence.criteria.Predicate;
 public final class Like extends Criteria<String> {
 
     private enum Type {
-        STARTS_WITH,
-        ENDS_WITH,
-        CONTAINS;
+        STARTS_WITH, ENDS_WITH, CONTAINS;
     }
 
     private Type type;
@@ -67,6 +66,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns a new LIKE criteria that matches values starting with the given string.
+     * 
      * @param value The string value.
      * @return A new STARTS_WITH LIKE criteria.
      */
@@ -76,6 +76,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns a new LIKE criteria that matches values ending with the given string.
+     * 
      * @param value The string value.
      * @return A new ENDS_WITH LIKE criteria.
      */
@@ -85,6 +86,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns a new LIKE criteria that matches values containing the given string.
+     * 
      * @param value The string value.
      * @return A new CONTAINS LIKE criteria.
      */
@@ -94,6 +96,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns whether this criteria is a STARTS_WITH type.
+     * 
      * @return True if STARTS_WITH, false otherwise.
      */
     public boolean startsWith() {
@@ -102,6 +105,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns whether this criteria is an ENDS_WITH type.
+     * 
      * @return True if ENDS_WITH, false otherwise.
      */
     public boolean endsWith() {
@@ -110,6 +114,7 @@ public final class Like extends Criteria<String> {
 
     /**
      * Returns whether this criteria is a CONTAINS type.
+     * 
      * @return True if CONTAINS, false otherwise.
      */
     public boolean contains() {
@@ -123,7 +128,9 @@ public final class Like extends Criteria<String> {
 
         if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
             Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
-            return matches.isEmpty() ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1)) : path.in(parameterBuilder.create(matches));
+            return matches.isEmpty()
+                ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1))
+                : path.in(parameterBuilder.create(matches));
         }
         else if (Bool.is(type)) {
             Expression<Boolean> pathAsBoolean = (Expression<Boolean>) path;

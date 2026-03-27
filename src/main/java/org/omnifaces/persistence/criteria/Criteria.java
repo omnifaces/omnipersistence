@@ -24,8 +24,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * This is used by {@link Page} and {@link BaseEntityService#getPage(Page, boolean)}. It defines a set of criteria
- * which could be supplied as value of "required criteria" and "optional criteria" maps.
+ * This is used by {@link Page} and {@link BaseEntityService#getPage(Page, boolean)}. It defines a set of criteria which could be supplied as value of "required
+ * criteria" and "optional criteria" maps.
  * <p>
  * There are so far the following criteria:
  * <ul>
@@ -40,21 +40,21 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </ul>
  * <p>
  * Usage examples:
+ * 
  * <pre>
  * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
- * criteria.put("name", Like.contains("john"));          // LIKE '%john%'
- * criteria.put("email", IgnoreCase.value("FOO@BAR"));   // LOWER(email) = LOWER('FOO@BAR')
- * criteria.put("age", Order.greaterThan(18));            // age &gt; 18
- * criteria.put("status", Not.value("INACTIVE"));        // status &lt;&gt; 'INACTIVE'
- * criteria.put("created", Between.range(start, end));   // created BETWEEN start AND end
- * criteria.put("role", Enumerated.value(Role.ADMIN));   // role = 'ADMIN'
- * criteria.put("active", Bool.value(true));              // active IS TRUE
- * criteria.put("score", Numeric.value(42));              // score = 42
+ * criteria.put("name", Like.contains("john")); // LIKE '%john%'
+ * criteria.put("email", IgnoreCase.value("FOO@BAR")); // LOWER(email) = LOWER('FOO@BAR')
+ * criteria.put("age", Order.greaterThan(18)); // age &gt; 18
+ * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE'
+ * criteria.put("created", Between.range(start, end)); // created BETWEEN start AND end
+ * criteria.put("role", Enumerated.value(Role.ADMIN)); // role = 'ADMIN'
+ * criteria.put("active", Bool.value(true)); // active IS TRUE
+ * criteria.put("score", Numeric.value(42)); // score = 42
  * </pre>
  * <p>
- * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and
- * turned into a predicate. Simply extend this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)},
- * and optionally override {@link #applies(Object)}.
+ * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and turned into a predicate. Simply extend
+ * this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}, and optionally override {@link #applies(Object)}.
  * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *
@@ -70,6 +70,7 @@ public abstract class Criteria<T> {
 
     /**
      * Create criteria based on given value.
+     * 
      * @param value The criteria value.
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
@@ -91,9 +92,11 @@ public abstract class Criteria<T> {
 
     /**
      * Returns a predicate for the criteria value. Below is an example implementation:
+     * 
      * <pre>
      * return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
      * </pre>
+     * 
      * @param path Entity property path. You can use this to inspect the target entity property.
      * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
      * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
@@ -102,8 +105,9 @@ public abstract class Criteria<T> {
     public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
     /**
-     * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java"
-     * equivalent of the SQL behavior as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java" equivalent of the SQL behavior
+     * as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
+     * 
      * @param modelValue The model value to test this criteria on.
      * @return Whether this criteria value would apply to the given model value.
      * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
@@ -115,6 +119,7 @@ public abstract class Criteria<T> {
 
     /**
      * Returns the criteria value.
+     * 
      * @return The criteria value.
      */
     public T getValue() {
@@ -123,6 +128,7 @@ public abstract class Criteria<T> {
 
     /**
      * Unwraps the criteria value from given object which could possibly represent a {@link Criteria}.
+     * 
      * @param possibleCriteria Any object which could possibly represent a {@link Criteria}.
      * @return The unwrapped criteria value when given object actually represents a {@link Criteria}, else the original value unmodified.
      */
@@ -152,19 +158,21 @@ public abstract class Criteria<T> {
     }
 
     /**
-     * Factory for creating {@link ParameterExpression} instances in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}.
-     * The implementation is responsible for generating unique parameter names and tracking parameter values.
+     * Factory for creating {@link ParameterExpression} instances in {@link Criteria#build(Expression, CriteriaBuilder, ParameterBuilder)}. The implementation
+     * is responsible for generating unique parameter names and tracking parameter values.
      */
     @FunctionalInterface
     public interface ParameterBuilder {
 
         /**
          * Creates a new {@link ParameterExpression} for the given value.
+         * 
          * @param <T> The generic parameter type.
          * @param value The parameter value.
          * @return A new parameter expression.
          */
         <T> ParameterExpression<T> create(Object value);
+
     }
 
 }

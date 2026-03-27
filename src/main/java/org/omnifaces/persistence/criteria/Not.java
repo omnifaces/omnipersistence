@@ -21,13 +21,13 @@ import jakarta.persistence.criteria.Predicate;
 /**
  * Creates <code>NOT (predicate)</code>.
  * <p>
- * This wraps any value or {@link Criteria} to negate it. The value can be a plain object, or another {@link Criteria}
- * instance.
+ * This wraps any value or {@link Criteria} to negate it. The value can be a plain object, or another {@link Criteria} instance.
  * <p>
  * Usage examples:
+ * 
  * <pre>
- * criteria.put("status", Not.value("INACTIVE"));                // status &lt;&gt; 'INACTIVE'
- * criteria.put("name", Not.value(Like.contains("test")));       // NOT (LOWER(name) LIKE '%test%')
+ * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE'
+ * criteria.put("name", Not.value(Like.contains("test"))); // NOT (LOWER(name) LIKE '%test%')
  * criteria.put("role", Not.value(Enumerated.value(Role.ADMIN))); // role &lt;&gt; 'ADMIN'
  * </pre>
  *
@@ -43,6 +43,7 @@ public final class Not extends Criteria<Object> {
 
     /**
      * Returns a new NOT criteria for the given value.
+     * 
      * @param value The value or {@link Criteria} to negate.
      * @return A new NOT criteria.
      */

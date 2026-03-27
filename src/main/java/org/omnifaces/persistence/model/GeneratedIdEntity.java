@@ -22,12 +22,11 @@ import jakarta.persistence.MappedSuperclass;
 
 /**
  * <p>
- * Mapped superclass for entity with generated ID.
- * It extends from {@link BaseEntity}.
- * It specifies a {@link Id} column, named "id", with {@link GeneratedValue} strategy {@link jakarta.persistence.GenerationType#IDENTITY IDENTITY}.
- * Jakarta Persistence will automatically take care of the ID.
+ * Mapped superclass for entity with generated ID. It extends from {@link BaseEntity}. It specifies a {@link Id} column, named "id", with {@link GeneratedValue}
+ * strategy {@link jakarta.persistence.GenerationType#IDENTITY IDENTITY}. Jakarta Persistence will automatically take care of the ID.
  * <p>
  * Usage example:
+ * 
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -54,7 +53,8 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
     public static final String ID = "id";
 
     /** The generated ID of this entity. */
-    @Id @GeneratedValue(strategy = IDENTITY)
+    @Id
+    @GeneratedValue(strategy = IDENTITY)
     private I id;
 
     @Override

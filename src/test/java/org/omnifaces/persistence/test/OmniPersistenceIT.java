@@ -98,10 +98,15 @@ public abstract class OmniPersistenceIT {
     }
 
     protected abstract PersonService personService();
+
     protected abstract PhoneService phoneService();
+
     protected abstract BaseEntityService<Long, Text> textService();
+
     protected abstract BaseEntityService<Long, Comment> commentService();
+
     protected abstract BaseEntityService<String, Lookup> lookupService();
+
     protected abstract ConfigService configService();
 
     protected static boolean isEclipseLink() {
@@ -119,7 +124,6 @@ public abstract class OmniPersistenceIT {
         person.setDateOfBirth(LocalDate.now());
         return person;
     }
-
 
     // Basic operations -----------------------------------------------------------------------------------------------
 
@@ -197,7 +201,6 @@ public abstract class OmniPersistenceIT {
         assertThrows(IllegalEntityStateException.class, () -> personService().delete(nonExistingPerson));
     }
 
-
     // Batch operations -----------------------------------------------------------------------------------------------
 
     @Test
@@ -221,7 +224,6 @@ public abstract class OmniPersistenceIT {
         var persons = personService().getByIds(List.of());
         assertTrue(persons.isEmpty(), "Empty IDs should return empty list");
     }
-
 
     // Page -----------------------------------------------------------------------------------------------------------
 
@@ -298,7 +300,6 @@ public abstract class OmniPersistenceIT {
         assertTrue(result.size() >= 1, "At least one match by email or gender");
     }
 
-
     // Page with criteria types ---------------------------------------------------------------------------------------
 
     @Test
@@ -342,10 +343,12 @@ public abstract class OmniPersistenceIT {
         var femaleResult = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.FEMALE))).build(), true);
         assertTrue(maleResult.size() > 0, "Some males exist");
         assertTrue(femaleResult.size() > 0, "Some females exist");
-        assertEquals(TOTAL_RECORDS, maleResult.size() + femaleResult.size()
-            + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.TRANS))).build(), true).size()
-            + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.OTHER))).build(), true).size(),
-            "All genders sum up to total");
+        assertEquals(
+            TOTAL_RECORDS, maleResult.size() + femaleResult.size()
+                + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.TRANS))).build(), true).size()
+                + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.OTHER))).build(), true).size(),
+            "All genders sum up to total"
+        );
     }
 
     @Test
@@ -396,7 +399,6 @@ public abstract class OmniPersistenceIT {
         var notMales = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
         assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
     }
-
 
     // Page with fetch fields (PersonService/PhoneService custom methods) ---------------------------------------------
 
@@ -456,9 +458,12 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithGroupsAndRequiredElementCollectionFilter() {
-        var firstPage = personService().getPageWithGroups(Page.with().range(0, 10).allMatch(Map.of("groups", List.of(Group.USER, Group.DEVELOPER))).build(), true);
+        var firstPage = personService()
+            .getPageWithGroups(Page.with().range(0, 10).allMatch(Map.of("groups", List.of(Group.USER, Group.DEVELOPER))).build(), true);
         assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
-        firstPage.forEach(p -> assertTrue(p.getGroups().contains(Group.USER) && p.getGroups().contains(Group.DEVELOPER), "Groups collection is populated after detachment"));
+        firstPage.forEach(
+            p -> assertTrue(p.getGroups().contains(Group.USER) && p.getGroups().contains(Group.DEVELOPER), "Groups collection is populated after detachment")
+        );
     }
 
     @Test
@@ -466,11 +471,19 @@ public abstract class OmniPersistenceIT {
         var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
         assertFalse(result.isEmpty(), "Some persons have MOBILE phones");
         if (!isOpenJPA()) {
-            assertTrue(result.getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones"); // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context, so the count is inaccurate there.
+            assertTrue(result.getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones"); // OpenJPA generates broken nested
+                                                                                                                         // correlated subqueries for @OneToMany
+                                                                                                                         // in count subquery context, so the
+                                                                                                                         // count is inaccurate there.
         }
         result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
-        if (isOpenJPA() || isEclipseLink()) { // Hibernate JOIN FETCH returns all phone types; in-memory filtering of postponed fetches only applies to OpenJPA/EclipseLink.
-            result.forEach(person -> person.getPhones().forEach(phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")));
+        if (isOpenJPA() || isEclipseLink()) { // Hibernate JOIN FETCH returns all phone types; in-memory filtering of postponed fetches only applies to
+                                              // OpenJPA/EclipseLink.
+            result.forEach(
+                person -> person.getPhones().forEach(
+                    phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")
+                )
+            );
         }
     }
 
@@ -479,7 +492,11 @@ public abstract class OmniPersistenceIT {
         var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), true);
         assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
         result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
-        result.forEach(person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain after in-memory filtering of postponed fetch")));
+        result.forEach(
+            person -> person.getPhones().forEach(
+                phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain after in-memory filtering of postponed fetch")
+            )
+        );
     }
 
     @Test
@@ -505,7 +522,8 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithPhonesFilteredAndSortedDescending() {
-        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).orderBy("phones.number", false).build(), true);
+        var result = personService()
+            .getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).orderBy("phones.number", false).build(), true);
         assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
         result.forEach(person -> {
             assertFalse(person.getPhones().isEmpty(), "Filtered person has phones");
@@ -544,7 +562,6 @@ public abstract class OmniPersistenceIT {
         result.forEach(p -> assertEquals(expectedEmail, p.getEmail(), "All matching phones belong to the expected owner"));
     }
 
-
     // Page with DTO mapping ------------------------------------------------------------------------------------------
 
     @Test
@@ -567,7 +584,6 @@ public abstract class OmniPersistenceIT {
         assertEquals(5, page.size(), "Page returns 5 cards");
         assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
     }
-
 
     // Page with cursor-based paging ----------------------------------------------------------------------------------
 
@@ -596,9 +612,11 @@ public abstract class OmniPersistenceIT {
         var firstOfPage2 = page2.get(0);
         var backToPage1 = personService().getPage(Page.with().range(firstOfPage2, 10, true).orderBy("id", true).build(), false);
         assertEquals(10, backToPage1.size(), "Reversed cursor returns 10 persons");
-        assertEquals(page1.stream().map(Person::getId).toList(),
-                     backToPage1.stream().map(Person::getId).toList(),
-                     "Reversed cursor returns same persons as original page 1 in same order");
+        assertEquals(
+            page1.stream().map(Person::getId).toList(),
+            backToPage1.stream().map(Person::getId).toList(),
+            "Reversed cursor returns same persons as original page 1 in same order"
+        );
     }
 
     @Test
@@ -626,7 +644,6 @@ public abstract class OmniPersistenceIT {
         assertTrue(Collections.disjoint(page1.stream().map(Person::getId).toList(), page2.stream().map(Person::getId).toList()), "Pages do not overlap");
         page2.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated after cursor-based paging"));
     }
-
 
     // @SoftDeletable -------------------------------------------------------------------------------------------------
 
@@ -704,10 +721,12 @@ public abstract class OmniPersistenceIT {
         assertTrue(deleted.stream().anyMatch(l -> "b1".equals(l.getId())), "b1 is in soft deleted list");
         assertTrue(deleted.stream().anyMatch(l -> "b2".equals(l.getId())), "b2 is in soft deleted list");
 
-        lookupService().softUndelete(List.of(
-            lookupService().getSoftDeletedById("b1"),
-            lookupService().getSoftDeletedById("b2")
-        ));
+        lookupService().softUndelete(
+            List.of(
+                lookupService().getSoftDeletedById("b1"),
+                lookupService().getSoftDeletedById("b2")
+            )
+        );
         assertEquals(totalBefore, lookupService().list().size(), "Records restored after batch undelete");
     }
 
@@ -789,7 +808,6 @@ public abstract class OmniPersistenceIT {
         assertThrows(IllegalEntityStateException.class, () -> lookupService().update(lookup));
     }
 
-
     // @NonDeletable --------------------------------------------------------------------------------------------------
 
     @Test
@@ -833,7 +851,6 @@ public abstract class OmniPersistenceIT {
         assertNotNull(stillExists, "Entity still exists after failed delete");
     }
 
-
     // getDatabase() / getProvider() ----------------------------------------------------------------------------------
 
     @Test
@@ -859,7 +876,6 @@ public abstract class OmniPersistenceIT {
             assertFalse(configService().isProviderOpenJPA(), "Provider is not OpenJPA");
         }
     }
-
 
     // @Audit ---------------------------------------------------------------------------------------------------------
 
@@ -918,4 +934,5 @@ public abstract class OmniPersistenceIT {
             .toList();
         assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
     }
+
 }

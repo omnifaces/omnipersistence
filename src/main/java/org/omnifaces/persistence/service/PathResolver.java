@@ -22,9 +22,11 @@ import jakarta.persistence.criteria.Expression;
  */
 @FunctionalInterface
 interface PathResolver {
+
     Expression<?> get(String field);
 
     default String join(String field) {
         return '@' + field;
     }
+
 }

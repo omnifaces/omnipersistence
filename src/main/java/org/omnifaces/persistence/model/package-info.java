@@ -23,8 +23,8 @@
  * <li>{@link VersionedEntity} — adds {@code @Version} on top of {@link TimestampedEntity}.
  * </ul>
  * <p>
- * All base classes provide correct {@code equals}, {@code hashCode}, {@code compareTo} and {@code toString}
- * based on entity ID by default, overridable via {@link BaseEntity#identityGetters()}.
+ * All base classes provide correct {@code equals}, {@code hashCode}, {@code compareTo} and {@code toString} based on entity ID by default, overridable via
+ * {@link BaseEntity#identityGetters()}.
  * <p>
  * Supporting model annotations:
  * <ul>

@@ -32,11 +32,13 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
- * This is by default already registered on {@link BaseEntity}. It will fire CDI events {@link Created}, {@link Updated}
- * and {@link Deleted} which you can {@link Observes} on your entity.
+ * This is by default already registered on {@link BaseEntity}. It will fire CDI events {@link Created}, {@link Updated} and {@link Deleted} which you can
+ * {@link Observes} on your entity.
  * <p>
  * Usage example:
+ * 
  * <pre>
+ * 
  * public void onCreate(&#64;Observes &#64;Created YourEntity yourEntity) {
  *     // ...
  * }
@@ -65,6 +67,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Created} event after the entity has been persisted.
+     * 
      * @param entity The entity that was persisted.
      */
     @PostPersist
@@ -74,6 +77,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Updated} event after the entity has been updated.
+     * 
      * @param entity The entity that was updated.
      */
     @PostUpdate
@@ -83,6 +87,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Deleted} event after the entity has been removed.
+     * 
      * @param entity The entity that was removed.
      */
     @PostRemove
@@ -91,10 +96,11 @@ public class BaseEntityListener {
     }
 
     private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
-        findBeanManager().ifPresent(beanManager ->
-            beanManager.getEvent()
-                       .select(createAnnotationInstance(eventType))
-                       .fire(entity));
+        findBeanManager().ifPresent(
+            beanManager -> beanManager.getEvent()
+                .select(createAnnotationInstance(eventType))
+                .fire(entity)
+        );
     }
 
     private Optional<BeanManager> findBeanManager() {
@@ -117,4 +123,5 @@ public class BaseEntityListener {
 
         return beanManager;
     }
+
 }

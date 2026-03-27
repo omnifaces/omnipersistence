@@ -15,8 +15,8 @@ package org.omnifaces.persistence.exception;
 import org.omnifaces.persistence.model.BaseEntity;
 
 /**
- * Thrown when trying to use soft delete operations on an entity that doesn't have the
- * {@link org.omnifaces.persistence.model.SoftDeletable} annotation on any of its fields.
+ * Thrown when trying to use soft delete operations on an entity that doesn't have the {@link org.omnifaces.persistence.model.SoftDeletable} annotation on any
+ * of its fields.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -29,6 +29,7 @@ public class NonSoftDeletableEntityException extends BaseEntityException {
 
     /**
      * Constructs a new non-soft-deletable entity exception for the given entity and message.
+     * 
      * @param entity The entity which is not marked as soft-deletable.
      * @param message The detail message.
      */

@@ -318,7 +318,7 @@
                 <artifactId>maven-dependency-plugin</artifactId>
                 <version>3.10.0</version>
             </plugin>
-    
+
             <!-- Configure the unit tests (*Test.java). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -328,7 +328,7 @@
                     <skipTests>${skipUTs}</skipTests>
                 </configuration>
             </plugin>
-    
+
             <!-- Configure the integration tests (*IT.java). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

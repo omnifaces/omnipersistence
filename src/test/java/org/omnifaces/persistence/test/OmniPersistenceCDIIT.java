@@ -38,18 +38,47 @@ public class OmniPersistenceCDIIT extends OmniPersistenceIT {
         return OmniPersistenceIT.createDeployment(OmniPersistenceCDIIT.class, StartupServiceEJB.class);
     }
 
-    @Inject private PersonServiceCDI personService;
-    @Inject private PhoneServiceCDI phoneService;
-    @Inject private TextServiceCDI textService;
-    @Inject private CommentServiceCDI commentService;
-    @Inject private LookupServiceCDI lookupService;
-    @Inject private ConfigServiceCDI configService;
+    @Inject
+    private PersonServiceCDI personService;
+    @Inject
+    private PhoneServiceCDI phoneService;
+    @Inject
+    private TextServiceCDI textService;
+    @Inject
+    private CommentServiceCDI commentService;
+    @Inject
+    private LookupServiceCDI lookupService;
+    @Inject
+    private ConfigServiceCDI configService;
 
-    @Override protected PersonService personService()                   { return personService; }
-    @Override protected PhoneService phoneService()                     { return phoneService; }
-    @Override protected BaseEntityService<Long, Text> textService()     { return textService; }
-    @Override protected BaseEntityService<Long, Comment> commentService() { return commentService; }
-    @Override protected BaseEntityService<String, Lookup> lookupService() { return lookupService; }
-    @Override protected ConfigService configService()                   { return configService; }
+    @Override
+    protected PersonService personService() {
+        return personService;
+    }
+
+    @Override
+    protected PhoneService phoneService() {
+        return phoneService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, Text> textService() {
+        return textService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, Comment> commentService() {
+        return commentService;
+    }
+
+    @Override
+    protected BaseEntityService<String, Lookup> lookupService() {
+        return lookupService;
+    }
+
+    @Override
+    protected ConfigService configService() {
+        return configService;
+    }
 
 }

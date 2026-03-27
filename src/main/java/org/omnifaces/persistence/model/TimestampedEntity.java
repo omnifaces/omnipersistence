@@ -25,13 +25,13 @@ import jakarta.persistence.Transient;
 
 /**
  * <p>
- * Mapped superclass for timestamped entity with generated ID.
- * It extends from {@link GeneratedIdEntity} which in turn extends from {@link BaseEntity}, and implements {@link Timestamped}.
- * In addition to the "id" column, it specifies two timestamp columns, named "created" and "lastModified".
- * On pre persist, the both columns will be set to current timestamp.
- * On pre update, the "lastModified" column will be set to current timestamp, unless {@link #skipAdjustLastModified()} is called beforehand.
+ * Mapped superclass for timestamped entity with generated ID. It extends from {@link GeneratedIdEntity} which in turn extends from {@link BaseEntity}, and
+ * implements {@link Timestamped}. In addition to the "id" column, it specifies two timestamp columns, named "created" and "lastModified". On pre persist, the
+ * both columns will be set to current timestamp. On pre update, the "lastModified" column will be set to current timestamp, unless
+ * {@link #skipAdjustLastModified()} is called beforehand.
  * <p>
  * Usage example:
+ * 
  * <pre>
  * &#64;Entity
  * public class YourEntity extends TimestampedEntity&lt;Long&gt; {
@@ -96,8 +96,8 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     }
 
     /**
-     * Invoke this method if you need to skip adjusting the "last modified" timestamp during any update event on this
-     * instance. In case you intend to reset this later on, simply obtain a new instance from the entity manager.
+     * Invoke this method if you need to skip adjusting the "last modified" timestamp during any update event on this instance. In case you intend to reset this
+     * later on, simply obtain a new instance from the entity manager.
      */
     public void skipAdjustLastModified() {
         this.skipAdjustLastModified = true;

@@ -13,10 +13,9 @@
 /**
  * Data transfer objects for the persistence layer.
  * <p>
- * Contains {@link org.omnifaces.persistence.model.dto.Page}, an immutable value object that bundles a pagination range,
- * ordering directives and search criteria maps for use with
- * {@link org.omnifaces.persistence.service.BaseEntityService#getPage(Page, boolean)}.
- * Build instances via {@link org.omnifaces.persistence.model.dto.Page#with()}.
+ * Contains {@link org.omnifaces.persistence.model.dto.Page}, an immutable value object that bundles a pagination range, ordering directives and search criteria
+ * maps for use with {@link org.omnifaces.persistence.service.BaseEntityService#getPage(Page, boolean)}. Build instances via
+ * {@link org.omnifaces.persistence.model.dto.Page#with()}.
  *
  * @see org.omnifaces.persistence.model.dto.Page
  * @see org.omnifaces.persistence.service.BaseEntityService

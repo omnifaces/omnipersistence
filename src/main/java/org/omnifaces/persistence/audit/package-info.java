@@ -13,9 +13,8 @@
 /**
  * Field-level entity auditing via CDI events.
  * <p>
- * Annotate an entity with {@code @EntityListeners(AuditListener.class)} and mark individual fields with
- * {@link Audit} to receive a CDI
- * {@link AuditedChange} event whenever a marked field changes value.
+ * Annotate an entity with {@code @EntityListeners(AuditListener.class)} and mark individual fields with {@link Audit} to receive a CDI {@link AuditedChange}
+ * event whenever a marked field changes value.
  *
  * @see Audit
  * @see AuditListener
