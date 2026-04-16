@@ -36,9 +36,9 @@ import org.omnifaces.persistence.model.BaseEntity;
  * {@link Observes} on your entity.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
- * 
+ *
  * public void onCreate(&#64;Observes &#64;Created YourEntity yourEntity) {
  *     // ...
  * }
@@ -67,7 +67,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Created} event after the entity has been persisted.
-     * 
+     *
      * @param entity The entity that was persisted.
      */
     @PostPersist
@@ -77,7 +77,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Updated} event after the entity has been updated.
-     * 
+     *
      * @param entity The entity that was updated.
      */
     @PostUpdate
@@ -87,7 +87,7 @@ public class BaseEntityListener {
 
     /**
      * Fires the {@link Deleted} event after the entity has been removed.
-     * 
+     *
      * @param entity The entity that was removed.
      */
     @PostRemove

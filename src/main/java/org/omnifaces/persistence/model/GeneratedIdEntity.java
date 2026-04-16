@@ -26,7 +26,7 @@ import jakarta.persistence.MappedSuperclass;
  * strategy {@link jakarta.persistence.GenerationType#IDENTITY IDENTITY}. Jakarta Persistence will automatically take care of the ID.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {

@@ -255,7 +255,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns the currently active {@link BaseEntityService} instance, if any. This is set via a {@link ThreadLocal} during the execution of any public method
      * on this service.
-     * 
+     *
      * @return The currently active {@link BaseEntityService} instance, or <code>null</code>.
      */
     public static BaseEntityService<?, ?> getCurrentBaseEntityService() {
@@ -351,7 +351,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the Jakarta Persistence provider being used. This is immutable (you can't override the method to change the internally used value).
-     * 
+     *
      * @return The Jakarta Persistence provider being used.
      */
     public Provider getProvider() {
@@ -360,7 +360,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the SQL database being used. This is immutable (you can't override the method to change the internally used value).
-     * 
+     *
      * @return The SQL database being used.
      */
     public Database getDatabase() {
@@ -369,7 +369,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the actual type of the generic ID type <code>I</code>. This is immutable (you can't override the method to change the internally used value).
-     * 
+     *
      * @return The actual type of the generic ID type <code>I</code>.
      */
     protected Class<I> getIdentifierType() {
@@ -379,7 +379,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns the actual type of the generic base entity type <code>E</code>. This is immutable (you can't override the method to change the internally used
      * value).
-     * 
+     *
      * @return The actual type of the generic base entity type <code>E</code>.
      */
     protected Class<E> getEntityType() {
@@ -388,7 +388,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns whether the ID is generated. This is immutable (you can't override the method to change the internally used value).
-     * 
+     *
      * @return Whether the ID is generated.
      */
     protected boolean isGeneratedId() {
@@ -399,7 +399,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns the entity manager being used. When you have only one persistence unit, then you don't need to override this. When you have multiple persistence
      * units, then you need to extend the {@link BaseEntityService} like below wherein you supply the persistence unit specific entity manager and then let all
      * your service classes extend from it instead.
-     * 
+     *
      * <pre>
      * public abstract class YourBaseEntityService&lt;E extends BaseEntity&lt;Long&gt;&gt; extends BaseEntityService&lt;Long, E&gt; {
      *
@@ -422,7 +422,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the metamodel of current base entity.
-     * 
+     *
      * @return The metamodel of current base entity.
      */
     protected EntityType<E> getMetamodel() {
@@ -431,7 +431,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the metamodel of given base entity.
-     * 
+     *
      * @param <I> The generic ID type of the given base entity.
      * @param <E> The generic base entity type of the given base entity.
      * @param entity Base entity to obtain metamodel for.
@@ -447,7 +447,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Create an instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified by the given name, usually to perform a
      * SELECT e.
-     * 
+     *
      * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either a {@link NamedQuery} or a
      * <code>&lt;persistence-unit&gt;&lt;mapping-file&gt;</code>.
      * @return An instance of {@link TypedQuery} for executing a Java Persistence Query Language statement identified by the given name, usually to perform a
@@ -460,7 +460,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Create an instance of {@link Query} for executing a Java Persistence Query Language statement identified by the given name, usually to perform an INSERT,
      * UPDATE or DELETE.
-     * 
+     *
      * @param name The name of the Java Persistence Query Language statement defined in metadata, which can be either a {@link NamedQuery} or a
      * <code>&lt;persistence-unit&gt;&lt;mapping-file&gt;</code>.
      * @return An instance of {@link Query} for executing a Java Persistence Query Language statement identified by the given name, usually to perform an
@@ -473,7 +473,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns the specified <code>T</code>,
      * usually to perform a SELECT t.
-     * 
+     *
      * @param <T> The generic result type.
      * @param jpql The Java Persistence Query Language statement.
      * @param resultType The result type.
@@ -487,7 +487,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>E</code>, usually to
      * perform a SELECT e.
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>E</code>, usually to
      * perform a SELECT e.
@@ -499,7 +499,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Create an instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>Long</code>, usually a
      * SELECT e.id or SELECT COUNT(e).
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>Long</code>, usually a
      * SELECT e.id or SELECT COUNT(e).
@@ -510,7 +510,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Create an instance of {@link Query} for executing the given Java Persistence Query Language statement, usually to perform an INSERT, UPDATE or DELETE.
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link Query} for executing the given Java Persistence Query Language statement, usually to perform an INSERT, UPDATE or DELETE.
      */
@@ -525,7 +525,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link #find(CriteriaQueryBuilder, Map)} methods.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
-     * 
+     *
      * <pre>
      * &#64;Stateless
      * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
@@ -538,7 +538,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
      * </pre>
-     * 
+     *
      * @param <E> The generic base entity type.
      */
     @FunctionalInterface
@@ -546,7 +546,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         /**
          * Builds the Jakarta Persistence criteria query.
-         * 
+         *
          * @param criteriaBuilder The criteria builder to use.
          * @param query The criteria query to build upon.
          * @param root The root of the entity to query.
@@ -559,19 +559,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Find entity by the given query and positional parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = find("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return Found entity matching the given query and positional parameters, if any.
@@ -585,19 +585,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Find entity by the given query and mapped parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = find("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
@@ -611,7 +611,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Find entity by {@link CriteriaQueryBuilder} and mapped parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
      * Optional&lt;Foo&gt; foo = find(
      *         (criteriaBuilder, query, root) -&gt; {
@@ -620,7 +620,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
-     * 
+     *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
@@ -647,19 +647,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link NonUniqueResultException} when there are multiple matches.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return Found entity matching the given query and positional parameters, if any.
@@ -673,19 +673,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link NonUniqueResultException} when there are multiple matches.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = findFirst("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
@@ -699,7 +699,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * doesn't throw {@link NonUniqueResultException} when there are multiple matches.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
      * Optional&lt;Foo&gt; foo = findFirst(
      *         (criteriaBuilder, query, root) -&gt; {
@@ -708,7 +708,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
-     * 
+     *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
@@ -719,7 +719,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Find entity by the given ID. This does not include soft deleted one.
-     * 
+     *
      * @param id Entity ID to find entity for.
      * @return Found entity, if any.
      */
@@ -729,7 +729,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Find entity by the given ID and set whether it may return a soft deleted one.
-     * 
+     *
      * @param id Entity ID to find entity for.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, if any.
@@ -740,7 +740,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Find soft deleted entity by the given ID.
-     * 
+     *
      * @param id Entity ID to find soft deleted entity for.
      * @return Found soft deleted entity, if any.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
@@ -751,7 +751,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get entity by the given ID. This does not include soft deleted one.
-     * 
+     *
      * @param id Entity ID to get entity by.
      * @return Found entity, or <code>null</code> if there is none.
      */
@@ -761,7 +761,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get entity by the given ID and set whether it may return a soft deleted one.
-     * 
+     *
      * @param id Entity ID to get entity by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, or <code>null</code> if there is none.
@@ -778,7 +778,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get entity by the given ID and entity graph name.
-     * 
+     *
      * @param id Entity ID to get entity by.
      * @param entityGraphName Entity graph name.
      * @return Found entity, or <code>null</code> if there is none.
@@ -796,7 +796,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get soft deleted entity by the given ID.
-     * 
+     *
      * @param id Entity ID to get soft deleted entity by.
      * @return Found soft deleted entity, or <code>null</code> if there is none.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
@@ -816,7 +816,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
-     * 
+     *
      * @param ids Entity IDs to get entities by.
      * @return Found entities, or an empty set if there is none.
      */
@@ -826,7 +826,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
-     * 
+     *
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
@@ -864,7 +864,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Check whether given entity exists. This method supports proxied entities.
-     * 
+     *
      * @param entity Entity to check.
      * @return Whether entity with given entity exists.
      */
@@ -877,7 +877,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * List all entities. The default ordering is by ID, descending. This does not include soft deleted entities.
-     * 
+     *
      * @return List of all entities.
      */
     public List<E> list() {
@@ -886,7 +886,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * List all entities and set whether it may include soft deleted ones. The default ordering is by ID, descending.
-     * 
+     *
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return List of all entities, optionally including soft deleted ones.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
@@ -901,7 +901,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * List all entities that have been soft deleted. The default ordering is by ID, descending.
-     * 
+     *
      * @return List of all soft deleted entities.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
@@ -920,19 +920,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * List entities matching the given query and positional parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = ?1 AND f.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * List&lt;Foo&gt; foos = list("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return List of entities matching the given query and positional parameters, if any.
@@ -945,19 +945,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * List entities matching the given query and mapped parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * List&lt;Foo&gt; foos = list("SELECT f FROM Foo f WHERE f.bar = :bar AND f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return List of entities matching the given query and mapped parameters, if any.
@@ -970,7 +970,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * List entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
      * List&lt;Foo&gt; foo = list(
      *         (criteriaBuilder, query, root) -&gt; {
@@ -979,7 +979,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
-     * 
+     *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
@@ -1033,7 +1033,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Persist given entity and immediately perform a flush. Any bean validation constraint violation will be logged separately.
-     * 
+     *
      * @param entity Entity to persist.
      * @return Entity ID.
      * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
@@ -1073,7 +1073,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>), then any bean validation constraint violation will be logged separately. Due to
      * technical limitations, this effectively means that bean validation is invoked twice. First in this method in order to be able to obtain the constraint
      * violations and then once more while JTA is committing the transaction, but is executed beyond the scope of this method.
-     * 
+     *
      * @param entity Entity to update.
      * @return Updated entity.
      * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
@@ -1108,7 +1108,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Update given entity via {@link #update(BaseEntity)} and immediately perform a flush so that all changes in managed entities so far in the current
      * transaction are persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
-     * 
+     *
      * @param entity Entity to update.
      * @return Updated entity.
      * @throws IllegalEntityStateException When entity is not persisted or its ID is not generated.
@@ -1132,7 +1132,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Update given entities.
-     * 
+     *
      * @param entities Entities to update.
      * @return Updated entities.
      * @throws IllegalEntityStateException When at least one entity has no ID.
@@ -1146,19 +1146,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Update or delete all entities matching the given query and positional parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * int affectedRows = update("UPDATE Foo f SET f.bar = ?1 WHERE f.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * int affectedRows = update("SET bar = ?1 WHERE baz = ?2", bar, baz);
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return The number of entities updated or deleted.
@@ -1172,19 +1172,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Update or delete all entities matching the given query and mapped parameters, if any.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * int affectedRows = update("UPDATE Foo f SET f.bar = :bar WHERE f.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Short jpql is also supported:
-     * 
+     *
      * <pre>
-     * 
+     *
      * int affectedRows = update("SET bar = :bar WHERE baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
-     * 
+     *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return The number of entities updated or deleted.
@@ -1197,7 +1197,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Save given entity. This will automatically determine based on the presence of generated entity ID, or existence of an entity in the data store whether to
      * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
-     * 
+     *
      * @param entity Entity to save.
      * @return Saved entity.
      */
@@ -1217,7 +1217,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Save given entity via {@link #save(BaseEntity)} and immediately perform a flush so that all changes in managed entities so far in the current transaction
      * are persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
-     * 
+     *
      * @param entity Entity to save.
      * @return Saved entity.
      */
@@ -1231,7 +1231,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Delete given entity.
-     * 
+     *
      * @param entity Entity to delete.
      * @throws NonDeletableEntityException When entity has {@link NonDeletable} annotation set.
      * @throws IllegalEntityStateException When entity has no ID.
@@ -1254,7 +1254,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Soft delete given entity.
-     * 
+     *
      * @param entity Entity to soft delete.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      * @throws IllegalEntityStateException When entity has no ID.
@@ -1270,7 +1270,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Soft undelete given entity.
-     * 
+     *
      * @param entity Entity to soft undelete.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      * @throws IllegalEntityStateException When entity has no ID.
@@ -1286,7 +1286,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Delete given entities.
-     * 
+     *
      * @param entities Entities to delete.
      * @throws NonDeletableEntityException When at least one entity has {@link NonDeletable} annotation set.
      * @throws IllegalEntityStateException When at least one entity has no ID.
@@ -1299,7 +1299,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Soft delete given entities.
-     * 
+     *
      * @param entities Entities to soft delete.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      * @throws IllegalEntityStateException When at least one entity has no ID.
@@ -1312,7 +1312,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Soft undelete given entities.
-     * 
+     *
      * @param entities Entities to soft undelete.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      * @throws IllegalEntityStateException When at least one entity has no ID.
@@ -1328,7 +1328,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Make given entity managed. NOTE: This will discard any unmanaged changes in the given entity! This is particularly useful in case you intend to make sure
      * that you have the most recent version at hands. This method also supports proxied entities as well as DTOs.
-     * 
+     *
      * @param entity Entity to manage.
      * @return The managed entity.
      * @throws NullPointerException When given entity is <code>null</code>.
@@ -1363,7 +1363,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Make any given entity managed if necessary. NOTE: This will discard any unmanaged changes in the given entity! This is particularly useful in case you
      * intend to make sure that you have the most recent version at hands. This method also supports <code>null</code> entities as well as proxied entities as
      * well as DTOs.
-     * 
+     *
      * @param <E> The generic entity type.
      * @param entity Entity to manage, may be <code>null</code>.
      * @return The managed entity, or <code>null</code> when <code>null</code> was supplied. It leniently returns the very same argument if the entity has no ID
@@ -1394,7 +1394,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * have the opportunity to completely reset the state of a given entity which might have been edited in the client, without changing the reference. This is
      * generally useful when the entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection. This method
      * supports proxied entities.
-     * 
+     *
      * @param entity Entity to reset.
      * @throws IllegalEntityStateException When entity is already managed, or has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been deleted.
@@ -1419,7 +1419,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns count of all foreign key references to given entity. This is particularly useful in case you intend to check if the given entity is still
      * referenced elsewhere in database.
-     * 
+     *
      * @param entity Entity to count all foreign key references for.
      * @return Count of all foreign key references to given entity.
      */
@@ -1434,12 +1434,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link CollectionType#MAP}. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Foo fooWithBarsAndBazs = fetchLazyCollections(getById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
-     * 
+     *
      * @param entity Entity instance to fetch lazy collections on.
      * @param getters Getters of those lazy collections.
      * @return The same entity, useful if you want to continue using it immediately.
@@ -1454,12 +1454,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * of type {@link CollectionType#MAP}. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyCollections(findById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
-     * 
+     *
      * @param entity Optional entity instance to fetch lazy collections on.
      * @param getters Getters of those lazy collections.
      * @return The same optional entity, useful if you want to continue using it immediately.
@@ -1474,12 +1474,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link CollectionType#MAP}. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Foo fooWithBarsAndBazs = fetchLazyCollections(getById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
-     * 
+     *
      * @param entity Entity instance to fetch lazy maps on.
      * @param getters Getters of those lazy collections.
      * @return The same entity, useful if you want to continue using it immediately.
@@ -1494,12 +1494,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link CollectionType#MAP}. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
      * <p>
      * Usage example:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyCollections(findById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
-     * 
+     *
      * @param entity Optional entity instance to fetch lazy maps on.
      * @param getters Getters of those lazy collections.
      * @return The same optional entity, useful if you want to continue using it immediately.
@@ -1511,7 +1511,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Fetch all lazy blobs of given entity. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
-     * 
+     *
      * @param entity Entity instance to fetch all blobs on.
      * @return The same entity, useful if you want to continue using it immediately.
      */
@@ -1521,7 +1521,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Fetch all lazy blobs of given optional entity. Note that the implementation does for simplicitly not check if those are actually lazy or eager.
-     * 
+     *
      * @param entity Optional entity instance to fetch all blobs on.
      * @return The same optional entity, useful if you want to continue using it immediately.
      */
@@ -1564,7 +1564,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Functional interface to fine-grain a Jakarta Persistence criteria query for any of {@link #getPage(Page, boolean)} methods.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
-     * 
+     *
      * <pre>
      * &#64;Stateless
      * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
@@ -1577,7 +1577,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
      * </pre>
-     * 
+     *
      * @param <E> The generic base entity type.
      */
     @FunctionalInterface
@@ -1585,7 +1585,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         /**
          * Builds the Jakarta Persistence criteria query.
-         * 
+         *
          * @param criteriaBuilder The criteria builder to use.
          * @param query The abstract query to build upon, which can be a {@link CriteriaQuery} or {@link Subquery}.
          * @param root The root of the entity to query.
@@ -1600,7 +1600,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * in exactly the same order as constructor arguments of your DTO.
      * <p>
      * You do not need this interface directly. Just supply a lambda. Below is an usage example:
-     * 
+     *
      * <pre>
      * public class YourEntityDTO extends YourEntity {
      *
@@ -1618,7 +1618,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
      * </pre>
-     * 
+     *
      * <pre>
      * &#64;Stateless
      * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
@@ -1638,7 +1638,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
      * </pre>
-     * 
+     *
      * @param <T> The generic base entity type or from a DTO subclass thereof.
      */
     @FunctionalInterface
@@ -1646,7 +1646,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         /**
          * Builds the Jakarta Persistence criteria query and returns a mapping of DTO getters to criteria expressions.
-         * 
+         *
          * @param criteriaBuilder The criteria builder to use.
          * @param query The criteria query to build upon.
          * @param root The root of the entity to query.
@@ -1660,7 +1660,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked before any of
      * {@link #getPage(Page, boolean)} methods is called. For example, to set a vendor specific {@link EntityManager} hint. The default implementation returns a
      * no-op callback.
-     * 
+     *
      * @return The callback method which is invoked before any of {@link #getPage(Page, boolean)} methods is called.
      */
     protected Consumer<EntityManager> beforePage() {
@@ -1671,7 +1671,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked when any query involved in
      * {@link #getPage(Page, boolean)} is about to be executed. For example, to set a vendor specific {@link Query} hint. The default implementation delegates
      * to {@link Provider#configureSecondLevelCache(Query, boolean)}.
-     * 
+     *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param cacheable Whether the results should be cacheable.
@@ -1684,7 +1684,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Here you can in your {@link BaseEntityService} subclass define the callback method which needs to be invoked after any of {@link #getPage(Page, boolean)}
      * methods is called. For example, to remove a vendor specific {@link EntityManager} hint. The default implementation returns a no-op callback.
-     * 
+     *
      * @return The callback method which is invoked after any of {@link #getPage(Page, boolean)} methods is called.
      */
     protected Consumer<EntityManager> afterPage() {
@@ -1695,13 +1695,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}. This will by default cache the results.
      * <p>
      * Usage examples:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Page first10Records = Page.of(0, 10);
      * PartialResultList&lt;Foo&gt; foos = getPage(first10Records, true);
      * </pre>
-     * 
+     *
      * <pre>
      * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
      * criteria.put("bar", bar); // Exact match.
@@ -1711,7 +1711,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
      * PartialResultList&lt;Foo&gt; foos = getPage(first10RecordsMatchingCriteriaOrderedByBar, true);
      * </pre>
-     * 
+     *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1730,13 +1730,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page} and fetch fields. This will by default cache the results.
      * <p>
      * Usage examples:
-     * 
+     *
      * <pre>
-     * 
+     *
      * Page first10Records = Page.of(0, 10);
      * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10Records, true, "bar");
      * </pre>
-     * 
+     *
      * <pre>
      * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
      * criteria.put("bar", bar); // Exact match.
@@ -1746,7 +1746,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
      * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10RecordsMatchingCriteriaOrderedByBar, true, "bar");
      * </pre>
-     * 
+     *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1764,7 +1764,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link #getPage(Page, boolean)} and {@link #getPage(Page, boolean, String...)}.
-     * 
+     *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1793,7 +1793,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page} and {@link QueryBuilder}. This will by default cache the results.
      * <p>
      * Usage example: see {@link QueryBuilder}.
-     * 
+     *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1810,7 +1810,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link QueryBuilder}.
-     * 
+     *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
@@ -1832,7 +1832,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, result type and {@link MappedQueryBuilder}. This will by default cache the results.
      * <p>
      * Usage example: see {@link MappedQueryBuilder}.
-     * 
+     *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1852,7 +1852,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link MappedQueryBuilder}.
-     * 
+     *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by

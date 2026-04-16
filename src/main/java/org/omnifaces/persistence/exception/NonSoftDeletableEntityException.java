@@ -29,7 +29,7 @@ public class NonSoftDeletableEntityException extends BaseEntityException {
 
     /**
      * Constructs a new non-soft-deletable entity exception for the given entity and message.
-     * 
+     *
      * @param entity The entity which is not marked as soft-deletable.
      * @param message The detail message.
      */

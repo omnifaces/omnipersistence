@@ -29,7 +29,7 @@ public class IllegalEntityStateException extends BaseEntityException {
 
     /**
      * Constructs a new illegal entity state exception for the given entity and message.
-     * 
+     *
      * @param entity The entity which is in an illegal state.
      * @param message The detail message.
      */

@@ -29,7 +29,7 @@ public class NonDeletableEntityException extends BaseEntityException {
 
     /**
      * Constructs a new non-deletable entity exception for the given entity.
-     * 
+     *
      * @param entity The entity which is marked as non-deletable.
      */
     public NonDeletableEntityException(BaseEntity<?> entity) {

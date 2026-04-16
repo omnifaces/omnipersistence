@@ -41,14 +41,14 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </ul>
  * <p>
  * Usage examples:
- * 
+ *
  * <pre>
- * 
+ *
  * // Simplest form: get first 10 records.
  * Page first10Records = Page.of(0, 10);
  * PartialResultList&lt;Foo&gt; foos = fooService.getPage(first10Records, true);
  * </pre>
- * 
+ *
  * <pre>
  * // Using the builder with ordering and criteria.
  * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
@@ -61,7 +61,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *     .allMatch(criteria)
  *     .build();
  * </pre>
- * 
+ *
  * <pre>
  * // Using optional (OR) criteria.
  * Map&lt;String, Object&gt; optionalCriteria = new HashMap&lt;&gt;();
@@ -73,9 +73,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *     .anyMatch(optionalCriteria)
  *     .build();
  * </pre>
- * 
+ *
  * <pre>
- * 
+ *
  * // Cursor-based (keyset) paging: avoids SQL OFFSET for stable performance on large datasets.
  * Page page1 = Page.with().range(0, 10).orderBy("id", true).build();
  * PartialResultList&lt;Foo&gt; first = fooService.getPage(page1, false);
@@ -113,7 +113,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
-     * 
+     *
      * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
      * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
      * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to
@@ -133,7 +133,7 @@ public final class Page { // This class MAY NOT be mutable!
     /**
      * Creates a new Page whereby value based paging will be performed instead of offset based paging when applicable. Value based paging is not applicable when
      * the result type is a DTO, or when the ordering contains an aggregated field.
-     * 
+     *
      * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
      * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
      * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when
@@ -176,7 +176,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns the offset. Defaults to 0.
-     * 
+     *
      * @return The offset.
      */
     public int getOffset() {
@@ -185,7 +185,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns the limit. Defaults to {@link Integer#MAX_VALUE}.
-     * 
+     *
      * @return The limit.
      */
     public int getLimit() {
@@ -195,7 +195,7 @@ public final class Page { // This class MAY NOT be mutable!
     /**
      * Returns the last entity of the previous page, if any. If not <code>null</code>, then value based paging will be performed instead of offset based paging
      * when applicable.
-     * 
+     *
      * @return The last entity of the previous page, if any.
      */
     public Identifiable<?> getLast() {
@@ -204,7 +204,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns whether the value based paging is reversed. This is only used when {@link #getLast()} is not <code>null</code>.
-     * 
+     *
      * @return Whether the value based paging is reversed.
      */
     public boolean isReversed() {
@@ -213,7 +213,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns the ordering. Map key represents property path and map value represents whether to sort ascending. Defaults to <code>{"id",false}</code>.
-     * 
+     *
      * @return The ordering.
      */
     public Map<String, Boolean> getOrdering() {
@@ -222,7 +222,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-     * 
+     *
      * @return The required criteria.
      */
     public Map<String, Object> getRequiredCriteria() {
@@ -231,7 +231,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-     * 
+     *
      * @return The optional criteria.
      */
     public Map<String, Object> getOptionalCriteria() {
@@ -282,7 +282,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Returns a clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
-     * 
+     *
      * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
      */
     public Page all() {
@@ -291,7 +291,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Use this if you want to build a new page.
-     * 
+     *
      * @return A new page builder.
      */
     public static Builder with() {
@@ -300,7 +300,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * Use this if you want a page of given offset and limit.
-     * 
+     *
      * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
      * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
      * @return A new page of given offset and limit.
@@ -311,7 +311,7 @@ public final class Page { // This class MAY NOT be mutable!
 
     /**
      * The page builder. Use {@link Page#with()} to get started.
-     * 
+     *
      * @author Bauke Scholtz
      * @since 1.0
      */
@@ -327,7 +327,7 @@ public final class Page { // This class MAY NOT be mutable!
 
         /**
          * Set the range for offset-based paging. Mutually exclusive with {@link #range(Identifiable, int, boolean)}.
-         * 
+         *
          * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
          * @throws IllegalStateException When a range is already set in this builder.
@@ -346,7 +346,7 @@ public final class Page { // This class MAY NOT be mutable!
         /**
          * Set the range for cursor-based (value-based) paging. Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the last entity,
          * keeping performance stable regardless of page depth. Mutually exclusive with {@link #range(int, int)}.
-         * 
+         *
          * @param last Last entity of the previous page.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
          * @param reversed Whether to navigate in reverse order (i.e. towards the previous page).
@@ -366,7 +366,7 @@ public final class Page { // This class MAY NOT be mutable!
 
         /**
          * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
-         * 
+         *
          * @param field The field.
          * @param ascending Whether to sort ascending.
          * @return This builder.
@@ -378,7 +378,7 @@ public final class Page { // This class MAY NOT be mutable!
 
         /**
          * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
-         * 
+         *
          * @param requiredCriteria Required criteria.
          * @return This builder.
          * @throws IllegalStateException When another required criteria is already set in this builder.
@@ -395,7 +395,7 @@ public final class Page { // This class MAY NOT be mutable!
 
         /**
          * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-         * 
+         *
          * @param optionalCriteria Optional criteria.
          * @return This builder.
          * @throws IllegalStateException When another optional criteria is already set in this builder.
@@ -412,7 +412,7 @@ public final class Page { // This class MAY NOT be mutable!
 
         /**
          * Build the page.
-         * 
+         *
          * @return The built page.
          */
         public Page build() {

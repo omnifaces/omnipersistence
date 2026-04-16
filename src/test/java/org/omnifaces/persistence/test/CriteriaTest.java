@@ -711,7 +711,9 @@ public class CriteriaTest {
     // ----------------------------------------------------------------------------------------------------------------
 
     enum TestEnum {
-        MOBILE, HOME, WORK;
+        MOBILE,
+        HOME,
+        WORK;
     }
 
 }

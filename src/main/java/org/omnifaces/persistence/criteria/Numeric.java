@@ -29,7 +29,7 @@ import jakarta.persistence.criteria.Predicate;
  * {@link java.math.BigInteger}, {@link Integer} and {@link Long}.
  * <p>
  * Usage examples:
- * 
+ *
  * <pre>
  * criteria.put("age", Numeric.value(42)); // age = 42
  * criteria.put("age", Numeric.parse("42", type)); // age = 42 (parsed from string)
@@ -47,7 +47,7 @@ public final class Numeric extends Criteria<Number> {
 
     /**
      * Returns a new numeric criteria for the given value.
-     * 
+     *
      * @param value The numeric value.
      * @return A new numeric criteria.
      */
@@ -57,7 +57,7 @@ public final class Numeric extends Criteria<Number> {
 
     /**
      * Returns a new numeric criteria for the given search value, parsed against the given target numeric type.
-     * 
+     *
      * @param searchValue The search value to parse (usually a String).
      * @param targetType The target numeric class (e.g. Long.class, BigDecimal.class).
      * @return A new numeric criteria.
@@ -69,7 +69,7 @@ public final class Numeric extends Criteria<Number> {
 
     /**
      * Returns true if the given type is a numeric type.
-     * 
+     *
      * @param type The type to check.
      * @return True if the given type is a numeric type.
      */

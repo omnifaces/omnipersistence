@@ -31,7 +31,7 @@ import java.util.ServiceLoader;
  * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to <code>META-INF/{configFile}</code> on the classpath.
  * <p>
  * Usage example in <code>web.xml</code> or <code>@DataSourceDefinition</code>:
- * 
+ *
  * <pre>
  * &#64;DataSourceDefinition(
  *     name = "java:app/myDS",
@@ -41,7 +41,7 @@ import java.util.ServiceLoader;
  * </pre>
  * <p>
  * And the <code>META-INF/database.properties</code> file:
- * 
+ *
  * <pre>
  * className=org.postgresql.ds.PGSimpleDataSource
  * serverName=localhost
@@ -85,7 +85,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
     /**
      * Returns the configuration file name.
-     * 
+     *
      * @return The configuration file name.
      */
     public String getConfigFile() {
@@ -94,7 +94,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
     /**
      * Sets the configuration file name.
-     * 
+     *
      * @param configFile The name of the properties file to load configuration from.
      */
     public void setConfigFile(String configFile) {

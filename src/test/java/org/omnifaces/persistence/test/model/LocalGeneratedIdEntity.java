@@ -23,17 +23,17 @@ import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 /**
  * This is needed by OpenJPA because it doesn't recognize a parameterized ID in a MappedSuperClass in a JAR. OpenJPA 2.x will fail as below:
- * 
+ *
  * <pre>
  * org.apache.openjpa.persistence.ArgumentException: Type "class org.omnifaces.persistence.model.GeneratedIdEntity" declares field "id" as a primary key, but keys of type "java.lang.Comparable" are not supported.
  * </pre>
- * 
+ *
  * And OpenJPA 4.x will fail as below:
- * 
+ *
  * <pre>
  * java.lang.IllegalStateException: No registered metadata for type "class org.omnifaces.persistence.model.GeneratedIdEntity". This can happen if this class has not been annotated as a persistent entity or specified in the persistence unit (ex: in the orm.xml).
  * </pre>
- * 
+ *
  * This is <strong>NOT</strong> needed for Hibernate and EclipseLink. You can just extend from {@link GeneratedIdEntity} directly.
  */
 @MappedSuperclass

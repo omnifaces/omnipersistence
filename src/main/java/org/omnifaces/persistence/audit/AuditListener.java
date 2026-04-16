@@ -52,7 +52,7 @@ import org.omnifaces.persistence.model.BaseEntity;
  * </ol>
  * <p>
  * Entity example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * &#64;EntityListeners(AuditListener.class)
@@ -67,9 +67,9 @@ import org.omnifaces.persistence.model.BaseEntity;
  * </pre>
  * <p>
  * Observer example:
- * 
+ *
  * <pre>
- * 
+ *
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
@@ -97,7 +97,7 @@ public class AuditListener {
 
     /**
      * Snapshots the initial values of auditable properties after the entity is loaded from the database.
-     * 
+     *
      * @param entity The entity that was loaded.
      */
     @PostLoad
@@ -107,7 +107,7 @@ public class AuditListener {
 
     /**
      * Compares current values with the snapshot taken during {@link PostLoad} and fires an {@link AuditedChange} event if a difference is detected.
-     * 
+     *
      * @param entity The entity being updated.
      */
     @PreUpdate

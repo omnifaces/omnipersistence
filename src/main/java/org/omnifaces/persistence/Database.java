@@ -78,7 +78,7 @@ public enum Database {
 
     /**
      * Internal constructor to define a database and its associated dialect name aliases.
-     * 
+     *
      * @param aliases Optional aliases that might appear in the Jakarta Persistence dialect name.
      */
     Database(String... aliases) {
@@ -88,7 +88,7 @@ public enum Database {
     /**
      * Returns the {@link Database} associated with the given entity manager. This is determined by inspecting the dialect name provided by the underlying
      * Jakarta Persistence {@link Provider}.
-     * 
+     *
      * @param entityManager The entity manager to detect the database for.
      * @return The detected {@link Database}, or {@link #UNKNOWN} if detection fails or is unsupported.
      */

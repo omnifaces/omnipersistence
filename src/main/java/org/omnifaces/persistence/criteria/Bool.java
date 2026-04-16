@@ -26,7 +26,7 @@ import jakarta.persistence.criteria.Predicate;
  * (parsed via {@link Boolean#parseBoolean(String)} or as number).
  * <p>
  * Usage examples:
- * 
+ *
  * <pre>
  * criteria.put("active", Bool.value(true)); // active IS TRUE
  * criteria.put("active", Bool.value(false)); // active IS NOT TRUE
@@ -45,7 +45,7 @@ public final class Bool extends Criteria<Boolean> {
 
     /**
      * Returns a new boolean criteria for the given value.
-     * 
+     *
      * @param value The boolean value.
      * @return A new boolean criteria.
      */
@@ -55,7 +55,7 @@ public final class Bool extends Criteria<Boolean> {
 
     /**
      * Returns a new boolean criteria for the given search value, parsed as truthy.
-     * 
+     *
      * @param searchValue The search value to parse.
      * @return A new boolean criteria.
      * @see #isTruthy(Object)
@@ -66,7 +66,7 @@ public final class Bool extends Criteria<Boolean> {
 
     /**
      * Returns true if the given type is a boolean.
-     * 
+     *
      * @param type The type to check.
      * @return True if the given type is a boolean.
      */
@@ -96,7 +96,7 @@ public final class Bool extends Criteria<Boolean> {
      * <li>It is a {@link String} representing a number greater than 0.</li>
      * <li>It is a {@link String} that {@link Boolean#parseBoolean(String)} evaluates to {@code true}.</li>
      * </ul>
-     * 
+     *
      * @param value The value to check.
      * @return True if the value is truthy, false otherwise.
      */

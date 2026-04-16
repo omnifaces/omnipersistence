@@ -31,7 +31,7 @@ import jakarta.persistence.Transient;
  * {@link #skipAdjustLastModified()} is called beforehand.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends TimestampedEntity&lt;Long&gt; {

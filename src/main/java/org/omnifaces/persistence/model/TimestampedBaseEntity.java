@@ -31,7 +31,7 @@ import jakarta.persistence.Transient;
  * pre update, the "lastModified" column will be set to current timestamp, unless {@link #skipAdjustLastModified()} is called beforehand.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends TimestampedBaseEntity&lt;Long&gt; {

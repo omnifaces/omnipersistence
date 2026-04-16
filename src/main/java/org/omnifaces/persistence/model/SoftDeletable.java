@@ -29,7 +29,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * doesn't have such column will throw {@link NonSoftDeletableEntityException}.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -42,7 +42,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  * <p>
  * Or, when the column represents "active" state rather than "deleted" state:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -55,7 +55,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  * <p>
  * Then in your service you can use:
- * 
+ *
  * <pre>
  * yourEntityService.softDelete(entity); // Sets deleted=true (or active=false).
  * yourEntityService.softUndelete(entity); // Sets deleted=false (or active=true).
@@ -93,7 +93,7 @@ public @interface SoftDeletable {
 
     /**
      * Returns The soft deletable type. Defaults to {@link Type#DELETED}.
-     * 
+     *
      * @return The soft deletable type.
      */
     public Type type() default Type.DELETED;

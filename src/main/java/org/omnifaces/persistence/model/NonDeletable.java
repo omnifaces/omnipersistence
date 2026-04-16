@@ -27,7 +27,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * useful for entities that should never be hard-deleted, e.g. because they are referenced by other entities or represent immutable records.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * &#64;NonDeletable

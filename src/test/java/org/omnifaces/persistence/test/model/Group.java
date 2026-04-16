@@ -14,6 +14,9 @@ package org.omnifaces.persistence.test.model;
 
 public enum Group {
 
-    USER, MANAGER, ADMINISTRATOR, DEVELOPER;
+    USER,
+    MANAGER,
+    ADMINISTRATOR,
+    DEVELOPER;
 
 }

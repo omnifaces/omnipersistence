@@ -26,7 +26,7 @@ import jakarta.persistence.Version;
  * useful for optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when a concurrent update is detected.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends VersionedEntity&lt;Long&gt; {

@@ -40,7 +40,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </ul>
  * <p>
  * Usage examples:
- * 
+ *
  * <pre>
  * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
  * criteria.put("name", Like.contains("john")); // LIKE '%john%'
@@ -70,7 +70,7 @@ public abstract class Criteria<T> {
 
     /**
      * Create criteria based on given value.
-     * 
+     *
      * @param value The criteria value.
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
@@ -92,11 +92,11 @@ public abstract class Criteria<T> {
 
     /**
      * Returns a predicate for the criteria value. Below is an example implementation:
-     * 
+     *
      * <pre>
      * return criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
      * </pre>
-     * 
+     *
      * @param path Entity property path. You can use this to inspect the target entity property.
      * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
      * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
@@ -107,7 +107,7 @@ public abstract class Criteria<T> {
     /**
      * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java" equivalent of the SQL behavior
      * as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
-     * 
+     *
      * @param modelValue The model value to test this criteria on.
      * @return Whether this criteria value would apply to the given model value.
      * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
@@ -119,7 +119,7 @@ public abstract class Criteria<T> {
 
     /**
      * Returns the criteria value.
-     * 
+     *
      * @return The criteria value.
      */
     public T getValue() {
@@ -128,7 +128,7 @@ public abstract class Criteria<T> {
 
     /**
      * Unwraps the criteria value from given object which could possibly represent a {@link Criteria}.
-     * 
+     *
      * @param possibleCriteria Any object which could possibly represent a {@link Criteria}.
      * @return The unwrapped criteria value when given object actually represents a {@link Criteria}, else the original value unmodified.
      */
@@ -166,7 +166,7 @@ public abstract class Criteria<T> {
 
         /**
          * Creates a new {@link ParameterExpression} for the given value.
-         * 
+         *
          * @param <T> The generic parameter type.
          * @param value The parameter value.
          * @return A new parameter expression.

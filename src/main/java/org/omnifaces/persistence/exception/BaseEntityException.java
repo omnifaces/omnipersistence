@@ -39,7 +39,7 @@ public abstract class BaseEntityException extends PersistenceException {
 
     /**
      * Constructs a new base entity exception for the given entity and message.
-     * 
+     *
      * @param entity The entity associated with this exception.
      * @param message The detail message.
      */
@@ -50,7 +50,7 @@ public abstract class BaseEntityException extends PersistenceException {
 
     /**
      * Returns the entity associated with this exception.
-     * 
+     *
      * @param <E> The generic base entity type.
      * @return The entity associated with this exception.
      */

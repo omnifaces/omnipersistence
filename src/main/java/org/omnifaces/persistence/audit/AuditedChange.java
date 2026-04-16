@@ -20,9 +20,9 @@ import org.omnifaces.persistence.model.BaseEntity;
  * callback.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
- * 
+ *
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
@@ -57,7 +57,7 @@ public class AuditedChange {
 
     /**
      * Returns the entity that was changed.
-     * 
+     *
      * @return The entity that was changed.
      */
     public BaseEntity<?> getEntity() {
@@ -66,7 +66,7 @@ public class AuditedChange {
 
     /**
      * Returns the Jakarta Persistence entity name.
-     * 
+     *
      * @return The Jakarta Persistence entity name.
      */
     public String getEntityName() {
@@ -75,7 +75,7 @@ public class AuditedChange {
 
     /**
      * Returns the name of the audited property that changed.
-     * 
+     *
      * @return The name of the audited property that changed.
      */
     public String getPropertyName() {
@@ -84,7 +84,7 @@ public class AuditedChange {
 
     /**
      * Returns the old value of the property before the change.
-     * 
+     *
      * @return The old value of the property before the change.
      */
     public Object getOldValue() {
@@ -93,7 +93,7 @@ public class AuditedChange {
 
     /**
      * Returns the new value of the property after the change.
-     * 
+     *
      * @return The new value of the property after the change.
      */
     public Object getNewValue() {

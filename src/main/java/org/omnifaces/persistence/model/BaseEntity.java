@@ -54,7 +54,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * auto-generated <code>id</code> column.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -67,9 +67,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * Override {@link #identityGetters()} to base all four identity methods ({@code equals}, {@code hashCode}, {@code compareTo} and {@code toString}) on custom
  * business-key properties — this is the preferred approach:
- * 
+ *
  * <pre>
- * 
+ *
  * &#64;Override
  * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
  *     return Stream.of(YourEntity::getEmail);
@@ -79,9 +79,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * Use the protected final helpers ({@link #hashCode(Function...)}, {@link #equals(Object, Function...)}, {@link #compareTo(Object, Function...)},
  * {@link #toString(Function...)}) only when individual methods must behave differently — for example when {@code compareTo} should order by different fields
  * than those used for equality:
- * 
+ *
  * <pre>
- * 
+ *
  * &#64;Override
  * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
  *     return Stream.of(YourEntity::getEmail); // equals, hashCode and toString identify by email
@@ -108,15 +108,15 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * Returns the getters that define entity identity. The default implementation returns {@link BaseEntity#getId()}.
      * <p>
      * Override to use natural/business key(s), e.g.:
-     * 
+     *
      * <pre>
-     * 
+     *
      * &#64;Override
      * protected Stream&lt;Function&lt;Phone, Object&gt;&gt; identityGetters() {
      *     return Stream.of(Phone::getCountryCode, Phone::getNumber);
      * }
      * </pre>
-     * 
+     *
      * @return The getters that define entity identity.
      */
     protected Stream<? extends Function<?, Object>> identityGetters() {
@@ -133,7 +133,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
     /**
      * Subclasses can use this convenience method to override the {@link #hashCode()} based on given property getters.
-     * 
+     *
      * @param <E> The generic base entity type.
      * @param getters The property getters to determine the {@link #hashCode()} for.
      * @return The {@link #hashCode()} of the given property getters.
@@ -159,7 +159,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
     /**
      * Subclasses can use this convenience method to override the {@link #equals(Object)} based on given property getters.
-     * 
+     *
      * @param <E> The generic base entity type.
      * @param other The reference object with which to compare.
      * @param getters The property getters to determine the {@link #equals(Object)} for.
@@ -201,7 +201,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
     /**
      * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
-     * 
+     *
      * @param <E> The generic base entity type.
      * @param other The object to be compared.
      * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
@@ -232,7 +232,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
     /**
      * Subclasses can use this convenience method to override the {@link #toString()} based on given property getters.
-     * 
+     *
      * @param <E> The generic base entity type.
      * @param getters The property getters to determine the {@link #toString()} for.
      * @return The {@link Class#getSimpleName()}, then followed by {@code [}, then a comma separated string of the results of all given getters, and finally

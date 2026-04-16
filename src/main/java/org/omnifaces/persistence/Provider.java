@@ -219,7 +219,7 @@ public enum Provider {
 
     /**
      * Returns the {@link Provider} associated with the given entity manager.
-     * 
+     *
      * @param entityManager The entity manager to detect the provider for.
      * @return The {@link Provider} associated with the given entity manager.
      */
@@ -242,7 +242,7 @@ public enum Provider {
 
     /**
      * Returns the dialect name of the given entity manager factory. The default implementation throws {@link UnsupportedOperationException}.
-     * 
+     *
      * @param entityManagerFactory The entity manager factory to get the dialect name for.
      * @return The dialect name of the given entity manager factory.
      */
@@ -252,7 +252,7 @@ public enum Provider {
 
     /**
      * Returns whether the given expression is an aggregation. The default implementation throws {@link UnsupportedOperationException}.
-     * 
+     *
      * @param expression The expression to check.
      * @return Whether the given expression is an aggregation.
      */
@@ -263,7 +263,7 @@ public enum Provider {
     /**
      * Returns whether the given attribute is an element collection. The default implementation returns {@code true} if
      * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ELEMENT_COLLECTION}.
-     * 
+     *
      * @param attribute The attribute to check.
      * @return Whether the given attribute is an element collection.
      */
@@ -274,7 +274,7 @@ public enum Provider {
     /**
      * Returns whether the given attribute is a one-to-many relationship. The default implementation returns {@code true} if
      * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#ONE_TO_MANY}.
-     * 
+     *
      * @param attribute The attribute to check.
      * @return Whether the given attribute is a one-to-many relationship.
      */
@@ -285,7 +285,7 @@ public enum Provider {
     /**
      * Returns whether the given attribute is a many-to-one or one-to-one relationship. The default implementation returns {@code true} if
      * {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#MANY_TO_ONE} or {@link PersistentAttributeType#ONE_TO_ONE}.
-     * 
+     *
      * @param attribute The attribute to check.
      * @return Whether the given attribute is a many-to-one or one-to-one relationship.
      */
@@ -295,7 +295,7 @@ public enum Provider {
 
     /**
      * Returns whether the given entity is a proxy. The default implementation returns {@code false}.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to check.
@@ -307,7 +307,7 @@ public enum Provider {
 
     /**
      * Returns whether the given entity is an uninitialized proxy. The default implementation returns {@code false}.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to check.
@@ -320,7 +320,7 @@ public enum Provider {
     /**
      * Returns the dereferenced entity of the given entity. If it is a proxy, then the actual implementation will be returned. The default implementation
      * directly returns the given entity.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to dereference.
@@ -333,7 +333,7 @@ public enum Provider {
     /**
      * Returns the actual entity type of the given entity. If it is a proxy, then the type of the actual implementation will be returned. The default
      * implementation returns the first class in the hierarchy having the {@link Entity} annotation.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the type for.
@@ -357,7 +357,7 @@ public enum Provider {
     /**
      * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy. The default implementation returns
      * {@link BaseEntity#getId()}.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the identifier for.
@@ -370,7 +370,7 @@ public enum Provider {
     /**
      * Returns the table name of the given entity. The default implementation returns the {@link Table} annotation of {@link #getEntityType(BaseEntity)} or else
      * defaults to entity class' simple name in upper cased form.
-     * 
+     *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the table name for.
@@ -390,7 +390,7 @@ public enum Provider {
      * Applies 2nd level cache-related hints to the given query. The default implementation sets the standard Jakarta Persistence
      * {@code jakarta.persistence.cache.storeMode} and {@code jakarta.persistence.cache.retrieveMode} hints. When {@code cacheable} is {@code true}, results are
      * read from and stored in the 2nd level cache; otherwise results are read from the DB and the cache is force-refreshed.
-     * 
+     *
      * @param query The query to apply 2nd level cache hints to.
      * @param cacheable Whether results should be read from and stored in the 2nd level cache.
      */

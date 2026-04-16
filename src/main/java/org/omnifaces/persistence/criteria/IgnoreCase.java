@@ -25,7 +25,7 @@ import jakarta.persistence.criteria.Predicate;
  * insensitive by default.
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * criteria.put("email", IgnoreCase.value("John@Example.COM"));
  * </pre>
@@ -43,7 +43,7 @@ public final class IgnoreCase extends Criteria<String> {
 
     /**
      * Returns a new case-insensitive criteria for the given value.
-     * 
+     *
      * @param value The string value.
      * @return A new case-insensitive criteria.
      */

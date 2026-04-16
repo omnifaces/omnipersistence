@@ -30,7 +30,7 @@ import jakarta.persistence.EntityListeners;
  * </ol>
  * <p>
  * Usage example:
- * 
+ *
  * <pre>
  * &#64;Entity
  * &#64;EntityListeners(AuditListener.class)
