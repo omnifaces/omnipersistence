@@ -16,11 +16,10 @@ import java.util.Map;
 
 /**
  * <p>
- * SPI for loading data source properties from an external file. Implementations of this interface can be registered
- * via {@link java.util.ServiceLoader} to customize how {@link SwitchableCommonDataSource} loads its configuration.
+ * SPI for loading data source properties from an external file. Implementations of this interface can be registered via {@link java.util.ServiceLoader} to
+ * customize how {@link SwitchableCommonDataSource} loads its configuration.
  * <p>
- * If no implementation is found via ServiceLoader, the default behavior is to load the properties file from
- * <code>META-INF/</code> on the classpath.
+ * If no implementation is found via ServiceLoader, the default behavior is to load the properties file from <code>META-INF/</code> on the classpath.
  *
  * @author Arjan Tijms
  * @since 1.0
@@ -30,6 +29,7 @@ public interface PropertiesFileLoader {
 
     /**
      * Loads a map of properties from the given file name.
+     *
      * @param fileName The name of the properties file to load.
      * @return A map of property keys and values.
      */

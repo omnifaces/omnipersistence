@@ -65,11 +65,13 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * Jakarta Persistence utilities for common operations such as getting optional/first results, converting results to maps,
- * counting foreign key references, and building criteria expressions.
+ * Jakarta Persistence utilities for common operations such as getting optional/first results, converting results to maps, counting foreign key references, and
+ * building criteria expressions.
  * <p>
  * Usage examples:
+ *
  * <pre>
+ *
  * // Get an optional single result from a typed query.
  * Optional&lt;Foo&gt; foo = JPA.findSingleResult(typedQuery);
  *
@@ -109,12 +111,12 @@ public final class JPA {
         throw new AssertionError();
     }
 
-
     // Configuration utils ----------------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns the currently configured bean validation mode for given entity manager.
-     * This consults the {@value #PROPERTY_VALIDATION_MODE} property in <code>persistence.xml</code>.
+     * Returns the currently configured bean validation mode for given entity manager. This consults the {@value #PROPERTY_VALIDATION_MODE} property in
+     * <code>persistence.xml</code>.
+     *
      * @param entityManager The involved entity manager.
      * @return The currently configured bean validation mode.
      */
@@ -123,11 +125,11 @@ public final class JPA {
         return validationMode != null ? ValidationMode.valueOf(validationMode.toString().toUpperCase()) : ValidationMode.AUTO;
     }
 
-
     // Query utils ------------------------------------------------------------------------------------------------------------------------
 
     /**
      * Returns single result of given typed query as {@link Optional}.
+     *
      * @param <T> The generic result type.
      * @param typedQuery The involved typed query.
      * @return Single result of given typed query as {@link Optional}.
@@ -139,6 +141,7 @@ public final class JPA {
 
     /**
      * Returns single result of given query as {@link Optional}.
+     *
      * @param <T> The expected result type.
      * @param query The involved query.
      * @return Single result of given query as {@link Optional}.
@@ -151,6 +154,7 @@ public final class JPA {
 
     /**
      * Returns single result of given typed query, or <code>null</code> if there is none.
+     *
      * @param <T> The generic result type.
      * @param typedQuery The involved typed query.
      * @return Single result of given typed query, or <code>null</code> if there is none.
@@ -167,6 +171,7 @@ public final class JPA {
 
     /**
      * Returns single result of given query, or <code>null</code> if there is none.
+     *
      * @param <T> The expected result type.
      * @param query The involved query.
      * @return Single result of given query, or <code>null</code> if there is none.
@@ -184,8 +189,9 @@ public final class JPA {
     }
 
     /**
-     * Returns first result of given typed query as {@link Optional}.
-     * The difference with {@link #findSingleResult(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * Returns first result of given typed query as {@link Optional}. The difference with {@link #findSingleResult(TypedQuery)} is that it doesn't throw
+     * {@link NonUniqueResultException} when there are multiple matches.
+     *
      * @param <T> The generic result type.
      * @param typedQuery The involved typed query.
      * @return First result of given typed query as {@link Optional}.
@@ -196,8 +202,9 @@ public final class JPA {
     }
 
     /**
-     * Returns first result of given query as {@link Optional}.
-     * The difference with {@link #findSingleResult(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * Returns first result of given query as {@link Optional}. The difference with {@link #findSingleResult(Query)} is that it doesn't throw
+     * {@link NonUniqueResultException} when there are multiple matches.
+     *
      * @param <T> The expected result type.
      * @param query The involved query.
      * @return First result of given query as {@link Optional}.
@@ -210,8 +217,9 @@ public final class JPA {
     }
 
     /**
-     * Returns first result of given typed query, or <code>null</code> if there is none.
-     * The difference with {@link #getSingleResultOrNull(TypedQuery)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * Returns first result of given typed query, or <code>null</code> if there is none. The difference with {@link #getSingleResultOrNull(TypedQuery)} is that
+     * it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     *
      * @param <T> The generic result type.
      * @param typedQuery The involved typed query.
      * @return First result of given typed query, or <code>null</code> if there is none.
@@ -221,8 +229,9 @@ public final class JPA {
     }
 
     /**
-     * Returns first result of given query, or <code>null</code> if there is none.
-     * The difference with {@link #getSingleResultOrNull(Query)} is that it doesn't throw {@link NonUniqueResultException} when there are multiple matches.
+     * Returns first result of given query, or <code>null</code> if there is none. The difference with {@link #getSingleResultOrNull(Query)} is that it doesn't
+     * throw {@link NonUniqueResultException} when there are multiple matches.
+     *
      * @param <T> The expected result type.
      * @param query The involved query.
      * @return First result of given query, or <code>null</code> if there is none.
@@ -235,6 +244,7 @@ public final class JPA {
 
     /**
      * Returns the result list of given typed query as a map mapped by the given key mapper.
+     *
      * @param <K> The generic map key type.
      * @param <T> The generic result type, also map value type.
      * @param typedQuery The involved typed query.
@@ -247,6 +257,7 @@ public final class JPA {
 
     /**
      * Returns the result list of given typed query as a map mapped by the given key and value mappers.
+     *
      * @param <K> The generic map key type.
      * @param <T> The generic result type.
      * @param <V> The generic map value type.
@@ -255,16 +266,19 @@ public final class JPA {
      * @param valueMapper The value mapper.
      * @return The result list of given typed query as a map mapped by the given key and value mappers.
      */
-    public static <K, T, V> Map<K, V> getResultMap(TypedQuery<T> typedQuery, Function<? super T, ? extends K> keyMapper, Function<? super T, ? extends V> valueMapper) {
+    public static <K, T, V> Map<K, V> getResultMap(
+        TypedQuery<T> typedQuery, Function<? super T, ? extends K> keyMapper, Function<? super T, ? extends V> valueMapper
+    )
+    {
         return typedQuery.getResultList().stream().collect(Collectors.toMap(keyMapper, valueMapper));
     }
-
 
     // Entity utils -----------------------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type.
-     * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
+     * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type. This is particularly useful in case
+     * you intend to check if the given entity is still referenced elsewhere in database.
+     *
      * @param <T> The generic result type.
      * @param <I> The generic identifier type.
      * @param entityManager The involved entity manager.
@@ -325,11 +339,11 @@ public final class JPA {
         return entityManager.createQuery(query).getSingleResult();
     }
 
-
     // Criteria utils ---------------------------------------------------------------------------------------------------------------------
 
     /**
      * Returns a SQL CONCAT(...) of given expressions or strings.
+     *
      * @param builder The involved criteria builder.
      * @param expressionsOrStrings Expressions or Strings.
      * @return A SQL CONCAT(...) of given expressions or strings.
@@ -359,8 +373,8 @@ public final class JPA {
     }
 
     /**
-     * Returns a new expression wherein given expression is cast as String.
-     * This covers known problems with certain providers and/or databases.
+     * Returns a new expression wherein given expression is cast as String. This covers known problems with certain providers and/or databases.
+     *
      * @param builder The involved criteria builder.
      * @param expression Expression to be cast as String.
      * @return A new expression wherein given expression is cast as String.
@@ -417,6 +431,7 @@ public final class JPA {
 
     /**
      * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
+     *
      * @param path Path of interest.
      * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
      */

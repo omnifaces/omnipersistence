@@ -22,6 +22,7 @@ import org.omnifaces.utils.data.Range;
  * Creates <code>path BETWEEN range.min AND range.max</code>.
  * <p>
  * Usage examples:
+ *
  * <pre>
  * criteria.put("age", Between.range(18, 65));
  * criteria.put("created", Between.range(startDate, endDate));
@@ -34,12 +35,15 @@ import org.omnifaces.utils.data.Range;
  */
 public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
+    private static final long serialVersionUID = 1L;
+
     private Between(Range<T> value) {
         super(value);
     }
 
     /**
      * Creates a new BETWEEN criteria for the given {@link Range}.
+     *
      * @param <T> The generic comparable type.
      * @param value The range value.
      * @return A new BETWEEN criteria.
@@ -50,6 +54,7 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
     /**
      * Creates a new BETWEEN criteria for the given min and max values.
+     *
      * @param <T> The generic comparable type.
      * @param min The minimum value (inclusive).
      * @param max The maximum value (inclusive).

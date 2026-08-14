@@ -22,14 +22,15 @@ import jakarta.persistence.criteria.Predicate;
 /**
  * Creates <code>path IS (NOT) TRUE</code>.
  * <p>
- * Supports truthy value parsing: besides actual {@link Boolean} values, it also accepts numeric values (where &gt; 0
- * is considered truthy) and string values (parsed via {@link Boolean#parseBoolean(String)} or as number).
+ * Supports truthy value parsing: besides actual {@link Boolean} values, it also accepts numeric values (where &gt; 0 is considered truthy) and string values
+ * (parsed via {@link Boolean#parseBoolean(String)} or as number).
  * <p>
  * Usage examples:
+ *
  * <pre>
- * criteria.put("active", Bool.value(true));   // active IS TRUE
- * criteria.put("active", Bool.value(false));  // active IS NOT TRUE
- * criteria.put("active", Bool.parse("1"));    // active IS TRUE (truthy)
+ * criteria.put("active", Bool.value(true)); // active IS TRUE
+ * criteria.put("active", Bool.value(false)); // active IS NOT TRUE
+ * criteria.put("active", Bool.parse("1")); // active IS TRUE (truthy)
  * </pre>
  *
  * @author Bauke Scholtz
@@ -38,12 +39,15 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Bool extends Criteria<Boolean> {
 
+    private static final long serialVersionUID = 1L;
+
     private Bool(Boolean value) {
         super(value);
     }
 
     /**
      * Returns a new boolean criteria for the given value.
+     *
      * @param value The boolean value.
      * @return A new boolean criteria.
      */
@@ -53,6 +57,7 @@ public final class Bool extends Criteria<Boolean> {
 
     /**
      * Returns a new boolean criteria for the given search value, parsed as truthy.
+     *
      * @param searchValue The search value to parse.
      * @return A new boolean criteria.
      * @see #isTruthy(Object)
@@ -63,6 +68,7 @@ public final class Bool extends Criteria<Boolean> {
 
     /**
      * Returns true if the given type is a boolean.
+     *
      * @param type The type to check.
      * @return True if the given type is a boolean.
      */
@@ -92,6 +98,7 @@ public final class Bool extends Criteria<Boolean> {
      * <li>It is a {@link String} representing a number greater than 0.</li>
      * <li>It is a {@link String} that {@link Boolean#parseBoolean(String)} evaluates to {@code true}.</li>
      * </ul>
+     *
      * @param value The value to check.
      * @return True if the value is truthy, false otherwise.
      */

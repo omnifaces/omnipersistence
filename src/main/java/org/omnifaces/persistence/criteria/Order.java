@@ -20,15 +20,15 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>,
- * or <code>path &gt;=</code> a given value.
+ * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>, or <code>path &gt;=</code> a given value.
  * <p>
  * Usage examples:
+ *
  * <pre>
- * criteria.put("age", Order.greaterThan(18));                         // age &gt; 18
- * criteria.put("age", Order.greaterThanOrEqualTo(18));                // age &gt;= 18
- * criteria.put("created", Order.lessThan(LocalDate.of(2025, 1, 1)));  // created &lt; 2025-01-01
- * criteria.put("price", Order.lessThanOrEqualTo(99.99));              // price &lt;= 99.99
+ * criteria.put("age", Order.greaterThan(18)); // age &gt; 18
+ * criteria.put("age", Order.greaterThanOrEqualTo(18)); // age &gt;= 18
+ * criteria.put("created", Order.lessThan(LocalDate.of(2025, 1, 1))); // created &lt; 2025-01-01
+ * criteria.put("price", Order.lessThanOrEqualTo(99.99)); // price &lt;= 99.99
  * </pre>
  *
  * @param <T> The generic comparable type.
@@ -38,6 +38,8 @@ import jakarta.persistence.criteria.Predicate;
  * @see Between
  */
 public final class Order<T extends Comparable<T>> extends Criteria<T> {
+
+    private static final long serialVersionUID = 1L;
 
     private enum Type {
         LT,
@@ -55,6 +57,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns a new comparison criteria for <code>path &lt; value</code>.
+     *
      * @param <T> The generic comparable type.
      * @param value The value to compare against.
      * @return A new less-than criteria.
@@ -65,6 +68,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns a new comparison criteria for <code>path &lt;= value</code>.
+     *
      * @param <T> The generic comparable type.
      * @param value The value to compare against.
      * @return A new less-than-or-equal criteria.
@@ -75,6 +79,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns a new comparison criteria for <code>path &gt;= value</code>.
+     *
      * @param <T> The generic comparable type.
      * @param value The value to compare against.
      * @return A new greater-than-or-equal criteria.
@@ -85,6 +90,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns a new comparison criteria for <code>path &gt; value</code>.
+     *
      * @param <T> The generic comparable type.
      * @param value The value to compare against.
      * @return A new greater-than criteria.
@@ -95,6 +101,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns whether this criteria is a less-than comparison.
+     *
      * @return True if LT, false otherwise.
      */
     public boolean lessThan() {
@@ -103,6 +110,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns whether this criteria is a less-than-or-equal comparison.
+     *
      * @return True if LTE, false otherwise.
      */
     public boolean lessThanOrEqualTo() {
@@ -111,6 +119,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns whether this criteria is a greater-than-or-equal comparison.
+     *
      * @return True if GTE, false otherwise.
      */
     public boolean greaterThanOrEqualTo() {
@@ -119,6 +128,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     /**
      * Returns whether this criteria is a greater-than comparison.
+     *
      * @return True if GT, false otherwise.
      */
     public boolean greaterThan() {
@@ -180,7 +190,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     @Override
     public String toString() {
-        return (type == Type.GT ? ">" : type == Type.GTE ? ">=" : type==Type.LT ? "<" : "<=") + " " + getValue();
+        return (type == Type.GT ? ">" : type == Type.GTE ? ">=" : type == Type.LT ? "<" : "<=") + " " + getValue();
     }
 
 }

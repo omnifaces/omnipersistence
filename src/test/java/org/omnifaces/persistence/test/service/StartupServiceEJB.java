@@ -101,4 +101,5 @@ public class StartupServiceEJB {
         commentServiceEJB.persist(new Comment());
         commentServiceEJB.persist(new Comment());
     }
+
 }

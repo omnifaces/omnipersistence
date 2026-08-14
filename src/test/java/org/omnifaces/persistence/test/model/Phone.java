@@ -38,7 +38,7 @@ public class Phone extends LocalGeneratedIdEntity {
     private @NotNull @Enumerated(STRING) Type type;
     private @NotNull String number;
 
-    @ManyToOne(optional=false, fetch=FetchType.LAZY)
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private @NotNull Person owner;
 
     public Type getType() {
@@ -74,4 +74,5 @@ public class Phone extends LocalGeneratedIdEntity {
     protected Stream<Function<Phone, Object>> identityGetters() {
         return Stream.of(Phone::getType, Phone::getNumber);
     }
+
 }

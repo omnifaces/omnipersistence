@@ -16,9 +16,8 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * Thrown when an entity is in an illegal state for the requested operation. For example, when trying to
- * {@link org.omnifaces.persistence.service.BaseEntityService#persist(BaseEntity) persist} an entity that is already
- * persisted, or when trying to {@link org.omnifaces.persistence.service.BaseEntityService#update(BaseEntity) update}
- * an entity that has no ID.
+ * {@link org.omnifaces.persistence.service.BaseEntityService#persist(BaseEntity) persist} an entity that is already persisted, or when trying to
+ * {@link org.omnifaces.persistence.service.BaseEntityService#update(BaseEntity) update} an entity that has no ID.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -30,6 +29,7 @@ public class IllegalEntityStateException extends BaseEntityException {
 
     /**
      * Constructs a new illegal entity state exception for the given entity and message.
+     *
      * @param entity The entity which is in an illegal state.
      * @param message The detail message.
      */

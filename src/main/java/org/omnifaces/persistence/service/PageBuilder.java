@@ -81,4 +81,5 @@ class PageBuilder<T> {
     public MappedQueryBuilder<T> getQueryBuilder() {
         return queryBuilder;
     }
+
 }

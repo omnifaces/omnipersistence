@@ -40,8 +40,7 @@ import org.omnifaces.persistence.model.Identifiable;
  */
 class RootPathResolver implements PathResolver {
 
-    private static final String ERROR_UNKNOWN_FIELD =
-        "Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
+    private static final String ERROR_UNKNOWN_FIELD = "Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
 
     private final Root<?> root;
     private final Map<String, Path<?>> joins;
@@ -167,4 +166,3 @@ class RootPathResolver implements PathResolver {
     }
 
 }
-

@@ -21,16 +21,13 @@ import jakarta.persistence.Version;
 
 /**
  * <p>
- * Mapped superclass for versioned entity.
- * It extends from {@link TimestampedBaseEntity} and implements {@link Versioned}.
- * In addition to the "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
- * The {@link Id} column needs to be manually taken care of.
- * On pre persist, Jakarta Persistence will automatically set version to 0.
- * On pre update, Jakarta Persistence will automatically increment version with 1.
- * This is useful for optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when
- * a concurrent update is detected.
+ * Mapped superclass for versioned entity. It extends from {@link TimestampedBaseEntity} and implements {@link Versioned}. In addition to the "created" and
+ * "lastModified" columns, it specifies a {@link Version} column, named "version". The {@link Id} column needs to be manually taken care of. On pre persist,
+ * Jakarta Persistence will automatically set version to 0. On pre update, Jakarta Persistence will automatically increment version with 1. This is useful for
+ * optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when a concurrent update is detected.
  * <p>
  * Usage example:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends VersionedBaseEntity&lt;Long&gt; {
@@ -41,10 +38,14 @@ import jakarta.persistence.Version;
  *     private String name;
  *
  *     &#64;Override
- *     public Long getId() { return id; }
+ *     public Long getId() {
+ *         return id;
+ *     }
  *
  *     &#64;Override
- *     public void setId(Long id) { this.id = id; }
+ *     public void setId(Long id) {
+ *         this.id = id;
+ *     }
  *
  *     // Other getters and setters omitted.
  * }

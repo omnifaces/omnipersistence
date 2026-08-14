@@ -19,10 +19,9 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Base class for all entity-related exceptions thrown by {@link BaseEntityService}.
- * The {@link ApplicationException} annotation ensures EJB passes this exception through unwrapped
- * (instead of wrapping it in an {@code EJBException}) and triggers a transaction rollback.
- * In CDI {@code @Transactional} contexts, the rollback happens automatically as this is a {@link RuntimeException}.
+ * Base class for all entity-related exceptions thrown by {@link BaseEntityService}. The {@link ApplicationException} annotation ensures EJB passes this
+ * exception through unwrapped (instead of wrapping it in an {@code EJBException}) and triggers a transaction rollback. In CDI {@code @Transactional} contexts,
+ * the rollback happens automatically as this is a {@link RuntimeException}.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -40,6 +39,7 @@ public abstract class BaseEntityException extends PersistenceException {
 
     /**
      * Constructs a new base entity exception for the given entity and message.
+     *
      * @param entity The entity associated with this exception.
      * @param message The detail message.
      */
@@ -50,6 +50,7 @@ public abstract class BaseEntityException extends PersistenceException {
 
     /**
      * Returns the entity associated with this exception.
+     *
      * @param <E> The generic base entity type.
      * @return The entity associated with this exception.
      */

@@ -24,9 +24,10 @@ import jakarta.persistence.criteria.Predicate;
  * Supports case insensitive enum name matching when parsing from a string value.
  * <p>
  * Usage examples:
+ *
  * <pre>
- * criteria.put("status", Enumerated.value(Status.ACTIVE));    // status = 'ACTIVE'
- * criteria.put("status", Enumerated.parse("active", type));   // status = 'ACTIVE' (case insensitive)
+ * criteria.put("status", Enumerated.value(Status.ACTIVE)); // status = 'ACTIVE'
+ * criteria.put("status", Enumerated.parse("active", type)); // status = 'ACTIVE' (case insensitive)
  * </pre>
  *
  * @author Bauke Scholtz
@@ -35,12 +36,15 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Enumerated extends Criteria<Enum<?>> {
 
+    private static final long serialVersionUID = 1L;
+
     private Enumerated(Enum<?> value) {
         super(value, false, true);
     }
 
     /**
      * Returns a new enumerated criteria for the given enum constant.
+     *
      * @param value The enum constant.
      * @return A new enumerated criteria.
      */
@@ -52,6 +56,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
      * Returns a new enumerated criteria for the given search value, parsed against the given target enum type.
      * <p>
      * Parsing is case-insensitive by default.
+     *
      * @param searchValue The search value to parse (usually a String).
      * @param targetType The target enum class.
      * @return A new enumerated criteria.

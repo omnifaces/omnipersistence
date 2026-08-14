@@ -24,14 +24,12 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * When put on a field of {@link BaseEntity}, then the special methods of
- * {@link BaseEntityService} will allow to soft-delete the entity and later
- * soft-undelete it. It will also allow to get all entities that are
- * soft-deleted and/or active in the data store. Calling those methods from a
- * service for an entity that doesn't have such column will throw
- * {@link NonSoftDeletableEntityException}.
+ * When put on a field of {@link BaseEntity}, then the special methods of {@link BaseEntityService} will allow to soft-delete the entity and later soft-undelete
+ * it. It will also allow to get all entities that are soft-deleted and/or active in the data store. Calling those methods from a service for an entity that
+ * doesn't have such column will throw {@link NonSoftDeletableEntityException}.
  * <p>
  * Usage example:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -44,6 +42,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  * <p>
  * Or, when the column represents "active" state rather than "deleted" state:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -56,10 +55,11 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  * <p>
  * Then in your service you can use:
+ *
  * <pre>
- * yourEntityService.softDelete(entity);   // Sets deleted=true (or active=false).
+ * yourEntityService.softDelete(entity); // Sets deleted=true (or active=false).
  * yourEntityService.softUndelete(entity); // Sets deleted=false (or active=true).
- * yourEntityService.listSoftDeleted();    // Lists only soft deleted entities.
+ * yourEntityService.listSoftDeleted(); // Lists only soft deleted entities.
  * </pre>
  *
  * @author Sergey Kuntsel
@@ -79,23 +79,21 @@ public @interface SoftDeletable {
     public enum Type {
 
         /**
-         * Indicates that the associated column is a column holding deleted state.
-         * All entities that haven't been soft deleted will thus have false
-         * in the soft delete column, assuming it was mapped as <code>boolean</code>.
-         * This is the default type.
+         * Indicates that the associated column is a column holding deleted state. All entities that haven't been soft deleted will thus have false in the soft
+         * delete column, assuming it was mapped as <code>boolean</code>. This is the default type.
          */
         DELETED,
 
         /**
-         * Indicates that the associated column is a column holding active state.
-         * All entities that haven't been soft deleted will thus have true
-         * in the soft delete column, assuming it was mapped as <code>boolean</code>.
+         * Indicates that the associated column is a column holding active state. All entities that haven't been soft deleted will thus have true in the soft
+         * delete column, assuming it was mapped as <code>boolean</code>.
          */
         ACTIVE
     }
 
     /**
      * Returns The soft deletable type. Defaults to {@link Type#DELETED}.
+     *
      * @return The soft deletable type.
      */
     public Type type() default Type.DELETED;

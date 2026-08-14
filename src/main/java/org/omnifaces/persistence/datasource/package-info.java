@@ -13,13 +13,11 @@
 /**
  * Switchable {@link javax.sql.DataSource} implementations driven by an external properties file.
  * <p>
- * Declare {@link SwitchableCommonDataSource} (or its XA variant
- * {@link SwitchableXADataSource}) as a data source in {@code web.xml} or via
- * {@code @DataSourceDefinition} and point its {@code configFile} property at a properties file that specifies the
- * real driver class and connection settings. Swapping the file switches the target database without redeployment.
+ * Declare {@link SwitchableCommonDataSource} (or its XA variant {@link SwitchableXADataSource}) as a data source in {@code web.xml} or via
+ * {@code @DataSourceDefinition} and point its {@code configFile} property at a properties file that specifies the real driver class and connection settings.
+ * Swapping the file switches the target database without redeployment.
  * <p>
- * The properties-file loading strategy can be replaced by providing a custom
- * {@link PropertiesFileLoader} SPI implementation.
+ * The properties-file loading strategy can be replaced by providing a custom {@link PropertiesFileLoader} SPI implementation.
  *
  * @see SwitchableCommonDataSource
  * @see SwitchableXADataSource

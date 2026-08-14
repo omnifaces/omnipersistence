@@ -34,24 +34,27 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * Let all your entities extend from this. Then you can make use of {@link BaseEntityService}.
- * This is the root of the entity hierarchy and provides default implementations of {@link Object#hashCode()},
- * {@link Object#equals(Object)}, {@link Comparable#compareTo(Object)} and {@link Object#toString()} based on the entity ID.
+ * Let all your entities extend from this. Then you can make use of {@link BaseEntityService}. This is the root of the entity hierarchy and provides default
+ * implementations of {@link Object#hashCode()}, {@link Object#equals(Object)}, {@link Comparable#compareTo(Object)} and {@link Object#toString()} based on the
+ * entity ID.
  * <p>
  * There are five more mapped superclasses which may also be of interest.
  * <ul>
- * <li>{@link TimestampedBaseEntity} - extends {@link BaseEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care of them.
+ * <li>{@link TimestampedBaseEntity} - extends {@link BaseEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care
+ * of them.
  * <li>{@link VersionedBaseEntity} - extends {@link TimestampedBaseEntity} with a <code>@Version</code> column and automatically takes care of it.
  * <li>{@link GeneratedIdEntity} - extends {@link BaseEntity} with <code>id</code> column and automatically takes care of it.
- * <li>{@link TimestampedEntity} - extends {@link GeneratedIdEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care of them.
+ * <li>{@link TimestampedEntity} - extends {@link GeneratedIdEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes
+ * care of them.
  * <li>{@link VersionedEntity} - extends {@link TimestampedEntity} with a <code>@Version</code> column and automatically takes care of it.
  * </ul>
  * <p>
- * The first three ({@link BaseEntity}, {@link TimestampedBaseEntity} and {@link VersionedBaseEntity}) require you to
- * manually define the {@link jakarta.persistence.Id} column. The last three ({@link GeneratedIdEntity}, {@link TimestampedEntity}
- * and {@link VersionedEntity}) already provide an auto-generated <code>id</code> column.
+ * The first three ({@link BaseEntity}, {@link TimestampedBaseEntity} and {@link VersionedBaseEntity}) require you to manually define the
+ * {@link jakarta.persistence.Id} column. The last three ({@link GeneratedIdEntity}, {@link TimestampedEntity} and {@link VersionedEntity}) already provide an
+ * auto-generated <code>id</code> column.
  * <p>
  * Usage example:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends GeneratedIdEntity&lt;Long&gt; {
@@ -62,19 +65,23 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * }
  * </pre>
  * <p>
- * Override {@link #identityGetters()} to base all four identity methods ({@code equals}, {@code hashCode},
- * {@code compareTo} and {@code toString}) on custom business-key properties — this is the preferred approach:
+ * Override {@link #identityGetters()} to base all four identity methods ({@code equals}, {@code hashCode}, {@code compareTo} and {@code toString}) on custom
+ * business-key properties — this is the preferred approach:
+ *
  * <pre>
+ *
  * &#64;Override
  * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
  *     return Stream.of(YourEntity::getEmail);
  * }
  * </pre>
  * <p>
- * Use the protected final helpers ({@link #hashCode(Function...)}, {@link #equals(Object, Function...)},
- * {@link #compareTo(Object, Function...)}, {@link #toString(Function...)}) only when individual methods must behave
- * differently — for example when {@code compareTo} should order by different fields than those used for equality:
+ * Use the protected final helpers ({@link #hashCode(Function...)}, {@link #equals(Object, Function...)}, {@link #compareTo(Object, Function...)},
+ * {@link #toString(Function...)}) only when individual methods must behave differently — for example when {@code compareTo} should order by different fields
+ * than those used for equality:
+ *
  * <pre>
+ *
  * &#64;Override
  * protected Stream&lt;Function&lt;YourEntity, Object&gt;&gt; identityGetters() {
  *     return Stream.of(YourEntity::getEmail); // equals, hashCode and toString identify by email
@@ -93,21 +100,23 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)
-public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
+public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I> {
 
     private static final long serialVersionUID = 1L;
 
     /**
-     * Returns the getters that define entity identity.
-     * The default implementation returns {@link BaseEntity#getId()}.
+     * Returns the getters that define entity identity. The default implementation returns {@link BaseEntity#getId()}.
      * <p>
      * Override to use natural/business key(s), e.g.:
+     *
      * <pre>
+     *
      * &#64;Override
      * protected Stream&lt;Function&lt;Phone, Object&gt;&gt; identityGetters() {
      *     return Stream.of(Phone::getCountryCode, Phone::getNumber);
      * }
      * </pre>
+     *
      * @return The getters that define entity identity.
      */
     protected Stream<? extends Function<?, Object>> identityGetters() {
@@ -122,12 +131,13 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
         return hashCode(identityGetters());
     }
 
-	/**
-	 * Subclasses can use this convenience method to override the {@link #hashCode()} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param getters The property getters to determine the {@link #hashCode()} for.
-	 * @return The {@link #hashCode()} of the given property getters.
-	 */
+    /**
+     * Subclasses can use this convenience method to override the {@link #hashCode()} based on given property getters.
+     *
+     * @param <E> The generic base entity type.
+     * @param getters The property getters to determine the {@link #hashCode()} for.
+     * @return The {@link #hashCode()} of the given property getters.
+     */
     @SafeVarargs
     protected final <E extends BaseEntity<I>> int hashCode(final Function<E, Object>... getters) {
         return hashCode(Stream.of(getters));
@@ -147,13 +157,14 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
         return equals(other, identityGetters());
     }
 
-	/**
-	 * Subclasses can use this convenience method to override the {@link #equals(Object)} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param other The reference object with which to compare.
-	 * @param getters The property getters to determine the {@link #equals(Object)} for.
-	 * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
-	 */
+    /**
+     * Subclasses can use this convenience method to override the {@link #equals(Object)} based on given property getters.
+     *
+     * @param <E> The generic base entity type.
+     * @param other The reference object with which to compare.
+     * @param getters The property getters to determine the {@link #equals(Object)} for.
+     * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
+     */
     @SafeVarargs
     protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
         return equals(other, Stream.of(getters));
@@ -190,6 +201,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
 
     /**
      * Subclasses can use this convenience method to override the {@link #compareTo(BaseEntity)} based on given property getters.
+     *
      * @param <E> The generic base entity type.
      * @param other The object to be compared.
      * @param getters The property getters to determine the {@link #compareTo(BaseEntity)} for.
@@ -206,7 +218,8 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
             return -1;
         }
 
-        return getters.map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow().compare(this, other);
+        return getters.map(getter -> comparing((Function) getter, nullsLast(naturalOrder()))).reduce(Comparator::thenComparing).orElseThrow()
+            .compare(this, other);
     }
 
     /**
@@ -218,11 +231,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     }
 
     /**
-	 * Subclasses can use this convenience method to override the {@link #toString()} based on given property getters.
-	 * @param <E> The generic base entity type.
-	 * @param getters The property getters to determine the {@link #toString()} for.
-     * @return The {@link Class#getSimpleName()}, then followed by {@code [}, then a comma separated string of the
-     * results of all given getters, and finally followed by {@code ]}.
+     * Subclasses can use this convenience method to override the {@link #toString()} based on given property getters.
+     *
+     * @param <E> The generic base entity type.
+     * @param getters The property getters to determine the {@link #toString()} for.
+     * @return The {@link Class#getSimpleName()}, then followed by {@code [}, then a comma separated string of the results of all given getters, and finally
+     * followed by {@code ]}.
      */
     @SafeVarargs
     protected final <E extends BaseEntity<I>> String toString(final Function<E, Object>... getters) {
@@ -232,6 +246,11 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     @SuppressWarnings("unchecked")
     private String toString(final Stream<? extends Function<?, Object>> getters) {
         final var values = getters.map(getter -> ((Function<Object, Object>) getter).apply(this)).toArray();
-        return getClass().getSimpleName() + "[" + (stream(values).allMatch(Objects::isNull) ? "@" + toHexString(identityHashCode(this)) : stream(values).map(Objects::toString).collect(joining(", "))) + "]";
+        return getClass().getSimpleName() + "["
+            + (stream(values).allMatch(Objects::isNull)
+                ? "@" + toHexString(identityHashCode(this))
+                : stream(values).map(Objects::toString).collect(joining(", ")))
+            + "]";
     }
+
 }

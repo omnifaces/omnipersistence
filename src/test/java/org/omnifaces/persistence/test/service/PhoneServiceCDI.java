@@ -29,4 +29,5 @@ public class PhoneServiceCDI extends PhoneService {
     public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
         return super.getPageWithOwners(page, count);
     }
+
 }

@@ -35,4 +35,5 @@ public class PersonServiceCDI extends PersonService {
     public PartialResultList<Person> getPageWithGroups(Page page, boolean count) {
         return super.getPageWithGroups(page, count);
     }
+
 }

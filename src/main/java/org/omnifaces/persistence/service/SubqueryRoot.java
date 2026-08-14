@@ -105,4 +105,5 @@ class SubqueryRoot<X> extends RootWrapper<X> {
 
         return new JoinFetchAdapter<>(join);
     }
+
 }

@@ -20,15 +20,13 @@ import jakarta.persistence.Version;
 
 /**
  * <p>
- * Mapped superclass for versioned entity with generated ID.
- * It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}, and implements {@link Versioned}.
- * In addition to the "id", "created" and "lastModified" columns, it specifies a {@link Version} column, named "version".
- * On pre persist, Jakarta Persistence will automatically set version to 0.
- * On pre update, Jakarta Persistence will automatically increment version with 1.
- * This is useful for optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when
- * a concurrent update is detected.
+ * Mapped superclass for versioned entity with generated ID. It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}, and
+ * implements {@link Versioned}. In addition to the "id", "created" and "lastModified" columns, it specifies a {@link Version} column, named "version". On pre
+ * persist, Jakarta Persistence will automatically set version to 0. On pre update, Jakarta Persistence will automatically increment version with 1. This is
+ * useful for optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when a concurrent update is detected.
  * <p>
  * Usage example:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends VersionedEntity&lt;Long&gt; {

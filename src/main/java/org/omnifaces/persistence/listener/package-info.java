@@ -13,9 +13,8 @@
 /**
  * Jakarta Persistence entity listener that bridges Jakarta Persistence lifecycle callbacks to CDI events.
  * <p>
- * {@link BaseEntityListener} is registered automatically on all
- * {@link org.omnifaces.persistence.model.BaseEntity} subclasses via {@code @EntityListeners} and fires qualified CDI
- * events ({@link org.omnifaces.persistence.event.Created}, {@link org.omnifaces.persistence.event.Updated},
+ * {@link BaseEntityListener} is registered automatically on all {@link org.omnifaces.persistence.model.BaseEntity} subclasses via {@code @EntityListeners} and
+ * fires qualified CDI events ({@link org.omnifaces.persistence.event.Created}, {@link org.omnifaces.persistence.event.Updated},
  * {@link org.omnifaces.persistence.event.Deleted}) on the corresponding Jakarta Persistence lifecycle callbacks.
  *
  * @see BaseEntityListener

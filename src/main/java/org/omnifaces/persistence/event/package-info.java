@@ -11,13 +11,10 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * CDI qualifier annotations for entity lifecycle events fired by
- * {@link org.omnifaces.persistence.listener.BaseEntityListener}.
+ * CDI qualifier annotations for entity lifecycle events fired by {@link org.omnifaces.persistence.listener.BaseEntityListener}.
  * <p>
- * Observe {@code @}{@link Created},
- * {@code @}{@link Updated} or
- * {@code @}{@link Deleted} to react to Jakarta Persistence
- * {@code @PrePersist}, {@code @PreUpdate} and {@code @PreRemove} lifecycle callbacks respectively.
+ * Observe {@code @}{@link Created}, {@code @}{@link Updated} or {@code @}{@link Deleted} to react to Jakarta Persistence {@code @PrePersist},
+ * {@code @PreUpdate} and {@code @PreRemove} lifecycle callbacks respectively.
  *
  * @see org.omnifaces.persistence.listener.BaseEntityListener
  */

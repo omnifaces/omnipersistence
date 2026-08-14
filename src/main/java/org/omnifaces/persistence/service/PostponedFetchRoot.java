@@ -40,9 +40,10 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
- * Both OpenJPA and EclipseLink stubbornly apply the range (offset/limit) to join rows rather than root entity rows when a fetch join is present, resulting in fewer root entities returned than the requested limit.
- * This root will postpone all issued fetches so BaseEntityService can ultimately execute them as a secondary JPQL query to initialize the fetched collections on the already-returned root entities.
- * After the postponed fetches run, this root performs an in-memory filter and sort of each loaded collection according to the active page criteria and ordering, if applicable.
+ * Both OpenJPA and EclipseLink stubbornly apply the range (offset/limit) to join rows rather than root entity rows when a fetch join is present, resulting in
+ * fewer root entities returned than the requested limit. This root will postpone all issued fetches so BaseEntityService can ultimately execute them as a
+ * secondary JPQL query to initialize the fetched collections on the already-returned root entities. After the postponed fetches run, this root performs an
+ * in-memory filter and sort of each loaded collection according to the active page criteria and ordering, if applicable.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -72,21 +73,24 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         var ids = entities.stream().map(BaseEntity::getId).toList();
 
         for (var fetchPath : fetchPaths) {
-            entityManager.createQuery("SELECT DISTINCT e FROM " + entityType.getSimpleName() + " e JOIN FETCH e." + fetchPath + " WHERE e.id IN :ids", entityType).setParameter("ids", ids).getResultList();
+            entityManager
+                .createQuery("SELECT DISTINCT e FROM " + entityType.getSimpleName() + " e JOIN FETCH e." + fetchPath + " WHERE e.id IN :ids", entityType)
+                .setParameter("ids", ids).getResultList();
             // No need to explicitly set in root entities; 1st level cache will sort out this while still inside the same transaction.
         }
 
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
         var fetchedEntityProperties = new ArrayList<List<Object>>();
         distinctEntities = buildAndSortPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntityProperties);
-        entityManager.clear(); // Detach all managed entities to prevent Jakarta Persistence provider from flushing spurious UPDATEs for entities loaded by the postponed fetch.
+        entityManager.clear(); // Detach all managed entities to prevent Jakarta Persistence provider from flushing spurious UPDATEs for entities loaded by the
+                               // postponed fetch.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
     }
 
     /**
-     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities.
-     * Finally, re-sorts the parent entities based on the first element of their sorted child lists.
+     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. Finally, re-sorts the parent entities based on the first
+     * element of their sorted child lists.
      */
     private static <T> List<T> buildAndSortPostponedFetches(Page page, List<T> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {
         var rows = entities.stream().map(entity -> processEntityFetches(entity, fetchPaths, page)).collect(toList());
@@ -106,7 +110,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return sortedEntities;
     }
 
-    private static record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {}
+    private static record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
+    }
 
     private static <T> EntityRow<T> processEntityFetches(T entity, List<String> paths, Page page) {
         var copies = paths.stream().map(path -> {
@@ -116,7 +121,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
                 return raw; // @OneToOne / @ManyToOne
             }
 
-            var filtered = col.stream().filter(item -> matchesFetchFilters(item, collectFiltersForFetch(path, page.getRequiredCriteria()))).collect(toCollection(ArrayList::new));
+            var filtered = col.stream().filter(item -> matchesFetchFilters(item, collectFiltersForFetch(path, page.getRequiredCriteria())))
+                .collect(toCollection(ArrayList::new));
             var itemComp = buildFetchItemComparator(path, page.getOrdering());
 
             if (itemComp != null) {
@@ -162,15 +168,15 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     @SuppressWarnings("unchecked")
     private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering) {
         return ordering.entrySet().stream()
-                .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
-                .map(entry -> {
-                    var subField = entry.getKey().substring(fetchPath.length() + 1);
-                    var ascending = entry.getValue();
-                    var fieldComp = comparing(obj -> (Comparable<Object>) invokeGetter(obj, subField), nullsLast(naturalOrder()));
-                    return ascending ? fieldComp : fieldComp.reversed();
-                })
-                .reduce(Comparator::thenComparing)
-                .orElse(null);
+            .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
+            .map(entry -> {
+                var subField = entry.getKey().substring(fetchPath.length() + 1);
+                var ascending = entry.getValue();
+                var fieldComp = comparing(obj -> (Comparable<Object>) invokeGetter(obj, subField), nullsLast(naturalOrder()));
+                return ascending ? fieldComp : fieldComp.reversed();
+            })
+            .reduce(Comparator::thenComparing)
+            .orElse(null);
     }
 
     private static Map<String, Object> collectFiltersForFetch(String fetchPath, Map<String, Object> requiredCriteria) {
@@ -210,8 +216,10 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {
         for (var i = 0; i < entities.size(); i++) {
             for (var j = 0; j < fetchPaths.size(); j++) {
-                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j)); // Set copy onto the detached entity, bypassing Jakarta Persistence tracking.
+                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j)); // Set copy onto the detached entity, bypassing Jakarta
+                                                                                                         // Persistence tracking.
             }
         }
     }
+
 }

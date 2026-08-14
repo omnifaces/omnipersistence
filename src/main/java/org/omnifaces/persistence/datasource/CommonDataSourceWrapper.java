@@ -33,12 +33,10 @@ import javax.sql.CommonDataSource;
 
 /**
  * <p>
- * A wrapper around a {@link CommonDataSource} that delegates all property access to the wrapped data source via
- * reflection-based JavaBeans introspection. This allows configuring any data source implementation generically
- * without compile-time dependency on the specific driver class.
+ * A wrapper around a {@link CommonDataSource} that delegates all property access to the wrapped data source via reflection-based JavaBeans introspection. This
+ * allows configuring any data source implementation generically without compile-time dependency on the specific driver class.
  * <p>
- * Properties are set and retrieved by name using the wrapped data source's getter and setter methods.
- * Unknown properties are silently ignored.
+ * Properties are set and retrieved by name using the wrapped data source's getter and setter methods. Unknown properties are silently ignored.
  *
  * @author Arjan Tijms
  * @since 1.0
@@ -49,18 +47,20 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     private CommonDataSource wrapped;
     private Map<String, PropertyDescriptor> dataSourceProperties;
-    private Set<String> commonProperties  = new HashSet<>(asList(
+    private Set<String> commonProperties = new HashSet<>(
+        asList(
             "serverName", "databaseName", "portNumber",
             "user", "password", "compatible", "logLevel",
             "protocolVersion", "prepareThreshold", "receiveBufferSize",
             "unknownLength", "socketTimeout", "ssl", "sslfactory",
             "applicationName", "tcpKeepAlive", "binaryTransfer",
             "binaryTransferEnable", "binaryTransferDisable"
-    ));
+        )
+    );
 
     /**
-     * Initializes the wrapper with the given data source.
-     * This method performs introspection on the wrapped instance to discover its available properties.
+     * Initializes the wrapper with the given data source. This method performs introspection on the wrapped instance to discover its available properties.
+     *
      * @param wrapped The data source to wrap.
      * @throws IllegalStateException If introspection fails.
      */
@@ -75,13 +75,15 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
             dataSourceProperties = unmodifiableMap(mutableProperties);
 
-        } catch (IntrospectionException e) {
+        }
+        catch (IntrospectionException e) {
             throw new IllegalStateException(e);
         }
     }
 
     /**
      * Gets a property from the wrapped data source via reflection.
+     *
      * @param <T> The expected return type.
      * @param name The name of the property to get.
      * @return The property value.
@@ -98,13 +100,15 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
         try {
             return (T) property.getReadMethod().invoke(getWrapped());
-        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+        }
+        catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             throw new IllegalStateException(e);
         }
     }
 
     /**
      * Sets a property on the wrapped data source via reflection.
+     *
      * @param name The name of the property to set.
      * @param value The value to set.
      */
@@ -119,13 +123,15 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
         try {
             dataSourceProperties.get(name).getWriteMethod().invoke(getWrapped(), value);
-        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+        }
+        catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             throw new IllegalStateException(e);
         }
     }
 
     /**
      * Sets a property on the wrapped data source by converting the given String value to the target property type.
+     *
      * @param name The name of the property to set.
      * @param value The String value to convert and set.
      */
@@ -138,13 +144,15 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
         try {
             property.getWriteMethod().invoke(getWrapped(), editor.getValue());
-        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+        }
+        catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             throw new IllegalStateException(e);
         }
     }
 
     /**
      * Returns the wrapped {@link CommonDataSource} instance.
+     *
      * @return The wrapped data source.
      */
     public CommonDataSource getWrapped() {
@@ -184,6 +192,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the server name.
+     *
      * @return The server name.
      */
     public String getServerName() {
@@ -192,6 +201,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the server name.
+     *
      * @param serverName The server name.
      */
     public void setServerName(String serverName) {
@@ -200,6 +210,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the database name.
+     *
      * @return The database name.
      */
     public String getDatabaseName() {
@@ -208,6 +219,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the database name.
+     *
      * @param databaseName The database name.
      */
     public void setDatabaseName(String databaseName) {
@@ -216,6 +228,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the port number.
+     *
      * @return The port number.
      */
     public int getPortNumber() {
@@ -224,6 +237,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the port number.
+     *
      * @param portNumber The port number.
      */
     public void setPortNumber(int portNumber) {
@@ -232,6 +246,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the port number.
+     *
      * @param portNumber The port number.
      */
     public void setPortNumber(Integer portNumber) {
@@ -240,6 +255,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the user.
+     *
      * @return The user.
      */
     public String getUser() {
@@ -248,6 +264,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the user.
+     *
      * @param user The user.
      */
     public void setUser(String user) {
@@ -256,6 +273,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the password.
+     *
      * @return The password.
      */
     public String getPassword() {
@@ -264,6 +282,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the password.
+     *
      * @param password The password.
      */
     public void setPassword(String password) {
@@ -272,6 +291,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the compatible version.
+     *
      * @return The compatible version.
      */
     public String getCompatible() {
@@ -280,6 +300,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the compatible version.
+     *
      * @param compatible The compatible version.
      */
     public void setCompatible(String compatible) {
@@ -288,6 +309,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the log level.
+     *
      * @return The log level.
      */
     public int getLogLevel() {
@@ -296,6 +318,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the log level.
+     *
      * @param logLevel The log level.
      */
     public void setLogLevel(int logLevel) {
@@ -304,6 +327,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the protocol version.
+     *
      * @return The protocol version.
      */
     public int getProtocolVersion() {
@@ -312,6 +336,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the protocol version.
+     *
      * @param protocolVersion The protocol version.
      */
     public void setProtocolVersion(int protocolVersion) {
@@ -320,6 +345,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the prepare threshold.
+     *
      * @return The prepare threshold.
      */
     public int getPrepareThreshold() {
@@ -328,6 +354,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the prepare threshold.
+     *
      * @param prepareThreshold The prepare threshold.
      */
     public void setPrepareThreshold(int prepareThreshold) {
@@ -336,6 +363,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the receive buffer size.
+     *
      * @param receiveBufferSize The receive buffer size.
      */
     public void setReceiveBufferSize(int receiveBufferSize) {
@@ -344,6 +372,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the send buffer size.
+     *
      * @param sendBufferSize The send buffer size.
      */
     public void setSendBufferSize(int sendBufferSize) {
@@ -352,6 +381,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the unknown length.
+     *
      * @param unknownLength The unknown length.
      */
     public void setUnknownLength(int unknownLength) {
@@ -360,6 +390,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the unknown length.
+     *
      * @return The unknown length.
      */
     public int getUnknownLength() {
@@ -368,6 +399,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the socket timeout.
+     *
      * @param socketTimeout The socket timeout.
      */
     public void setSocketTimeout(int socketTimeout) {
@@ -376,6 +408,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the socket timeout.
+     *
      * @return The socket timeout.
      */
     public int getSocketTimeout() {
@@ -384,6 +417,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets whether SSL is enabled.
+     *
      * @param ssl True if enabled, false otherwise.
      */
     public void setSsl(boolean ssl) {
@@ -392,6 +426,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns whether SSL is enabled.
+     *
      * @return True if enabled, false otherwise.
      */
     public boolean getSsl() {
@@ -400,6 +435,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the SSL factory.
+     *
      * @param sslfactory The SSL factory class name.
      */
     public void setSslfactory(String sslfactory) {
@@ -408,6 +444,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the SSL factory.
+     *
      * @return The SSL factory.
      */
     public String getSslfactory() {
@@ -416,6 +453,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the application name.
+     *
      * @param applicationName The application name.
      */
     public void setApplicationName(String applicationName) {
@@ -424,6 +462,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the application name.
+     *
      * @return The application name.
      */
     public String getApplicationName() {
@@ -432,6 +471,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets whether TCP keep alive is enabled.
+     *
      * @param tcpKeepAlive True if enabled, false otherwise.
      */
     public void setTcpKeepAlive(boolean tcpKeepAlive) {
@@ -440,6 +480,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns whether TCP keep alive is enabled.
+     *
      * @return True if enabled, false otherwise.
      */
     public boolean getTcpKeepAlive() {
@@ -448,6 +489,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets whether binary transfer is enabled.
+     *
      * @param binaryTransfer True if enabled, false otherwise.
      */
     public void setBinaryTransfer(boolean binaryTransfer) {
@@ -456,6 +498,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns whether binary transfer is enabled.
+     *
      * @return True if enabled, false otherwise.
      */
     public boolean getBinaryTransfer() {
@@ -464,6 +507,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the binary transfer enable setting.
+     *
      * @param binaryTransferEnable The binary transfer enable setting.
      */
     public void setBinaryTransferEnable(String binaryTransferEnable) {
@@ -472,6 +516,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the binary transfer enable setting
+     *
      * @return The binary transfer enable setting.
      */
     public String getBinaryTransferEnable() {
@@ -480,6 +525,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Sets the binary transfer disable setting.
+     *
      * @param binaryTransferDisable The binary transfer disable setting.
      */
     public void setBinaryTransferDisable(String binaryTransferDisable) {
@@ -488,6 +534,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     /**
      * Returns the binary transfer disable setting.
+     *
      * @return The binary transfer disable setting.
      */
     public String getBinaryTransferDisable() {

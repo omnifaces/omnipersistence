@@ -21,6 +21,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * Base interface for something identifiable. All entities managed by {@link BaseEntityService} must implement this.
  * <p>
  * Usage example:
+ *
  * <pre>
  * &#64;Entity
  * public class YourEntity extends BaseEntity&lt;Long&gt; {
@@ -37,6 +38,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *     public void setId(Long id) {
  *         this.id = id;
  *     }
+ *
  * }
  * </pre>
  *
@@ -46,7 +48,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see BaseEntity
  * @see BaseEntityService
  */
-public interface Identifiable<I extends Comparable<I> & Serializable> {
+public interface Identifiable<I extends Comparable<I> & Serializable> extends Serializable {
 
     /**
      * The string representing the field name <code>"id"</code>.
@@ -55,12 +57,14 @@ public interface Identifiable<I extends Comparable<I> & Serializable> {
 
     /**
      * Returns the ID.
+     *
      * @return The ID.
      */
     I getId();
 
     /**
      * Sets the ID.
+     *
      * @param id The ID.
      */
     void setId(I id);

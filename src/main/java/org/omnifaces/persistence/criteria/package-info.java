@@ -13,8 +13,7 @@
 /**
  * Typed criteria value wrappers for use in {@link org.omnifaces.persistence.model.dto.Page} search maps.
  * <p>
- * Plain values in a criteria map produce exact-equality predicates. Wrap them in one of the concrete
- * {@link Criteria} subclasses for richer matching:
+ * Plain values in a criteria map produce exact-equality predicates. Wrap them in one of the concrete {@link Criteria} subclasses for richer matching:
  * <ul>
  * <li>{@link Like} — substring, prefix or suffix match (case-insensitive).
  * <li>{@link Between} — range match on any {@link Comparable}.

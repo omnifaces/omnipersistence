@@ -22,17 +22,16 @@ import java.util.ServiceLoader;
 
 /**
  * <p>
- * A {@link CommonDataSourceWrapper} that loads its data source configuration from an external properties file.
- * This allows switching the underlying data source implementation and its properties without changing the application
- * code or deployment descriptors.
+ * A {@link CommonDataSourceWrapper} that loads its data source configuration from an external properties file. This allows switching the underlying data source
+ * implementation and its properties without changing the application code or deployment descriptors.
  * <p>
- * The properties file must contain at least a <code>className</code> property specifying the fully qualified class
- * name of the actual data source to instantiate. All other properties are set on the instantiated data source.
+ * The properties file must contain at least a <code>className</code> property specifying the fully qualified class name of the actual data source to
+ * instantiate. All other properties are set on the instantiated data source.
  * <p>
- * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to
- * <code>META-INF/{configFile}</code> on the classpath.
+ * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to <code>META-INF/{configFile}</code> on the classpath.
  * <p>
  * Usage example in <code>web.xml</code> or <code>@DataSourceDefinition</code>:
+ *
  * <pre>
  * &#64;DataSourceDefinition(
  *     name = "java:app/myDS",
@@ -42,6 +41,7 @@ import java.util.ServiceLoader;
  * </pre>
  * <p>
  * And the <code>META-INF/database.properties</code> file:
+ *
  * <pre>
  * className=org.postgresql.ds.PGSimpleDataSource
  * serverName=localhost
@@ -66,7 +66,8 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
     public void set(String name, Object value) {
         if (init) {
             super.set(name, value);
-        } else {
+        }
+        else {
             tempValues.put(name, value);
         }
     }
@@ -76,22 +77,24 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
     public <T> T get(String name) {
         if (init) {
             return super.get(name);
-        } else {
+        }
+        else {
             return (T) tempValues.get(name);
         }
     }
 
     /**
      * Returns the configuration file name.
+     *
      * @return The configuration file name.
      */
     public String getConfigFile() {
         return configFile;
     }
 
-
     /**
      * Sets the configuration file name.
+     *
      * @param configFile The name of the properties file to load configuration from.
      */
     public void setConfigFile(String configFile) {
@@ -105,9 +108,8 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
     /**
      * Initializes the underlying data source by loading the properties file.
      * <p>
-     * This method uses the {@link PropertiesFileLoader} SPI to load the file, instantiates the
-     * data source class specified by the <code>className</code> property, and applies all
-     * other properties to it.
+     * This method uses the {@link PropertiesFileLoader} SPI to load the file, instantiates the data source class specified by the <code>className</code>
+     * property, and applies all other properties to it.
      */
     public void doInit() {
 
@@ -125,7 +127,8 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
             // Try the fallback default location of META-INF on the classpath
             properties.putAll(loadPropertiesFromClasspath("META-INF/" + configFile));
 
-        } else {
+        }
+        else {
             for (PropertiesFileLoader propertiesFileLoader : loader) {
                 properties.putAll(propertiesFileLoader.loadFromFile(configFile));
             }

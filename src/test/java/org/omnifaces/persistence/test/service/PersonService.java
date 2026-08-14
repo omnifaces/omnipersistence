@@ -50,7 +50,13 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
             LinkedHashMap<Getter<PersonCard>, Expression<?>> mapping = new LinkedHashMap<>();
             mapping.put(PersonCard::getId, person.get("id"));
             mapping.put(PersonCard::getEmail, person.get("email"));
-            mapping.put(PersonCard::getAddressString, concat(builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ", personAddress.get("city"), ", ", personAddress.get("country")));
+            mapping.put(
+                PersonCard::getAddressString,
+                concat(
+                    builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ",
+                    personAddress.get("city"), ", ", personAddress.get("country")
+                )
+            );
             mapping.put(PersonCard::getTotalPhones, builder.count(personPhones));
 
             query.groupBy(personAddress);

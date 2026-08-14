@@ -38,18 +38,47 @@ public class OmniPersistenceEJBIT extends OmniPersistenceIT {
         return OmniPersistenceIT.createDeployment(OmniPersistenceEJBIT.class, StartupServiceCDI.class);
     }
 
-    @EJB private PersonServiceEJB personService;
-    @EJB private PhoneServiceEJB phoneService;
-    @EJB private TextServiceEJB textService;
-    @EJB private CommentServiceEJB commentService;
-    @EJB private LookupServiceEJB lookupService;
-    @EJB private ConfigServiceEJB configService;
+    @EJB
+    private PersonServiceEJB personService;
+    @EJB
+    private PhoneServiceEJB phoneService;
+    @EJB
+    private TextServiceEJB textService;
+    @EJB
+    private CommentServiceEJB commentService;
+    @EJB
+    private LookupServiceEJB lookupService;
+    @EJB
+    private ConfigServiceEJB configService;
 
-    @Override protected PersonService personService()                   { return personService; }
-    @Override protected PhoneService phoneService()                     { return phoneService; }
-    @Override protected BaseEntityService<Long, Text> textService()     { return textService; }
-    @Override protected BaseEntityService<Long, Comment> commentService() { return commentService; }
-    @Override protected BaseEntityService<String, Lookup> lookupService() { return lookupService; }
-    @Override protected ConfigService configService()                   { return configService; }
+    @Override
+    protected PersonService personService() {
+        return personService;
+    }
+
+    @Override
+    protected PhoneService phoneService() {
+        return phoneService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, Text> textService() {
+        return textService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, Comment> commentService() {
+        return commentService;
+    }
+
+    @Override
+    protected BaseEntityService<String, Lookup> lookupService() {
+        return lookupService;
+    }
+
+    @Override
+    protected ConfigService configService() {
+        return configService;
+    }
 
 }
