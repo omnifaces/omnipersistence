@@ -37,6 +37,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class IgnoreCase extends Criteria<String> {
 
+    private static final long serialVersionUID = 1L;
+
     private IgnoreCase(String value) {
         super(value);
     }

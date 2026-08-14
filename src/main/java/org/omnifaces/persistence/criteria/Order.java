@@ -39,6 +39,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
+    private static final long serialVersionUID = 1L;
+
     private enum Type {
         LT,
         LTE,

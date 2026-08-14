@@ -20,6 +20,7 @@ import static java.util.Collections.unmodifiableMap;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 
+import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -90,9 +91,11 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see BaseEntityService
  * @see Criteria
  */
-public final class Page { // This class MAY NOT be mutable!
+public final class Page implements Serializable { // This class MAY NOT be mutable!
 
     // Constants ------------------------------------------------------------------------------------------------------
+
+    private static final long serialVersionUID = 1L;
 
     /** All pages. */
     public final static Page ALL = Page.of(0, MAX_VALUE);

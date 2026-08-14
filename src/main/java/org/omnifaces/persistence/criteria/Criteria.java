@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import java.io.Serializable;
 import java.util.Objects;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -64,7 +65,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see Page
  * @see BaseEntityService
  */
-public abstract class Criteria<T> {
+public abstract class Criteria<T> implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private T value;
 

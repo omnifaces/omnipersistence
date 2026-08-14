@@ -17,13 +17,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.omnifaces.persistence.criteria.Between;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
@@ -702,6 +706,34 @@ public class CriteriaTest {
         void equalInstances() {
             assertEquals(Not.value("test"), Not.value("test"));
             assertNotEquals(Not.value("test"), Not.value("other"));
+        }
+
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // Serialization
+    // ----------------------------------------------------------------------------------------------------------------
+
+    @Nested
+    class Serialization {
+
+        static Stream<Criteria<?>> allCriteria() {
+            return Stream.of(
+                Between.range(10, 20),
+                Bool.value(true),
+                Enumerated.value(TestEnum.MOBILE),
+                IgnoreCase.value("foo"),
+                Like.contains("bar"),
+                Not.value("baz"),
+                Numeric.value(42),
+                Order.greaterThan(18)
+            );
+        }
+
+        @ParameterizedTest
+        @MethodSource("allCriteria")
+        void criteriaSurvivesSerialization(Criteria<?> criteria) throws Exception {
+            assertEquals(criteria, serializeAndDeserialize(criteria));
         }
 
     }

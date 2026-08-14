@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
 import java.util.Map;
 
@@ -361,6 +362,31 @@ public class PageTest {
         void orderingIsUnmodifiable() {
             var page = Page.with().orderBy("name", true).build();
             assertThrows(UnsupportedOperationException.class, () -> page.getOrdering().put("new", false));
+        }
+
+    }
+
+    @Nested
+    class Serialization {
+
+        @Test
+        void pageWithCriteriaAndLastEntitySurvivesSerialization() throws Exception {
+            var last = new TestEntity();
+            last.setId(42L);
+            var page = Page.with()
+                .range(last, 10, false)
+                .orderBy("name", true)
+                .allMatch(Map.of("name", Like.contains("test")))
+                .anyMatch(Map.of("email", Like.endsWith("@example.com")))
+                .build();
+
+            assertEquals(page, serializeAndDeserialize(page));
+        }
+
+        @Test
+        void constantsSurviveSerialization() throws Exception {
+            assertEquals(Page.ALL, serializeAndDeserialize(Page.ALL));
+            assertEquals(Page.ONE, serializeAndDeserialize(Page.ONE));
         }
 
     }

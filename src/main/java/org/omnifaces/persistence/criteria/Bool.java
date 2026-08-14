@@ -39,6 +39,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Bool extends Criteria<Boolean> {
 
+    private static final long serialVersionUID = 1L;
+
     private Bool(Boolean value) {
         super(value);
     }

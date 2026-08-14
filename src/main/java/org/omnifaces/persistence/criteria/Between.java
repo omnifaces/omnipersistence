@@ -35,6 +35,8 @@ import org.omnifaces.utils.data.Range;
  */
 public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
+    private static final long serialVersionUID = 1L;
+
     private Between(Range<T> value) {
         super(value);
     }

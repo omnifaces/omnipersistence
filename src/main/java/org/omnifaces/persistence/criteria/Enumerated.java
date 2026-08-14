@@ -36,6 +36,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Enumerated extends Criteria<Enum<?>> {
 
+    private static final long serialVersionUID = 1L;
+
     private Enumerated(Enum<?> value) {
         super(value, false, true);
     }

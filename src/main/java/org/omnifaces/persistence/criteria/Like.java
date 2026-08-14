@@ -53,6 +53,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Like extends Criteria<String> {
 
+    private static final long serialVersionUID = 1L;
+
     private enum Type {
         STARTS_WITH,
         ENDS_WITH,

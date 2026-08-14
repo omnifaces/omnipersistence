@@ -37,6 +37,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Not extends Criteria<Object> {
 
+    private static final long serialVersionUID = 1L;
+
     private Not(Object value) {
         super(value, true, true);
     }

@@ -41,6 +41,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 public final class Numeric extends Criteria<Number> {
 
+    private static final long serialVersionUID = 1L;
+
     private Numeric(Number value) {
         super(value);
     }

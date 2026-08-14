@@ -48,7 +48,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see BaseEntity
  * @see BaseEntityService
  */
-public interface Identifiable<I extends Comparable<I> & Serializable> {
+public interface Identifiable<I extends Comparable<I> & Serializable> extends Serializable {
 
     /**
      * The string representing the field name <code>"id"</code>.
