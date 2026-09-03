@@ -18,6 +18,7 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Comment;
+import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.CommentServiceEJB;
 import org.omnifaces.persistence.test.service.ConfigService;
@@ -29,7 +30,6 @@ import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.PhoneServiceEJB;
 import org.omnifaces.persistence.test.service.StartupServiceCDI;
 import org.omnifaces.persistence.test.service.TextServiceEJB;
-import org.omnifaces.persistence.test.model.Lookup;
 
 public class OmniPersistenceEJBIT extends OmniPersistenceIT {
 
