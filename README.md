@@ -717,3 +717,7 @@ The tests cover CRUD, paginated queries, all `Criteria` types, `@OneToMany` and 
 
 More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `BaseEntityService` and `Page`. OptimusFaces also carries a more elaborate integration test suite that exercises the full DataTable behaviour against all supported databases: **H2**, **MySQL**, **PostgreSQL**, **SQL Server** and **DB2** (OmniPersistence itself only runs its own integration tests against H2).
 
+
+## 14. Commercial support
+
+OmniPersistence is maintained by [BalusC BV](https://balusc.org). For commercial support, Jakarta EE consulting or migration work, mail <bauke@balusc.org>.
