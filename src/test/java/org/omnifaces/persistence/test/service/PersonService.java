@@ -15,6 +15,9 @@ package org.omnifaces.persistence.test.service;
 import static org.omnifaces.persistence.JPA.concat;
 
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
@@ -78,6 +81,26 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public PartialResultList<PersonCard> getAllPersonCards() {
         return getPageOfPersonCards(Page.ALL, false);
+    }
+
+    public List<Person> listByIdRange(Long minId, Long maxId) {
+        return list("WHERE e.id BETWEEN ?1 AND ?2 ORDER BY e.id", minId, maxId);
+    }
+
+    public Optional<Person> findByIdAndEmail(Long id, String email) {
+        return find("WHERE e.id = ?1 AND e.email = ?2", id, email);
+    }
+
+    public Optional<Person> findFirstByIdRange(Long minId, Long maxId) {
+        return findFirst("WHERE e.id BETWEEN ?1 AND ?2 ORDER BY e.id", minId, maxId);
+    }
+
+    public int updateEmailByIdRange(String email, Long minId, Long maxId) {
+        return update("SET e.email = ?1 WHERE e.id BETWEEN ?2 AND ?3", email, minId, maxId);
+    }
+
+    public int updateEmailByMappedIdRange(String email, Long minId, Long maxId) {
+        return update("SET e.email = :email WHERE e.id BETWEEN :minId AND :maxId", Map.of("email", email, "minId", minId, "maxId", maxId));
     }
 
 }

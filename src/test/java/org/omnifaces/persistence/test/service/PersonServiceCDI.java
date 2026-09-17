@@ -36,4 +36,16 @@ public class PersonServiceCDI extends PersonService {
         return super.getPageWithGroups(page, count);
     }
 
+    @Override
+    @Transactional(REQUIRED)
+    public int updateEmailByIdRange(String email, Long minId, Long maxId) {
+        return super.updateEmailByIdRange(email, minId, maxId);
+    }
+
+    @Override
+    @Transactional(REQUIRED)
+    public int updateEmailByMappedIdRange(String email, Long minId, Long maxId) {
+        return super.updateEmailByMappedIdRange(email, minId, maxId);
+    }
+
 }

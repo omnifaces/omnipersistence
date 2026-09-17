@@ -201,6 +201,74 @@ public abstract class OmniPersistenceIT {
         assertThrows(IllegalEntityStateException.class, () -> personService().delete(nonExistingPerson));
     }
 
+    // Positional parameters ------------------------------------------------------------------------------------------
+
+    /**
+     * Positional parameters are 1-based: <code>?1</code> takes the first vararg. The ranges are asymmetric so that binding them in reverse yields no match
+     * rather than the same match.
+     */
+    @Test
+    void testListByPositionalParameters() {
+        var persons = personService().listByIdRange(2L, 4L);
+        assertEquals(List.of(2L, 3L, 4L), persons.stream().map(Person::getId).toList(), "Persons 2 until 4");
+        assertTrue(personService().listByIdRange(4L, 2L).isEmpty(), "Reversed range matches nothing");
+    }
+
+    /**
+     * Each vararg lands on its own position, so a query with two of them matches only when both hold.
+     *
+     * @see #testListByPositionalParameters()
+     */
+    @Test
+    void testFindByPositionalParameters() {
+        var person = personService().getById(2L);
+        var foundPerson = personService().findByIdAndEmail(person.getId(), person.getEmail());
+        assertTrue(foundPerson.isPresent(), "Person matching both ID and email");
+        assertEquals(person.getId(), foundPerson.get().getId(), "Found person");
+        assertFalse(personService().findByIdAndEmail(3L, person.getEmail()).isPresent(), "Mismatching ID and email");
+    }
+
+    /**
+     * @see #testListByPositionalParameters()
+     */
+    @Test
+    void testFindFirstByPositionalParameters() {
+        var person = personService().findFirstByIdRange(2L, 4L);
+        assertTrue(person.isPresent(), "First person of persons 2 until 4");
+        assertEquals(2L, person.get().getId(), "Found person");
+        assertFalse(personService().findFirstByIdRange(4L, 2L).isPresent(), "Reversed range matches nothing");
+    }
+
+    /**
+     * Bulk update binds positionally as well, across both the SET and the WHERE clause. It runs on its own ID range so that it doesn't disturb the persons
+     * asserted by the other positional parameter tests.
+     *
+     * @see #testListByPositionalParameters()
+     */
+    @Test
+    void testUpdateByPositionalParameters() {
+        var newEmail = "testUpdateByPositionalParameters@example.com";
+        assertEquals(3, personService().updateEmailByIdRange(newEmail, 6L, 8L), "Updated persons 6 until 8");
+
+        var persons = personService().listByIdRange(6L, 8L);
+        assertEquals(List.of(newEmail, newEmail, newEmail), persons.stream().map(Person::getEmail).toList(), "Email updated");
+    }
+
+    /**
+     * Bulk update is a non-SELECT query, so it must be created without an entity result type. This holds for mapped parameters just as much as for positional
+     * ones, hence this counterpart on its own ID range.
+     *
+     * @see #testUpdateByPositionalParameters()
+     */
+    @Test
+    void testUpdateByMappedParameters() {
+        var newEmail = "testUpdateByMappedParameters@example.com";
+        assertEquals(3, personService().updateEmailByMappedIdRange(newEmail, 10L, 12L), "Updated persons 10 until 12");
+
+        var persons = personService().listByIdRange(10L, 12L);
+        assertEquals(List.of(newEmail, newEmail, newEmail), persons.stream().map(Person::getEmail).toList(), "Email updated");
+    }
+
     // Batch operations -----------------------------------------------------------------------------------------------
 
     @Test

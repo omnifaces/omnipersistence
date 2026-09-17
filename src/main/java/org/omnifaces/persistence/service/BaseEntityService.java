@@ -1018,6 +1018,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return query;
     }
 
+    private Query createUpdateQuery(String jpql, Object... parameters) {
+        var query = getEntityManager().createQuery(jpql);
+        setPositionalParameters(query, parameters);
+        return query;
+    }
+
+    private Query createUpdateQuery(String jpql, Map<String, Object> parameters) {
+        var query = getEntityManager().createQuery(jpql);
+        setMappedParameters(query, parameters);
+        return query;
+    }
+
     private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         var criteriaBuilder = getEntityManager().getCriteriaBuilder();
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
@@ -1165,7 +1177,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @see Query#executeUpdate()
      */
     protected int update(String jpql, Object... parameters) {
-        return createQuery(update(jpql), parameters).executeUpdate();
+        return createUpdateQuery(update(jpql), parameters).executeUpdate();
     }
 
     /**
@@ -1191,7 +1203,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @see Query#executeUpdate()
      */
     protected int update(String jpql, Map<String, Object> parameters) {
-        return createQuery(update(jpql), parameters).executeUpdate();
+        return createUpdateQuery(update(jpql), parameters).executeUpdate();
     }
 
     /**
@@ -1941,14 +1953,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return typedQuery;
     }
 
-    private static <Q> void setPositionalParameters(TypedQuery<Q> typedQuery, Object[] positionalParameters) {
+    private static void setPositionalParameters(Query query, Object[] positionalParameters) {
         logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, Arrays.toString(positionalParameters)));
-        range(0, positionalParameters.length).forEach(i -> typedQuery.setParameter(i, positionalParameters[i]));
+        range(0, positionalParameters.length).forEach(i -> query.setParameter(i + 1, positionalParameters[i]));
     }
 
-    private static <Q> void setMappedParameters(TypedQuery<Q> typedQuery, Map<String, Object> mappedParameters) {
+    private static void setMappedParameters(Query query, Map<String, Object> mappedParameters) {
         logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, mappedParameters));
-        mappedParameters.entrySet().forEach(parameter -> typedQuery.setParameter(parameter.getKey(), parameter.getValue()));
+        mappedParameters.entrySet().forEach(parameter -> query.setParameter(parameter.getKey(), parameter.getValue()));
     }
 
     private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
