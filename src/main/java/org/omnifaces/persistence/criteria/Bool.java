@@ -85,7 +85,7 @@ public final class Bool extends Criteria<Boolean> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return Objects.equals(isTruthy(modelValue), getValue());
     }
 

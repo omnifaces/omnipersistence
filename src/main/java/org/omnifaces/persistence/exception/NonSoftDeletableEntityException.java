@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.exception;
 
+import jakarta.annotation.Nullable;
+
 import org.omnifaces.persistence.model.BaseEntity;
 
 /**
@@ -33,7 +35,7 @@ public class NonSoftDeletableEntityException extends BaseEntityException {
      * @param entity The entity which is not marked as soft-deletable, may be <code>null</code> when the entity type as a whole is not soft-deletable.
      * @param message The detail message.
      */
-    public NonSoftDeletableEntityException(BaseEntity<?> entity, String message) {
+    public NonSoftDeletableEntityException(@Nullable BaseEntity<?> entity, String message) {
         super(entity, message);
     }
 

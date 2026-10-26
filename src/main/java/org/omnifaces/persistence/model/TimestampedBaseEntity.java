@@ -123,7 +123,8 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
     }
 
     @Override
-    public @Nullable Instant getCreated() {
+    @Nullable
+    public Instant getCreated() {
         return created;
     }
 
@@ -133,7 +134,8 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
     }
 
     @Override
-    public @Nullable Instant getLastModified() {
+    @Nullable
+    public Instant getLastModified() {
         return lastModified;
     }
 

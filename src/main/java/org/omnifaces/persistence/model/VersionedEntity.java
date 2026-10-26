@@ -61,7 +61,8 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
     private Long version;
 
     @Override
-    public @Nullable Long getVersion() {
+    @Nullable
+    public Long getVersion() {
         return version;
     }
 

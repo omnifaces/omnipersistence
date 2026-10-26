@@ -21,12 +21,13 @@ import static java.util.Objects.requireNonNull;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 
-import jakarta.annotation.Nullable;
 import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+
+import jakarta.annotation.Nullable;
 
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.model.Identifiable;
@@ -124,13 +125,13 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to
      * <code>{"id",false}</code>.
      * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given
-     * criteria.
+     * criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
      * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of
-     * given criteria.
+     * given criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
      */
     public Page(
-        @Nullable Integer offset, @Nullable Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria,
-        Map<String, Object> optionalCriteria
+        @Nullable Integer offset, @Nullable Integer limit, @Nullable LinkedHashMap<String, Boolean> ordering, @Nullable Map<String, Object> requiredCriteria,
+        @Nullable Map<String, Object> optionalCriteria
     )
     {
         this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
@@ -144,7 +145,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE} when <code>null</code>.
      * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when
      * applicable.
-     * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code> when <code>null</code>.
+     * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code> when
+     * <code>null</code>.
      * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to
      * <code>{"id",false}</code>.
      * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given
@@ -204,6 +206,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      *
      * @return The last entity of the previous page, if any.
      */
+    @Nullable
     public Identifiable<?> getLast() {
         return last;
     }

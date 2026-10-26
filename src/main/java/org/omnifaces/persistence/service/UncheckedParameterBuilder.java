@@ -14,6 +14,7 @@ package org.omnifaces.persistence.service;
 
 import java.util.Map;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.ParameterExpression;
 
@@ -39,7 +40,7 @@ class UncheckedParameterBuilder implements ParameterBuilder {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> ParameterExpression<T> create(Object value) {
+    public <T> ParameterExpression<T> create(@Nullable Object value) {
         String name = field + parameters.size();
         parameters.put(name, value);
         Class<? extends Object> type = (value == null) ? Object.class : value.getClass();

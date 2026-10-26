@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test.model;
 
 import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -42,12 +43,13 @@ public class Lookup extends BaseEntity<String> {
     }
 
     @Override
+    @Nullable
     public String getId() {
         return id;
     }
 
     @Override
-    public void setId(String id) {
+    public void setId(@Nullable String id) {
         this.id = id;
     }
 

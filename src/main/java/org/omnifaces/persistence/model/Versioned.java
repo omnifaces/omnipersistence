@@ -30,6 +30,7 @@ public interface Versioned {
      *
      * @return The version, or <code>null</code> if the entity is not persisted yet.
      */
-    @Nullable Long getVersion();
+    @Nullable
+    Long getVersion();
 
 }

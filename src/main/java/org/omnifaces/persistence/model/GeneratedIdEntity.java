@@ -59,7 +59,8 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
     private I id;
 
     @Override
-    public @Nullable I getId() {
+    @Nullable
+    public I getId() {
         return id;
     }
 

@@ -14,6 +14,7 @@ package org.omnifaces.persistence.criteria;
 
 import static org.omnifaces.persistence.JPA.castAsString;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -59,7 +60,7 @@ public final class IgnoreCase extends Criteria<String> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return modelValue != null && modelValue.toString().equalsIgnoreCase(getValue());
     }
 

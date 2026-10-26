@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test.model;
 
 import static jakarta.persistence.GenerationType.IDENTITY;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
@@ -46,12 +47,13 @@ public class LocalGeneratedIdEntity extends BaseEntity<Long> {
     private Long id;
 
     @Override
+    @Nullable
     public Long getId() {
         return id;
     }
 
     @Override
-    public void setId(Long id) {
+    public void setId(@Nullable Long id) {
         this.id = id;
     }
 

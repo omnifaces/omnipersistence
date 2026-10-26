@@ -12,8 +12,9 @@
  */
 package org.omnifaces.persistence.model;
 
-import jakarta.annotation.Nullable;
 import java.io.Serializable;
+
+import jakarta.annotation.Nullable;
 
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -61,13 +62,14 @@ public interface Identifiable<I extends Comparable<I> & Serializable> extends Se
      *
      * @return The ID, or <code>null</code> if not set yet, e.g. when the entity has a generated ID and is not persisted yet.
      */
-    @Nullable I getId();
+    @Nullable
+    I getId();
 
     /**
      * Sets the ID.
      *
      * @param id The ID, may be <code>null</code>.
      */
-    void setId(I id);
+    void setId(@Nullable I id);
 
 }
