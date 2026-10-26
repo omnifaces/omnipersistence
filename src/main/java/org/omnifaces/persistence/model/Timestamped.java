@@ -15,7 +15,6 @@ package org.omnifaces.persistence.model;
 import jakarta.annotation.Nullable;
 import java.time.Instant;
 
-
 /**
  * <p>
  * Base interface for timestamped entity. Implemented by {@link TimestampedBaseEntity} and {@link TimestampedEntity}.
