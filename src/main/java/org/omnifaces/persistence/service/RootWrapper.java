@@ -48,7 +48,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 public abstract class RootWrapper<X> implements Root<X> {
 
-    private Root<X> wrapped;
+    private final Root<X> wrapped;
 
     /**
      * Constructs a new root wrapper around the given wrapped root.

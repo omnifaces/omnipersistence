@@ -74,7 +74,7 @@ public enum Database {
 
     private static final Logger logger = Logger.getLogger(Database.class.getName());
 
-    private String[] names;
+    private final String[] names;
 
     /**
      * Internal constructor to define a database and its associated dialect name aliases.

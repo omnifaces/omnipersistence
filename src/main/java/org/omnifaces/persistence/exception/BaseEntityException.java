@@ -35,7 +35,7 @@ public abstract class BaseEntityException extends PersistenceException {
     private static final long serialVersionUID = 1L;
 
     /** The entity associated with this exception. */
-    private BaseEntity<?> entity;
+    private final BaseEntity<?> entity;
 
     /**
      * Constructs a new base entity exception for the given entity and message.

@@ -18,8 +18,8 @@ public class PersonCard extends Person {
 
     private static final long serialVersionUID = 1L;
 
-    private String addressString;
-    private Long totalPhones;
+    private final String addressString;
+    private final Long totalPhones;
 
     public PersonCard(Long id, String email, String addressString, Long totalPhones) {
         setId(id);

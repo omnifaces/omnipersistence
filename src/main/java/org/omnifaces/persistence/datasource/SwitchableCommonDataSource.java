@@ -60,7 +60,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
     private boolean init;
     private String configFile;
-    private Map<String, Object> tempValues = new HashMap<>();
+    private final Map<String, Object> tempValues = new HashMap<>();
 
     @Override
     public void set(String name, Object value) {

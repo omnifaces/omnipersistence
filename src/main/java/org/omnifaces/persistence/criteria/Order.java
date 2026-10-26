@@ -48,7 +48,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
         GTE
     }
 
-    private Type type;
+    private final Type type;
 
     private Order(Type type, T value) {
         super(value);

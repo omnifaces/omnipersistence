@@ -32,7 +32,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 public abstract class FetchWrapper<Z, X> implements Fetch<Z, X> {
 
-    private Fetch<Z, X> wrapped;
+    private final Fetch<Z, X> wrapped;
 
     /**
      * Constructs a new fetch wrapper around the given wrapped fetch.

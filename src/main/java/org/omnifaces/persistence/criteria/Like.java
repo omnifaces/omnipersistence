@@ -61,7 +61,7 @@ public final class Like extends Criteria<String> {
         CONTAINS;
     }
 
-    private Type type;
+    private final Type type;
 
     private Like(Type type, String value) {
         super(value);

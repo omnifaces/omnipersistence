@@ -31,7 +31,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {
 
-    private Join<X, Y> join;
+    private final Join<X, Y> join;
 
     public JoinFetchAdapter(Join<X, Y> join) {
         this.join = join;

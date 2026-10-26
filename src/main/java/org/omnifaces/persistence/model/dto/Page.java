@@ -325,7 +325,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         private Integer limit;
         private Identifiable<?> last;
         private boolean reversed;
-        private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
+        private final LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
         private Map<String, Object> requiredCriteria;
         private Map<String, Object> optionalCriteria;
 

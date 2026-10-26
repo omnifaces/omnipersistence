@@ -47,7 +47,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     private CommonDataSource wrapped;
     private Map<String, PropertyDescriptor> dataSourceProperties;
-    private Set<String> commonProperties = new HashSet<>(
+    private final Set<String> commonProperties = new HashSet<>(
         asList(
             "serverName", "databaseName", "portNumber",
             "user", "password", "compatible", "logLevel",
