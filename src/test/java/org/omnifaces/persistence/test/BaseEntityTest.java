@@ -716,7 +716,7 @@ public class BaseEntityTest {
 
         private static final long serialVersionUID = 1L;
         private Long id;
-        private Tag tag;
+        private final Tag tag;
 
         TaggedEntity(Long id, Tag tag) {
             this.id = id;

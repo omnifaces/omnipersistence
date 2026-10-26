@@ -51,7 +51,7 @@ import org.omnifaces.persistence.model.dto.Page;
  */
 class PostponedFetchRoot<X> extends RootWrapper<X> {
 
-    private Set<String> postponedFetches;
+    private final Set<String> postponedFetches;
 
     public PostponedFetchRoot(Root<X> wrapped) {
         super(wrapped);

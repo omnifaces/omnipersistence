@@ -36,7 +36,7 @@ class SoftDeleteData {
     private static final String ERROR_NOT_SOFT_DELETABLE = "Entity %s cannot be soft deleted. You need to add a @SoftDeletable field first.";
     private static final String ERROR_ILLEGAL_SOFT_DELETABLE = "Entity %s cannot be soft deleted. There should be only one @SoftDeletable field.";
 
-    private Class<?> entityType;
+    private final Class<?> entityType;
     private final boolean softDeletable;
     private final String fieldName;
     private final String setterName;

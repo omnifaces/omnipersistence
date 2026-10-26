@@ -69,7 +69,7 @@ public abstract class Criteria<T> implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private T value;
+    private final T value;
 
     /**
      * Create criteria based on given value.

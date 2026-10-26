@@ -25,8 +25,8 @@ import jakarta.persistence.criteria.Fetch;
  */
 class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {
 
-    private Set<String> postponedFetches;
-    private String path;
+    private final Set<String> postponedFetches;
+    private final String path;
 
     public PostponedFetch(Set<String> postponedFetches, String path) {
         super(null);
