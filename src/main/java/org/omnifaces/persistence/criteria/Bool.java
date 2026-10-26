@@ -99,8 +99,8 @@ public final class Bool extends Criteria<Boolean> {
      * <li>It is a {@link String} that {@link Boolean#parseBoolean(String)} evaluates to {@code true}.</li>
      * </ul>
      *
-     * @param value The value to check.
-     * @return True if the value is truthy, false otherwise.
+     * @param value The value to check, may be <code>null</code>.
+     * @return True if the value is truthy, false otherwise, including when the value is <code>null</code>.
      */
     public static Boolean isTruthy(Object value) {
         if (value == null) {

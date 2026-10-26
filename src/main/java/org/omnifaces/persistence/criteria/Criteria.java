@@ -57,6 +57,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and turned into a predicate. Simply extend
  * this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}, and optionally override {@link #applies(Object)}.
  * <p>
+ * A criteria value may by default not be <code>null</code>; the constructor then throws {@link NullPointerException}. The exceptions are {@link Enumerated} and
+ * {@link Not}: <code>Enumerated.value(null)</code> matches <code>path IS NULL</code> and <code>Not.value(null)</code> matches <code>path IS NOT NULL</code>.
+ * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *
  * @param <T> The generic criteria value type.
@@ -74,7 +77,8 @@ public abstract class Criteria<T> implements Serializable {
     /**
      * Create criteria based on given value.
      *
-     * @param value The criteria value.
+     * @param value The criteria value, may not be <code>null</code>.
+     * @throws NullPointerException When given criteria value is <code>null</code>.
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
     protected Criteria(T value) {
@@ -103,7 +107,7 @@ public abstract class Criteria<T> implements Serializable {
      * @param path Entity property path. You can use this to inspect the target entity property.
      * @param criteriaBuilder So you can build a predicate with a {@link ParameterExpression}.
      * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
-     * @return A predicate for the criteria value.
+     * @return A predicate for the criteria value, or <code>null</code> to impose no restriction.
      */
     public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
@@ -111,7 +115,7 @@ public abstract class Criteria<T> implements Serializable {
      * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java" equivalent of the SQL behavior
      * as achieved by {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}.
      *
-     * @param modelValue The model value to test this criteria on.
+     * @param modelValue The model value to test this criteria on, may be <code>null</code>.
      * @return Whether this criteria value would apply to the given model value.
      * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
      * @throws UnsupportedOperationException When this method is not implemented yet.
@@ -171,7 +175,7 @@ public abstract class Criteria<T> implements Serializable {
          * Creates a new {@link ParameterExpression} for the given value.
          *
          * @param <T> The generic parameter type.
-         * @param value The parameter value.
+         * @param value The parameter value, may be <code>null</code>.
          * @return A new parameter expression.
          */
         <T> ParameterExpression<T> create(Object value);

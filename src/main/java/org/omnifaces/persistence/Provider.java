@@ -336,8 +336,8 @@ public enum Provider {
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
-     * @param entity The entity to get the type for.
-     * @return The actual entity type of the given entity.
+     * @param entity The entity to get the type for, may be <code>null</code>.
+     * @return The actual entity type of the given entity, or <code>null</code> when <code>null</code> was supplied.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
@@ -360,8 +360,8 @@ public enum Provider {
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
-     * @param entity The entity to get the identifier for.
-     * @return The identifier of the given entity.
+     * @param entity The entity to get the identifier for, may be <code>null</code>.
+     * @return The identifier of the given entity, or <code>null</code> when <code>null</code> was supplied or when the entity has no ID.
      */
     public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(E entity) {
         return entity == null ? null : entity.getId();
@@ -373,8 +373,8 @@ public enum Provider {
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
-     * @param entity The entity to get the table name for.
-     * @return The table name of the given entity.
+     * @param entity The entity to get the table name for, may be <code>null</code>.
+     * @return The table name of the given entity, or <code>null</code> when <code>null</code> was supplied.
      */
     public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
         if (entity == null) {

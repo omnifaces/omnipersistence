@@ -45,7 +45,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
     /**
      * Returns a new enumerated criteria for the given enum constant.
      *
-     * @param value The enum constant.
+     * @param value The enum constant, may be <code>null</code> to match <code>path IS NULL</code>.
      * @return A new enumerated criteria.
      */
     public static Enumerated value(Enum<?> value) {
@@ -73,7 +73,9 @@ public final class Enumerated extends Criteria<Enum<?>> {
 
     @Override
     public boolean applies(Object modelValue) {
-        return getValue() == null ? modelValue == null : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getClass()), getValue());
+        return getValue() == null
+            ? modelValue == null
+            : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getDeclaringClass()), getValue());
     }
 
     @SuppressWarnings("unchecked")

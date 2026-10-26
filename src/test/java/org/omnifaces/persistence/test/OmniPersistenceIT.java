@@ -34,6 +34,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+
 import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
@@ -44,6 +48,7 @@ import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.criteria.Between;
+import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Enumerated;
 import org.omnifaces.persistence.criteria.IgnoreCase;
 import org.omnifaces.persistence.criteria.Like;
@@ -466,6 +471,36 @@ public abstract class OmniPersistenceIT {
         var allMales = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
         var notMales = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
         assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
+    }
+
+    @Test
+    void testPageWithNullCriteriaValues() {
+        var isNull = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(null))).build(), true);
+        var isNotNull = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(null))).build(), true);
+        assertEquals(0, isNull.size(), "No records have null gender");
+        assertEquals(TOTAL_RECORDS, isNotNull.size(), "All records have non-null gender");
+    }
+
+    @Test
+    void testPageWithCriteriaBuildingNullPredicateImposesNoRestriction() {
+        var result = personService().getPage(Page.with().allMatch(Map.of("email", new NoRestriction())).build(), true);
+        assertEquals(TOTAL_RECORDS, result.size(), "All records are returned");
+        assertEquals(TOTAL_RECORDS, result.getEstimatedTotalNumberOfResults(), "Total count is correct");
+    }
+
+    private static class NoRestriction extends Criteria<String> {
+
+        private static final long serialVersionUID = 1L;
+
+        NoRestriction() {
+            super("");
+        }
+
+        @Override
+        public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+            return null;
+        }
+
     }
 
     // Page with fetch fields (PersonService/PhoneService custom methods) ---------------------------------------------

@@ -86,7 +86,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      *
      * @param <T> The expected return type.
      * @param name The name of the property to get.
-     * @return The property value.
+     * @return The property value, or <code>null</code> when the wrapped data source does not have the property.
      */
     @SuppressWarnings("unchecked")
     public <T> T get(String name) {

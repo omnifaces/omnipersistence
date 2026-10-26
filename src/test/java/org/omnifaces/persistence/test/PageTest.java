@@ -258,6 +258,26 @@ public class PageTest {
         }
 
         @Test
+        void cursorRangeWithNullLastThrowsException() {
+            assertThrows(NullPointerException.class, () -> Page.with().range(null, 10, false));
+        }
+
+        @Test
+        void orderByWithNullFieldThrowsException() {
+            assertThrows(NullPointerException.class, () -> Page.with().orderBy(null, true));
+        }
+
+        @Test
+        void requiredCriteriaWithNullThrowsException() {
+            assertThrows(NullPointerException.class, () -> Page.with().allMatch(null));
+        }
+
+        @Test
+        void optionalCriteriaWithNullThrowsException() {
+            assertThrows(NullPointerException.class, () -> Page.with().anyMatch(null));
+        }
+
+        @Test
         void doubleRequiredCriteriaThrowsException() {
             var criteria = Map.<String, Object>of("name", "test");
             assertThrows(IllegalStateException.class, () -> Page.with().allMatch(criteria).allMatch(criteria));

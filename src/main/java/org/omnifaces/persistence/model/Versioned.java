@@ -26,7 +26,7 @@ public interface Versioned {
     /**
      * Returns the version for optimistic locking.
      *
-     * @return The version.
+     * @return The version, or <code>null</code> if the entity is not persisted yet.
      */
     Long getVersion();
 

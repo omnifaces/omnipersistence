@@ -46,7 +46,7 @@ public final class Not extends Criteria<Object> {
     /**
      * Returns a new NOT criteria for the given value.
      *
-     * @param value The value or {@link Criteria} to negate.
+     * @param value The value or {@link Criteria} to negate, may be <code>null</code> to match <code>path IS NOT NULL</code>.
      * @return A new NOT criteria.
      */
     public static Not value(Object value) {

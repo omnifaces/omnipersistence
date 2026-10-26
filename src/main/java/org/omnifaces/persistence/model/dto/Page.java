@@ -17,6 +17,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static java.util.Collections.unmodifiableMap;
+import static java.util.Objects.requireNonNull;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 
@@ -350,9 +351,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * Set the range for cursor-based (value-based) paging. Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the last entity,
          * keeping performance stable regardless of page depth. Mutually exclusive with {@link #range(int, int)}.
          *
-         * @param last Last entity of the previous page.
+         * @param last Last entity of the previous page. May not be <code>null</code>.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
          * @param reversed Whether to navigate in reverse order (i.e. towards the previous page).
+         * @throws NullPointerException When last entity is <code>null</code>.
          * @throws IllegalStateException When a range is already set in this builder.
          * @return This builder.
          */
@@ -361,7 +363,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                 throw new IllegalStateException("Range is already set");
             }
 
-            this.last = last;
+            this.last = requireNonNull(last, "last");
             this.limit = limit;
             this.reversed = reversed;
             return this;
@@ -370,20 +372,22 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         /**
          * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
          *
-         * @param field The field.
+         * @param field The field. May not be <code>null</code>.
          * @param ascending Whether to sort ascending.
          * @return This builder.
+         * @throws NullPointerException When field is <code>null</code>.
          */
         public Builder orderBy(String field, boolean ascending) {
-            ordering.put(field, ascending);
+            ordering.put(requireNonNull(field, "field"), ascending);
             return this;
         }
 
         /**
          * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
          *
-         * @param requiredCriteria Required criteria.
+         * @param requiredCriteria Required criteria. May not be <code>null</code>.
          * @return This builder.
+         * @throws NullPointerException When required criteria is <code>null</code>.
          * @throws IllegalStateException When another required criteria is already set in this builder.
          * @see Criteria
          */
@@ -392,15 +396,16 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                 throw new IllegalStateException("Required criteria is already set");
             }
 
-            this.requiredCriteria = requiredCriteria;
+            this.requiredCriteria = requireNonNull(requiredCriteria, "requiredCriteria");
             return this;
         }
 
         /**
          * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
          *
-         * @param optionalCriteria Optional criteria.
+         * @param optionalCriteria Optional criteria. May not be <code>null</code>.
          * @return This builder.
+         * @throws NullPointerException When optional criteria is <code>null</code>.
          * @throws IllegalStateException When another optional criteria is already set in this builder.
          * @see Criteria
          */
@@ -409,7 +414,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                 throw new IllegalStateException("Optional criteria is already set");
             }
 
-            this.optionalCriteria = optionalCriteria;
+            this.optionalCriteria = requireNonNull(optionalCriteria, "optionalCriteria");
             return this;
         }
 

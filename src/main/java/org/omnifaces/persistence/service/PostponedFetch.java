@@ -15,9 +15,11 @@ package org.omnifaces.persistence.service;
 import java.util.Set;
 
 import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.JoinType;
 
 /**
- * This class postpones all {@link Fetch#fetch(String)} calls.
+ * This class postpones all {@link Fetch#fetch(String)} and {@link Fetch#fetch(String, JoinType)} calls. As there is no actual fetch to delegate to, all other
+ * {@link Fetch} methods throw {@link UnsupportedOperationException}.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -39,6 +41,17 @@ class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {
     @SuppressWarnings("hiding")
     public <X, Y> Fetch<X, Y> fetch(String attributeName) {
         return new PostponedFetch<>(postponedFetches, path + "." + attributeName);
+    }
+
+    @Override
+    @SuppressWarnings("hiding")
+    public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType joinType) {
+        return fetch(attributeName);
+    }
+
+    @Override
+    public Fetch<Z, X> getWrapped() {
+        throw new UnsupportedOperationException("Postponed fetch only supports fetch(String) and fetch(String, JoinType).");
     }
 
 }

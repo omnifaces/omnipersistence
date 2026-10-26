@@ -580,6 +580,12 @@ public class CriteriaTest {
             assertTrue(Enumerated.value(TestEnum.HOME).applies("Home"));
         }
 
+        @Test
+        void appliesWithStringMatchesEnumConstantWithBody() {
+            assertTrue(Enumerated.value(TestEnumWithBody.WITH_BODY).applies("with_body"));
+            assertFalse(Enumerated.value(TestEnumWithBody.WITH_BODY).applies("without_body"));
+        }
+
         @SuppressWarnings("unchecked")
         @Test
         void parseCaseInsensitive() {
@@ -746,6 +752,12 @@ public class CriteriaTest {
         MOBILE,
         HOME,
         WORK;
+    }
+
+    enum TestEnumWithBody {
+        WITH_BODY {
+        },
+        WITHOUT_BODY;
     }
 
 }

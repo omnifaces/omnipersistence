@@ -58,14 +58,14 @@ public interface Identifiable<I extends Comparable<I> & Serializable> extends Se
     /**
      * Returns the ID.
      *
-     * @return The ID.
+     * @return The ID, or <code>null</code> if not set yet, e.g. when the entity has a generated ID and is not persisted yet.
      */
     I getId();
 
     /**
      * Sets the ID.
      *
-     * @param id The ID.
+     * @param id The ID, may be <code>null</code>.
      */
     void setId(I id);
 

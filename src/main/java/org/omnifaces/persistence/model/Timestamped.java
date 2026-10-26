@@ -35,7 +35,7 @@ public interface Timestamped {
     /**
      * Returns the "created" timestamp.
      *
-     * @return The created timestamp.
+     * @return The created timestamp, or <code>null</code> if the entity is not persisted yet.
      */
     Instant getCreated();
 
@@ -49,7 +49,7 @@ public interface Timestamped {
     /**
      * Returns the "last modified" timestamp.
      *
-     * @return The last modified timestamp.
+     * @return The last modified timestamp, or <code>null</code> if the entity is not persisted yet.
      */
     Instant getLastModified();
 
