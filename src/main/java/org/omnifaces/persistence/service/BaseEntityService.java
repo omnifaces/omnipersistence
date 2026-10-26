@@ -2301,7 +2301,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         else if (isBrokenSubqueryProvider && value instanceof Criteria) {
             // Count subquery context (implied by falling through previous branch): Criteria (e.g. Like) cannot be expressed as plain IN,
             // and buildArrayPredicate generates broken nested correlated subqueries that OpenJPA and Hibernate+PostgreSQL/SQL Server cannot resolve correctly.
-            // Silently skip; the count may be slightly inaccurate, which is an accepted known limitation.
+            // Skip with a warning; the count may be slightly inaccurate, which is an accepted known limitation.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
