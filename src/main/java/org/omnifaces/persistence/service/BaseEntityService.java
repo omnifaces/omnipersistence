@@ -75,6 +75,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.StreamSupport;
 
+import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.ElementCollection;
@@ -755,7 +756,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param id Entity ID to get entity by.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    public E getById(I id) {
+    public @Nullable E getById(I id) {
         return runWithCurrentInstance(() -> getById(id, false));
     }
 
@@ -766,7 +767,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    protected E getById(I id, boolean includeSoftDeleted) {
+    protected @Nullable E getById(I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
 
         if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
@@ -783,7 +784,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entityGraphName Entity graph name.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    public E getByIdWithLoadGraph(I id, String entityGraphName) {
+    public @Nullable E getByIdWithLoadGraph(I id, String entityGraphName) {
         return runWithCurrentInstance(() -> {
             var entityGraph = entityManager.getEntityGraph(entityGraphName);
             var properties = new HashMap<String, Object>();
@@ -801,7 +802,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found soft deleted entity, or <code>null</code> if there is none.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
-    public E getSoftDeletedById(I id) {
+    public @Nullable E getSoftDeletedById(I id) {
         return runWithCurrentInstance(() -> {
             softDeleteData.checkSoftDeletable();
             var entity = getEntityManager().find(entityType, id);
@@ -1383,7 +1384,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
      */
     @SuppressWarnings({ "hiding", "unchecked" })
-    protected <E> E manageIfNecessary(E entity) {
+    protected <E> @Nullable E manageIfNecessary(@Nullable E entity) {
         if (entity == null) {
             return null;
         }
@@ -2252,7 +2253,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
             }
             else if (type.isEnum()) {
-                predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
+                    predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
             }
             else if (Numeric.is(type)) {
                 predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);

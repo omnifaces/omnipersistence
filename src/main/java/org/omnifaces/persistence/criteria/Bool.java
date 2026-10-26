@@ -15,6 +15,7 @@ package org.omnifaces.persistence.criteria;
 import java.math.BigDecimal;
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -58,11 +59,11 @@ public final class Bool extends Criteria<Boolean> {
     /**
      * Returns a new boolean criteria for the given search value, parsed as truthy.
      *
-     * @param searchValue The search value to parse.
+     * @param searchValue The search value to parse. If <code>null</code>, it is treated as <code>false</code>.
      * @return A new boolean criteria.
      * @see #isTruthy(Object)
      */
-    public static Bool parse(Object searchValue) {
+    public static Bool parse(@Nullable Object searchValue) {
         return new Bool(isTruthy(searchValue));
     }
 
@@ -102,7 +103,7 @@ public final class Bool extends Criteria<Boolean> {
      * @param value The value to check, may be <code>null</code>.
      * @return True if the value is truthy, false otherwise, including when the value is <code>null</code>.
      */
-    public static Boolean isTruthy(Object value) {
+    public static Boolean isTruthy(@Nullable Object value) {
         if (value == null) {
             return false;
         }

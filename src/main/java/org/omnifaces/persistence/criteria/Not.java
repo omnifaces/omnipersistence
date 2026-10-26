@@ -14,6 +14,7 @@ package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -49,7 +50,7 @@ public final class Not extends Criteria<Object> {
      * @param value The value or {@link Criteria} to negate, may be <code>null</code> to match <code>path IS NOT NULL</code>.
      * @return A new NOT criteria.
      */
-    public static Not value(Object value) {
+    public static Not value(@Nullable Object value) {
         return new Not(value);
     }
 

@@ -12,7 +12,9 @@
  */
 package org.omnifaces.persistence.model;
 
+import jakarta.annotation.Nullable;
 import java.time.Instant;
+
 
 /**
  * <p>
@@ -37,7 +39,7 @@ public interface Timestamped {
      *
      * @return The created timestamp, or <code>null</code> if the entity is not persisted yet.
      */
-    Instant getCreated();
+    @Nullable Instant getCreated();
 
     /**
      * Sets the "last modified" timestamp.
@@ -51,6 +53,6 @@ public interface Timestamped {
      *
      * @return The last modified timestamp, or <code>null</code> if the entity is not persisted yet.
      */
-    Instant getLastModified();
+    @Nullable Instant getLastModified();
 
 }

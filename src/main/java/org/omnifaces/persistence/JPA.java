@@ -60,6 +60,7 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SetAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
+import jakarta.annotation.Nullable;
 import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -160,7 +161,7 @@ public final class JPA {
      * @return Single result of given typed query, or <code>null</code> if there is none.
      * @throws NonUniqueResultException When there is no unique result.
      */
-    public static <T> T getSingleResultOrNull(TypedQuery<T> typedQuery) {
+    public static <T> @Nullable T getSingleResultOrNull(TypedQuery<T> typedQuery) {
         try {
             return typedQuery.getSingleResult();
         }
@@ -179,7 +180,7 @@ public final class JPA {
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
-    public static <T> T getSingleResultOrNull(Query query) {
+    public static <T> @Nullable T getSingleResultOrNull(Query query) {
         try {
             return (T) query.getSingleResult();
         }
@@ -224,7 +225,7 @@ public final class JPA {
      * @param typedQuery The involved typed query.
      * @return First result of given typed query, or <code>null</code> if there is none.
      */
-    public static <T> T getFirstResultOrNull(TypedQuery<T> typedQuery) {
+    public static <T> @Nullable T getFirstResultOrNull(TypedQuery<T> typedQuery) {
         return findFirstResult(typedQuery).orElse(null);
     }
 
@@ -238,7 +239,7 @@ public final class JPA {
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
-    public static <T> T getFirstResultOrNull(Query query) {
+    public static <T> @Nullable T getFirstResultOrNull(Query query) {
         return (T) findFirstResult(query).orElse(null);
     }
 
