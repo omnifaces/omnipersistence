@@ -1480,7 +1480,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
     protected Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
-        return ofNullable(entity.map(e -> fetchLazyCollections(e, getters)).orElse(null));
+        return entity.map(e -> fetchLazyCollections(e, getters));
     }
 
     /**
