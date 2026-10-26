@@ -18,6 +18,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>LOWER(path) = LOWER(value)</code>.
  * <p>
@@ -59,7 +61,7 @@ public final class IgnoreCase extends Criteria<String> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return modelValue != null && modelValue.toString().equalsIgnoreCase(getValue());
     }
 

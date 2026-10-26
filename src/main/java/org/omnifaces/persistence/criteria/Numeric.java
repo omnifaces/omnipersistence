@@ -22,6 +22,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>path = number</code>.
  * <p>
@@ -87,7 +89,7 @@ public final class Numeric extends Criteria<Number> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return modelValue != null && Objects.equals(parseNumber(modelValue, getValue().getClass()), getValue());
     }
 

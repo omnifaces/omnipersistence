@@ -31,6 +31,8 @@ import java.util.logging.Logger;
 
 import javax.sql.CommonDataSource;
 
+import org.jspecify.annotations.NullUnmarked;
+
 /**
  * <p>
  * A wrapper around a {@link CommonDataSource} that delegates all property access to the wrapped data source via reflection-based JavaBeans introspection. This
@@ -43,6 +45,7 @@ import javax.sql.CommonDataSource;
  * @see SwitchableCommonDataSource
  * @see SwitchableXADataSource
  */
+@NullUnmarked
 public class CommonDataSourceWrapper implements CommonDataSource {
 
     private CommonDataSource wrapped;

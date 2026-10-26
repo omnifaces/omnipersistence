@@ -22,4 +22,7 @@
  *
  * @see BaseEntityException
  */
+@NullMarked
 package org.omnifaces.persistence.exception;
+
+import org.jspecify.annotations.NullMarked;

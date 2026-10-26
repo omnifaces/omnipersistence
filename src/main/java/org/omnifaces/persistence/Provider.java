@@ -42,6 +42,7 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -340,11 +341,7 @@ public enum Provider {
      * @return The actual entity type of the given entity.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
-        if (entity == null) {
-            return null;
-        }
-
+    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> @Nullable Class<E> getEntityType(E entity) {
         Class<? extends BaseEntity> entityType = entity.getClass();
 
         while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null) {
@@ -363,8 +360,8 @@ public enum Provider {
      * @param entity The entity to get the identifier for.
      * @return The identifier of the given entity.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(E entity) {
-        return entity == null ? null : entity.getId();
+    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> @Nullable I getIdentifier(E entity) {
+        return entity.getId();
     }
 
     /**
@@ -376,7 +373,7 @@ public enum Provider {
      * @param entity The entity to get the table name for.
      * @return The table name of the given entity.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
+    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> @Nullable String getTableName(@Nullable E entity) {
         if (entity == null) {
             return null;
         }

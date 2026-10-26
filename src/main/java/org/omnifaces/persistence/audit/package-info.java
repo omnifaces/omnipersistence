@@ -20,4 +20,7 @@
  * @see AuditListener
  * @see AuditedChange
  */
+@NullMarked
 package org.omnifaces.persistence.audit;
+
+import org.jspecify.annotations.NullMarked;

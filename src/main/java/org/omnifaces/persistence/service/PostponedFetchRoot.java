@@ -35,6 +35,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.Root;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
@@ -70,7 +71,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     public <E extends BaseEntity<?>, T extends E> List<T> runPostponedFetches(Page page, EntityManager entityManager, Class<E> entityType, List<T> entities) {
         var fetchPaths = List.copyOf(postponedFetches);
-        var ids = entities.stream().map(BaseEntity::getId).toList();
+        var ids = entities.stream().map(BaseEntity::getId).filter(Objects::nonNull).toList();
 
         for (var fetchPath : fetchPaths) {
             entityManager
@@ -135,7 +136,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return new EntityRow<>(entity, copies);
     }
 
-    private static <T> Comparator<EntityRow<T>> buildRowComparator(Page page, List<String> paths) {
+    private static <T> @Nullable Comparator<EntityRow<T>> buildRowComparator(Page page, List<String> paths) {
         Comparator<EntityRow<T>> rowComparator = null;
 
         for (int i = 0; i < paths.size(); i++) {
@@ -166,7 +167,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     @SuppressWarnings("unchecked")
-    private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering) {
+    private static @Nullable Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering) {
         return ordering.entrySet().stream()
             .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
             .map(entry -> {

@@ -19,6 +19,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableSet;
+import static java.util.Objects.*;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -114,6 +115,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Bool;
@@ -216,7 +218,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private Supplier<Set<String>> elementCollections = Collections::emptySet;
     private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
     private java.util.function.Predicate<String> oneToManys = field -> false;
-    private Validator validator;
+    private @Nullable Validator validator;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -262,7 +264,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return CURRENT_INSTANCE.get();
     }
 
-    private <T> T runWithCurrentInstance(Supplier<T> action) {
+    private <T extends @Nullable Object> T runWithCurrentInstance(Supplier<T> action) {
         CURRENT_INSTANCE.set(this);
 
         try {
@@ -755,7 +757,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param id Entity ID to get entity by.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    public E getById(I id) {
+    public @Nullable E getById(@Nullable I id) {
         return runWithCurrentInstance(() -> getById(id, false));
     }
 
@@ -766,7 +768,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    protected E getById(I id, boolean includeSoftDeleted) {
+    protected @Nullable E getById(@Nullable I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
 
         if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
@@ -783,7 +785,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entityGraphName Entity graph name.
      * @return Found entity, or <code>null</code> if there is none.
      */
-    public E getByIdWithLoadGraph(I id, String entityGraphName) {
+    public @Nullable E getByIdWithLoadGraph(I id, String entityGraphName) {
         return runWithCurrentInstance(() -> {
             var entityGraph = entityManager.getEntityGraph(entityGraphName);
             var properties = new HashMap<String, Object>();
@@ -801,7 +803,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found soft deleted entity, or <code>null</code> if there is none.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
-    public E getSoftDeletedById(I id) {
+    public @Nullable E getSoftDeletedById(I id) {
         return runWithCurrentInstance(() -> {
             softDeleteData.checkSoftDeletable();
             var entity = getEntityManager().find(entityType, id);
@@ -1273,7 +1275,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws EntityNotFoundException When entity has in meanwhile been hard deleted.
      */
     @Transactional(REQUIRED)
-    public void softDelete(E entity) {
+    public void softDelete(@Nullable E entity) {
         runWithCurrentInstance(() -> {
             softDeleteData.checkSoftDeletable();
             softDeleteData.setSoftDeleted(manage(entity), true);
@@ -1289,7 +1291,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws EntityNotFoundException When entity has in meanwhile been hard deleted.
      */
     @Transactional(REQUIRED)
-    public void softUndelete(E entity) {
+    public void softUndelete(@Nullable E entity) {
         runWithCurrentInstance(() -> {
             softDeleteData.checkSoftDeletable();
             softDeleteData.setSoftDeleted(manage(entity), false);
@@ -1347,7 +1349,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity has no ID.
      * @throws EntityNotFoundException When entity has in meanwhile been deleted.
      */
-    protected E manage(E entity) {
+    protected E manage(@Nullable E entity) {
         if (entity == null) {
             throw new NullPointerException("Entity is null.");
         }
@@ -1383,7 +1385,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
      */
     @SuppressWarnings({ "hiding", "unchecked" })
-    protected <E> E manageIfNecessary(E entity) {
+    protected <E> @Nullable E manageIfNecessary(@Nullable E entity) {
         if (entity == null) {
             return null;
         }
@@ -1436,7 +1438,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Count of all foreign key references to given entity.
      */
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, manage(entity).getId());
+        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, requireNonNull(manage(entity).getId()));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1478,7 +1480,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
     protected Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
-        return ofNullable(entity.isPresent() ? fetchLazyCollections(entity.get(), getters) : null);
+        return ofNullable(entity.map(e -> fetchLazyCollections(e, getters)).orElse(null));
     }
 
     /**
@@ -1664,7 +1666,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
          * @param root The root of the entity to query.
          * @return A linked hash map representing the mapping of the result type's properties to the query's selection expressions.
          */
-        LinkedHashMap<Getter<T>, Expression<?>> build(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<? super T> root);
+        @Nullable LinkedHashMap<Getter<T>, Expression<?>> build(CriteriaBuilder criteriaBuilder, AbstractQuery<T> query, Root<? super T> root);
 
     }
 
@@ -1943,7 +1945,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private <T extends E, Q> TypedQuery<Q> buildTypedQuery(
-        PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, Root<E> root, Map<String, Object> parameters
+        PageBuilder<T> pageBuilder, CriteriaQuery<Q> criteriaQuery, @Nullable Root<E> root, Map<String, Object> parameters
     )
     {
         var typedQuery = getEntityManager().createQuery(criteriaQuery);
@@ -1963,7 +1965,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         mappedParameters.entrySet().forEach(parameter -> query.setParameter(parameter.getKey(), parameter.getValue()));
     }
 
-    private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
+    private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, @Nullable TypedQuery<Long> countQuery) {
         var page = pageBuilder.getPage();
         var entities = entityQuery.getResultList();
 
@@ -1986,7 +1988,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     // Selection actions ----------------------------------------------------------------------------------------------
 
-    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query, Page page) {
+    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query, @Nullable Page page) {
         var root = query.from(entityType);
         return query instanceof Subquery
             ? new SubqueryRoot<>(root)
@@ -2039,7 +2041,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
-    private <T extends E> void buildRange(PageBuilder<T> pageBuilder, Query query, Root<E> root) {
+    private <T extends E> void buildRange(PageBuilder<T> pageBuilder, Query query, @Nullable Root<E> root) {
         if (root == null) {
             return;
         }
@@ -2162,7 +2164,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         // (orderByField1 > ?1) OR (orderByField1 = ?1 AND orderByField2 > ?2) OR (orderByField1 = ?1 AND orderByField2 = ?2 AND orderByField3 > ?3) [...]
 
         var predicates = new ArrayList<Predicate>(page.getOrdering().size());
-        var orderByFields = new HashMap<Expression<V>, ParameterExpression<V>>();
+        var orderByFields = new HashMap<Expression<V>, @Nullable ParameterExpression<V>>();
         var last = (T) page.getLast();
 
         for (var order : page.getOrdering().entrySet()) {
@@ -2196,7 +2198,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .collect(toList());
     }
 
-    private <T extends E> Predicate buildPredicate(
+    private <T extends E> @Nullable Predicate buildPredicate(
         Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
@@ -2221,9 +2223,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     @SuppressWarnings("unchecked")
-    private <T extends E> Predicate buildTypedPredicate(
-        Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
-        ParameterBuilder parameterBuilder
+    private <T extends E> @Nullable Predicate buildTypedPredicate(
+        Expression<?> path, @Nullable Class<?> type, String field, @Nullable Object criteria, AbstractQuery<T> query,
+        CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
         var alias = Alias.create(getProvider(), path, field);
@@ -2251,17 +2253,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             else if (value instanceof BaseEntity) {
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
             }
-            else if (type.isEnum()) {
-                predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (Numeric.is(type)) {
-                predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (Bool.is(type)) {
-                predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (String.class.isAssignableFrom(type) || value instanceof String) {
-                predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
+            else if (type != null) {
+                if (type.isEnum()) {
+                    predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
+                }
+                else if (Numeric.is(type)) {
+                    predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);
+                }
+                else if (Bool.is(type)) {
+                    predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
+                }
+                else if (String.class.isAssignableFrom(type) || value instanceof String) {
+                    predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
+                }
+                else {
+                    throw new UnsupportedOperationException(format(EXCEPTION_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
+                }
             }
             else {
                 throw new UnsupportedOperationException(format(EXCEPTION_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
@@ -2283,9 +2290,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return predicate;
     }
 
-    private <T extends E> Predicate buildElementCollectionPredicate(
-        Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
-        PathResolver pathResolver, ParameterBuilder parameterBuilder
+    private <T extends E> @Nullable Predicate buildElementCollectionPredicate(
+        Alias alias, Expression<?> path, @Nullable Class<?> type, String field, Object value, AbstractQuery<T> query,
+        CriteriaBuilder criteriaBuilder, PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
         boolean isBrokenSubqueryProvider = getProvider() == OPENJPA
@@ -2308,11 +2315,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         else {
             // Hibernate with other databases handles plain IN on @ElementCollection correctly.
             // OpenJPA and Hibernate+PostgreSQL/SQLServer in count subquery context with non-Criteria values also use plain IN safely.
-            return buildInPredicate(alias, path, type, value, parameterBuilder);
+            return type == null ? null : buildInPredicate(alias, path, type, value, parameterBuilder);
         }
     }
 
-    private static Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+    private static @Nullable Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
         var in = stream(value)
             .map(item -> createElementCollectionCriteria(type, item).getValue())
             .filter(Objects::nonNull)
@@ -2327,8 +2334,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return path.in(in.toArray(new Expression[in.size()]));
     }
 
-    private <T extends E> Predicate buildArrayPredicate(
-        Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
+    private <T extends E> @Nullable Predicate buildArrayPredicate(
+        Expression<?> path, @Nullable Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver,
         ParameterBuilder parameterBuilder
     )
     {
@@ -2357,7 +2365,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             fieldPath = path;
         }
 
-        final var resolvedType = (oneToManyField && type == null) ? fieldPath.getJavaType() : type; // type is null for @OneToMany when buildPredicate bypasses
+        final var resolvedType = (type == null && oneToManyField) ? fieldPath.getJavaType() : type; // type is null for @OneToMany when buildPredicate bypasses
                                                                                                     // pathResolver.get(field) to avoid adding a join.
         var predicates = stream(value)
             .map(
@@ -2398,15 +2406,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return predicates.toArray(new Predicate[predicates.size()]);
     }
 
-    private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, Predicate nonnullable) {
+    private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, @Nullable Predicate nullable, Predicate nonnullable) {
         return nullable == null ? nonnullable : criteriaBuilder.and(nullable, nonnullable);
     }
 
-    private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, Predicate nullable, List<Predicate> nonnullable) {
+    private static Predicate conjunctRestrictionsIfNecessary(CriteriaBuilder criteriaBuilder, @Nullable Predicate nullable, List<Predicate> nonnullable) {
         return conjunctRestrictionsIfNecessary(criteriaBuilder, nullable, criteriaBuilder.and(toArray(nonnullable)));
     }
 
-    private static Predicate buildCountPredicateIfNecessary(
+    private static @Nullable Predicate buildCountPredicateIfNecessary(
         Predicate inPredicate, CriteriaBuilder criteriaBuilder, AbstractQuery<?> query, PathResolver pathResolver
     )
     {
@@ -2442,7 +2450,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             || from instanceof PostponedFetchRoot<?> postponedFetchRoot && postponedFetchRoot.hasPostponedFetches();
     }
 
-    private static <T> T noop() {
+    private static <T> @Nullable T noop() {
         return null;
     }
 

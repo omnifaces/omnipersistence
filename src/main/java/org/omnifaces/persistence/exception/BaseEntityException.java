@@ -15,6 +15,7 @@ package org.omnifaces.persistence.exception;
 import jakarta.ejb.ApplicationException;
 import jakarta.persistence.PersistenceException;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -35,7 +36,7 @@ public abstract class BaseEntityException extends PersistenceException {
     private static final long serialVersionUID = 1L;
 
     /** The entity associated with this exception. */
-    private BaseEntity<?> entity;
+    private @Nullable BaseEntity<?> entity;
 
     /**
      * Constructs a new base entity exception for the given entity and message.
@@ -43,7 +44,7 @@ public abstract class BaseEntityException extends PersistenceException {
      * @param entity The entity associated with this exception.
      * @param message The detail message.
      */
-    public BaseEntityException(BaseEntity<?> entity, String message) {
+    public BaseEntityException(@Nullable BaseEntity<?> entity, @Nullable String message) {
         super(message);
         this.entity = entity;
     }
@@ -55,7 +56,7 @@ public abstract class BaseEntityException extends PersistenceException {
      * @return The entity associated with this exception.
      */
     @SuppressWarnings("unchecked")
-    public <E extends BaseEntity<?>> E getEntity() {
+    public <E extends @Nullable BaseEntity<?>> E getEntity() {
         return (E) entity;
     }
 

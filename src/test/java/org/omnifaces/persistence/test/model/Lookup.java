@@ -18,6 +18,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
 
@@ -28,7 +29,7 @@ public class Lookup extends BaseEntity<String> {
 
     @Id
     @Column(length = 2, nullable = false, unique = true, name = "code")
-    private String id;
+    private @Nullable String id;
 
     @SoftDeletable(type = ACTIVE)
     private boolean active = true;
@@ -42,12 +43,12 @@ public class Lookup extends BaseEntity<String> {
     }
 
     @Override
-    public String getId() {
+    public @Nullable String getId() {
         return id;
     }
 
     @Override
-    public void setId(String id) {
+    public void setId(@Nullable String id) {
         this.id = id;
     }
 

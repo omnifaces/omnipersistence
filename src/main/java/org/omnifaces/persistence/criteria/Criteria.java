@@ -20,6 +20,7 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -65,7 +66,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @see Page
  * @see BaseEntityService
  */
-public abstract class Criteria<T> implements Serializable {
+public abstract class Criteria<T extends @Nullable Object> implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -105,7 +106,7 @@ public abstract class Criteria<T> implements Serializable {
      * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
      * @return A predicate for the criteria value.
      */
-    public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
+    public abstract @Nullable Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
     /**
      * Returns whether this criteria value would apply to the given model value. This must basically represent the "plain Java" equivalent of the SQL behavior
@@ -116,7 +117,7 @@ public abstract class Criteria<T> implements Serializable {
      * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
      * @throws UnsupportedOperationException When this method is not implemented yet.
      */
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         throw new UnsupportedOperationException("This method is not implemented yet.");
     }
 
@@ -135,7 +136,7 @@ public abstract class Criteria<T> implements Serializable {
      * @param possibleCriteria Any object which could possibly represent a {@link Criteria}.
      * @return The unwrapped criteria value when given object actually represents a {@link Criteria}, else the original value unmodified.
      */
-    public static Object unwrap(Object possibleCriteria) {
+    public static @Nullable Object unwrap(@Nullable Object possibleCriteria) {
         Object value = possibleCriteria;
 
         while (value instanceof Criteria) {
@@ -174,7 +175,7 @@ public abstract class Criteria<T> implements Serializable {
          * @param value The parameter value.
          * @return A new parameter expression.
          */
-        <T> ParameterExpression<T> create(Object value);
+        <T> ParameterExpression<T> create(@Nullable Object value);
 
     }
 

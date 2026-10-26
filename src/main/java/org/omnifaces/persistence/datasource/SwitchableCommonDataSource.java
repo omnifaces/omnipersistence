@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.ServiceLoader;
 
+import org.jspecify.annotations.NullUnmarked;
+
 /**
  * <p>
  * A {@link CommonDataSourceWrapper} that loads its data source configuration from an external properties file. This allows switching the underlying data source
@@ -56,6 +58,7 @@ import java.util.ServiceLoader;
  * @see SwitchableXADataSource
  * @see PropertiesFileLoader
  */
+@NullUnmarked
 public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
     private boolean init;

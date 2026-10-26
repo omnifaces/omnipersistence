@@ -30,6 +30,7 @@ import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.IdentifiableType;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.Identifiable;
 
 /**
@@ -57,7 +58,7 @@ class RootPathResolver implements PathResolver {
     }
 
     @Override
-    public Expression<?> get(String field) {
+    public Expression<?> get(@Nullable String field) {
         if (field == null) {
             return root;
         }
@@ -111,7 +112,7 @@ class RootPathResolver implements PathResolver {
             || findGetter(type, property).map(m -> m.isAnnotationPresent(Transient.class)).orElse(false);
     }
 
-    private static Path<?> getSupertypePath(Path<?> path, String attribute) {
+    private static @Nullable Path<?> getSupertypePath(Path<?> path, String attribute) {
         if (path.getModel() instanceof IdentifiableType<?> type) {
             while (type != null) {
                 try {
@@ -126,7 +127,7 @@ class RootPathResolver implements PathResolver {
         return null;
     }
 
-    private Path<?> guessManyOrOneToOnePath(String attribute) {
+    private @Nullable Path<?> guessManyOrOneToOnePath(String attribute) {
         for (String manyOrOneToOne : manyOrOneToOnes) {
             try {
                 return (Path<?>) get(manyOrOneToOne + "." + attribute);

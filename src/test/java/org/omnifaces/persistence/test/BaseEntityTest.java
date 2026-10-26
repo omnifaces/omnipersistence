@@ -28,6 +28,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -678,7 +679,7 @@ public class BaseEntityTest {
         return person;
     }
 
-    private static Phone createPhone(Long id, Type type, String number) {
+    private static Phone createPhone(Long id, @Nullable Type type, @Nullable String number) {
         var phone = new Phone();
         phone.setId(id);
         phone.setType(type);
@@ -715,26 +716,26 @@ public class BaseEntityTest {
     private static class TaggedEntity extends BaseEntity<Long> {
 
         private static final long serialVersionUID = 1L;
-        private Long id;
-        private Tag tag;
+        private @Nullable Long id;
+        private @Nullable Tag tag;
 
-        TaggedEntity(Long id, Tag tag) {
+        TaggedEntity(@Nullable Long id, @Nullable Tag tag) {
             this.id = id;
             this.tag = tag;
         }
 
         @Override
-        public Long getId() {
+        public @Nullable Long getId() {
             return id;
         }
 
         @Override
-        public void setId(Long id) {
+        public void setId(@Nullable Long id) {
             this.id = id;
         }
 
         @Override
-        protected Stream<Function<TaggedEntity, Object>> identityGetters() {
+        protected Stream<Function<TaggedEntity, @Nullable Object>> identityGetters() {
             return Stream.of(e -> e.tag);
         }
 

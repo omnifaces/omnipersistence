@@ -14,6 +14,8 @@ package org.omnifaces.persistence.model;
 
 import java.time.Instant;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>
  * Base interface for timestamped entity. Implemented by {@link TimestampedBaseEntity} and {@link TimestampedEntity}.
@@ -37,6 +39,7 @@ public interface Timestamped {
      *
      * @return The created timestamp.
      */
+    @Nullable
     Instant getCreated();
 
     /**
@@ -51,6 +54,7 @@ public interface Timestamped {
      *
      * @return The last modified timestamp.
      */
+    @Nullable
     Instant getLastModified();
 
 }

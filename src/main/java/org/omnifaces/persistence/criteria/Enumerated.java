@@ -18,6 +18,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>path = enum</code>.
  * <p>
@@ -34,11 +36,11 @@ import jakarta.persistence.criteria.Predicate;
  * @since 1.0
  * @see Criteria
  */
-public final class Enumerated extends Criteria<Enum<?>> {
+public final class Enumerated extends Criteria<@Nullable Enum<?>> {
 
     private static final long serialVersionUID = 1L;
 
-    private Enumerated(Enum<?> value) {
+    private Enumerated(@Nullable Enum<?> value) {
         super(value, false, true);
     }
 
@@ -48,7 +50,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
      * @param value The enum constant.
      * @return A new enumerated criteria.
      */
-    public static Enumerated value(Enum<?> value) {
+    public static Enumerated value(@Nullable Enum<?> value) {
         return new Enumerated(value);
     }
 
@@ -62,26 +64,26 @@ public final class Enumerated extends Criteria<Enum<?>> {
      * @return A new enumerated criteria.
      * @throws IllegalArgumentException If the search value cannot be mapped to an enum constant.
      */
-    public static Enumerated parse(Object searchValue, Class<Enum<?>> targetType) {
+    public static Enumerated parse(Object searchValue, @Nullable Class<Enum<?>> targetType) {
         return new Enumerated(parseEnum(searchValue, targetType));
     }
 
     @Override
-    public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+    public @Nullable Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         return getValue() == null ? null : criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return getValue() == null ? modelValue == null : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getClass()), getValue());
     }
 
     @SuppressWarnings("unchecked")
-    private static Enum<?> parseEnum(Object searchValue, Class<?> targetType) throws IllegalArgumentException {
+    private static @Nullable Enum<?> parseEnum(Object searchValue, @Nullable Class<?> targetType) throws IllegalArgumentException {
         if (searchValue instanceof Enum) {
             return (Enum<?>) searchValue;
         }
-        else if (targetType.isEnum()) {
+        else if (targetType != null && targetType.isEnum()) {
             var criteria = searchValue instanceof Criteria c ? c : IgnoreCase.value(searchValue.toString());
 
             for (Enum<?> enumConstant : ((Class<Enum<?>>) targetType).getEnumConstants()) {

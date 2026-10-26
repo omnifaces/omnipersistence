@@ -37,12 +37,16 @@ public abstract class ConfigService extends BaseEntityService<Long, Config> {
 
     public void updateValue(Long id, String newValue) {
         var config = getById(id);
-        config.setValue(newValue);
+        if (config != null) {
+            config.setValue(newValue);
+        }
     }
 
     public void updateKey(Long id, String newKey) {
         var config = getById(id);
-        config.setKey(newKey);
+        if (config != null) {
+            config.setKey(newKey);
+        }
     }
 
 }

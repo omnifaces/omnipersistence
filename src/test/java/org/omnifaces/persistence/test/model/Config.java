@@ -16,6 +16,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.audit.Audit;
 import org.omnifaces.persistence.audit.AuditListener;
 import org.omnifaces.persistence.model.NonDeletable;
@@ -28,13 +29,13 @@ public class Config extends LocalGeneratedIdEntity {
     private static final long serialVersionUID = 1L;
 
     @Column(name = "configKey")
-    private String key;
+    private @Nullable String key;
 
     @Audit
     @Column(name = "configValue")
-    private String value;
+    private @Nullable String value;
 
-    public String getKey() {
+    public @Nullable String getKey() {
         return key;
     }
 
@@ -42,7 +43,7 @@ public class Config extends LocalGeneratedIdEntity {
         this.key = key;
     }
 
-    public String getValue() {
+    public @Nullable String getValue() {
         return value;
     }
 

@@ -19,6 +19,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>path IS (NOT) TRUE</code>.
  * <p>
@@ -41,7 +43,7 @@ public final class Bool extends Criteria<Boolean> {
 
     private static final long serialVersionUID = 1L;
 
-    private Bool(Boolean value) {
+    private Bool(boolean value) {
         super(value);
     }
 
@@ -51,7 +53,7 @@ public final class Bool extends Criteria<Boolean> {
      * @param value The boolean value.
      * @return A new boolean criteria.
      */
-    public static Bool value(Boolean value) {
+    public static Bool value(boolean value) {
         return new Bool(value);
     }
 
@@ -62,7 +64,7 @@ public final class Bool extends Criteria<Boolean> {
      * @return A new boolean criteria.
      * @see #isTruthy(Object)
      */
-    public static Bool parse(Object searchValue) {
+    public static Bool parse(@Nullable Object searchValue) {
         return new Bool(isTruthy(searchValue));
     }
 
@@ -84,7 +86,7 @@ public final class Bool extends Criteria<Boolean> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return Objects.equals(isTruthy(modelValue), getValue());
     }
 
@@ -102,7 +104,7 @@ public final class Bool extends Criteria<Boolean> {
      * @param value The value to check.
      * @return True if the value is truthy, false otherwise.
      */
-    public static Boolean isTruthy(Object value) {
+    public static boolean isTruthy(@Nullable Object value) {
         if (value == null) {
             return false;
         }

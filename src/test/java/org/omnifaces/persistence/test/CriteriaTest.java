@@ -84,7 +84,6 @@ public class CriteriaTest {
         void nullValueThrowsNullPointerException() {
             assertThrows(NullPointerException.class, () -> Numeric.value(null));
             assertThrows(NullPointerException.class, () -> Like.contains(null));
-            assertThrows(NullPointerException.class, () -> Bool.value(null));
             assertThrows(NullPointerException.class, () -> IgnoreCase.value(null));
         }
 

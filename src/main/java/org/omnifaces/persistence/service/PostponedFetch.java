@@ -29,7 +29,7 @@ class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {
     private String path;
 
     public PostponedFetch(Set<String> postponedFetches, String path) {
-        super(null);
+        super(null); // TODO wrapped should not be null, can later result in NPE
         this.postponedFetches = postponedFetches;
         this.path = path;
         postponedFetches.add(path);

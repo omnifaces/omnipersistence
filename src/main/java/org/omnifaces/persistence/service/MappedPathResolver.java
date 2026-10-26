@@ -18,6 +18,8 @@ import java.util.Set;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Root;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Helper class of {@link BaseEntityService}.
  *
@@ -34,7 +36,7 @@ class MappedPathResolver extends RootPathResolver {
     }
 
     @Override
-    public Expression<?> get(String field) {
+    public Expression<?> get(@Nullable String field) {
         if (field != null) {
             Expression<?> path = paths.get(field);
 

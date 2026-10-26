@@ -24,6 +24,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Transient;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>
  * Mapped superclass for timestamped entity. It extends from {@link BaseEntity} and implements {@link Timestamped}. It specifies two timestamp columns, named
@@ -77,11 +79,11 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
 
     /** The timestamp when this entity was first persisted. */
     @Column(nullable = false)
-    private Instant created;
+    private @Nullable Instant created;
 
     /** The timestamp when this entity was last modified. */
     @Column(nullable = false)
-    private Instant lastModified;
+    private @Nullable Instant lastModified;
 
     /** Internal flag to skip the automatic adjustment of the last modified timestamp during {@link #onPreUpdate()}. */
     @Transient
@@ -122,7 +124,7 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
     }
 
     @Override
-    public Instant getCreated() {
+    public @Nullable Instant getCreated() {
         return created;
     }
 
@@ -132,7 +134,7 @@ public abstract class TimestampedBaseEntity<I extends Comparable<I> & Serializab
     }
 
     @Override
-    public Instant getLastModified() {
+    public @Nullable Instant getLastModified() {
         return lastModified;
     }
 

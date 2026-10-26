@@ -18,6 +18,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>NOT (predicate)</code>.
  * <p>
@@ -35,11 +37,11 @@ import jakarta.persistence.criteria.Predicate;
  * @since 1.0
  * @see Criteria
  */
-public final class Not extends Criteria<Object> {
+public final class Not extends Criteria<@Nullable Object> {
 
     private static final long serialVersionUID = 1L;
 
-    private Not(Object value) {
+    private Not(@Nullable Object value) {
         super(value, true, true);
     }
 
@@ -49,7 +51,7 @@ public final class Not extends Criteria<Object> {
      * @param value The value or {@link Criteria} to negate.
      * @return A new NOT criteria.
      */
-    public static Not value(Object value) {
+    public static Not value(@Nullable Object value) {
         return new Not(value);
     }
 
@@ -59,7 +61,7 @@ public final class Not extends Criteria<Object> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         if (modelValue instanceof Criteria) {
             return !((Criteria<?>) modelValue).applies(getValue());
         }

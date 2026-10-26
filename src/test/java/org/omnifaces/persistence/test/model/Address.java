@@ -15,18 +15,20 @@ package org.omnifaces.persistence.test.model;
 import jakarta.persistence.Entity;
 import jakarta.validation.constraints.NotNull;
 
+import org.jspecify.annotations.Nullable;
+
 @Entity
 public class Address extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 
-    private @NotNull String street;
-    private @NotNull String houseNumber;
-    private @NotNull String postcode;
-    private @NotNull String city;
-    private @NotNull String country;
+    private @NotNull @Nullable String street;
+    private @NotNull @Nullable String houseNumber;
+    private @NotNull @Nullable String postcode;
+    private @NotNull @Nullable String city;
+    private @NotNull @Nullable String country;
 
-    public String getStreet() {
+    public @Nullable String getStreet() {
         return street;
     }
 
@@ -34,7 +36,7 @@ public class Address extends LocalGeneratedIdEntity {
         this.street = street;
     }
 
-    public String getHouseNumber() {
+    public @Nullable String getHouseNumber() {
         return houseNumber;
     }
 
@@ -42,7 +44,7 @@ public class Address extends LocalGeneratedIdEntity {
         this.houseNumber = houseNumber;
     }
 
-    public String getPostcode() {
+    public @Nullable String getPostcode() {
         return postcode;
     }
 
@@ -50,7 +52,7 @@ public class Address extends LocalGeneratedIdEntity {
         this.postcode = postcode;
     }
 
-    public String getCity() {
+    public @Nullable String getCity() {
         return city;
     }
 
@@ -58,7 +60,7 @@ public class Address extends LocalGeneratedIdEntity {
         this.city = city;
     }
 
-    public String getCountry() {
+    public @Nullable String getCountry() {
         return country;
     }
 

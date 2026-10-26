@@ -29,6 +29,7 @@ import java.util.stream.Stream;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -119,8 +120,8 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      *
      * @return The getters that define entity identity.
      */
-    protected Stream<? extends Function<?, Object>> identityGetters() {
-        return Stream.<Function<BaseEntity<I>, Object>>of(BaseEntity::getId);
+    protected Stream<? extends Function<?, @Nullable Object>> identityGetters() {
+        return Stream.<Function<BaseEntity<I>, @Nullable Object>>of(BaseEntity::getId);
     }
 
     /**
@@ -144,7 +145,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     }
 
     @SuppressWarnings("unchecked")
-    private int hashCode(final Stream<? extends Function<?, Object>> getters) {
+    private int hashCode(final Stream<? extends Function<?, @Nullable Object>> getters) {
         final var values = getters.map(getter -> ((Function<Object, Object>) getter).apply(this)).filter(Objects::nonNull).toArray();
         return values.length > 0 ? Objects.hash(values) : super.hashCode();
     }
@@ -153,7 +154,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * Compares by default by entity class (proxies taken into account) and ID.
      */
     @Override
-    public boolean equals(final Object other) {
+    public boolean equals(@Nullable final Object other) {
         return equals(other, identityGetters());
     }
 
@@ -166,12 +167,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * @return {@code true} if this object is the same as the {@code other} argument; {@code false} otherwise.
      */
     @SafeVarargs
-    protected final <E extends BaseEntity<I>> boolean equals(final Object other, final Function<E, Object>... getters) {
+    protected final <E extends BaseEntity<I>> boolean equals(@Nullable final Object other, final Function<E, Object>... getters) {
         return equals(other, Stream.of(getters));
     }
 
     @SuppressWarnings("unchecked")
-    private boolean equals(final Object other, final Stream<? extends Function<?, Object>> getters) {
+    private boolean equals(@Nullable final Object other, final Stream<? extends Function<?, @Nullable Object>> getters) {
         if (other == this) {
             return true;
         }
@@ -195,7 +196,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * Orders by default with "nulls last".
      */
     @Override
-    public int compareTo(final BaseEntity<I> other) {
+    public int compareTo(@Nullable final BaseEntity<I> other) {
         return compareTo(other, identityGetters());
     }
 
@@ -208,12 +209,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      * @return A negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
      */
     @SafeVarargs
-    protected final <E extends BaseEntity<I>> int compareTo(final Object other, final Function<E, Object>... getters) {
+    protected final <E extends BaseEntity<I>> int compareTo(@Nullable final Object other, final Function<E, Object>... getters) {
         return compareTo(other, Stream.of(getters));
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    private int compareTo(final Object other, final Stream<? extends Function<?, Object>> getters) {
+    private int compareTo(@Nullable final Object other, final Stream<? extends Function<?, @Nullable Object>> getters) {
         if (other == null) {
             return -1;
         }
@@ -244,7 +245,7 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     }
 
     @SuppressWarnings("unchecked")
-    private String toString(final Stream<? extends Function<?, Object>> getters) {
+    private String toString(final Stream<? extends Function<?, @Nullable Object>> getters) {
         final var values = getters.map(getter -> ((Function<Object, Object>) getter).apply(this)).toArray();
         return getClass().getSimpleName() + "["
             + (stream(values).allMatch(Objects::isNull)

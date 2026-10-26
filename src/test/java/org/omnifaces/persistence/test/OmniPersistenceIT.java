@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Objects.*;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -221,7 +222,7 @@ public abstract class OmniPersistenceIT {
      */
     @Test
     void testFindByPositionalParameters() {
-        var person = personService().getById(2L);
+        var person = requireNonNull(personService().getById(2L));
         var foundPerson = personService().findByIdAndEmail(person.getId(), person.getEmail());
         assertTrue(foundPerson.isPresent(), "Person matching both ID and email");
         assertEquals(person.getId(), foundPerson.get().getId(), "Found person");
@@ -306,7 +307,7 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageByLazyManyToOne() { // This was failing since Hibernate 6 upgrade.
-        var person = personService().getById(1L);
+        var person = requireNonNull(personService().getById(1L));
         var phones = phoneService().getPage(Page.with().allMatch(Map.of("owner", person)).build(), true);
         assertEquals(TOTAL_PHONES_PER_PERSON_0, phones.size(), "There are 3 phones");
     }

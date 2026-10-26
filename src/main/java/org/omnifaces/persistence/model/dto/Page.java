@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -106,7 +107,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     private final int offset;
     private final int limit;
-    private final Identifiable<?> last;
+    private final @Nullable Identifiable<?> last;
     private final boolean reversed;
     private final Map<String, Boolean> ordering;
     private final Map<String, Object> requiredCriteria;
@@ -127,7 +128,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * given criteria.
      */
     public Page(
-        Integer offset, Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria
+        @Nullable Integer offset, @Nullable Integer limit, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria,
+        Map<String, Object> optionalCriteria
     )
     {
         this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
@@ -150,8 +152,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * given criteria.
      */
     public Page(
-        Integer offset, Integer limit, Identifiable<?> last, Boolean reversed, LinkedHashMap<String, Boolean> ordering, Map<String, Object> requiredCriteria,
-        Map<String, Object> optionalCriteria
+        @Nullable Integer offset, @Nullable Integer limit, @Nullable Identifiable<?> last, @Nullable Boolean reversed, LinkedHashMap<String, Boolean> ordering,
+        @Nullable Map<String, Object> requiredCriteria, @Nullable Map<String, Object> optionalCriteria
     )
     {
         this.offset = validateIntegerArgument("offset", offset, 0, 0);
@@ -163,7 +165,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
     }
 
-    private static int validateIntegerArgument(String argumentName, Integer argumentValue, int minValue, int defaultValue) {
+    private static int validateIntegerArgument(String argumentName, @Nullable Integer argumentValue, int minValue, int defaultValue) {
         if (argumentValue == null) {
             return defaultValue;
         }
@@ -201,7 +203,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      *
      * @return The last entity of the previous page, if any.
      */
-    public Identifiable<?> getLast() {
+    public @Nullable Identifiable<?> getLast() {
         return last;
     }
 
@@ -320,13 +322,13 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      */
     public static class Builder {
 
-        private Integer offset;
-        private Integer limit;
-        private Identifiable<?> last;
+        private @Nullable Integer offset;
+        private @Nullable Integer limit;
+        private @Nullable Identifiable<?> last;
         private boolean reversed;
         private LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
-        private Map<String, Object> requiredCriteria;
-        private Map<String, Object> optionalCriteria;
+        private @Nullable Map<String, Object> requiredCriteria;
+        private @Nullable Map<String, Object> optionalCriteria;
 
         /**
          * Set the range for offset-based paging. Mutually exclusive with {@link #range(Identifiable, int, boolean)}.

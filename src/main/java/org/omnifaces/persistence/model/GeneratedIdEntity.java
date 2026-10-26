@@ -20,6 +20,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>
  * Mapped superclass for entity with generated ID. It extends from {@link BaseEntity}. It specifies a {@link Id} column, named "id", with {@link GeneratedValue}
@@ -55,15 +57,15 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
     /** The generated ID of this entity. */
     @Id
     @GeneratedValue(strategy = IDENTITY)
-    private I id;
+    private @Nullable I id;
 
     @Override
-    public I getId() {
+    public @Nullable I getId() {
         return id;
     }
 
     @Override
-    public void setId(I id) {
+    public void setId(@Nullable I id) {
         this.id = id;
     }
 

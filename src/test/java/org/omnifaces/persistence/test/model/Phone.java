@@ -24,6 +24,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotNull;
 
+import org.jspecify.annotations.Nullable;
+
 @Entity
 public class Phone extends LocalGeneratedIdEntity {
 
@@ -35,29 +37,29 @@ public class Phone extends LocalGeneratedIdEntity {
         WORK;
     }
 
-    private @NotNull @Enumerated(STRING) Type type;
-    private @NotNull String number;
+    private @NotNull @Nullable @Enumerated(STRING) Type type;
+    private @NotNull @Nullable String number;
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    private @NotNull Person owner;
+    private @NotNull @Nullable Person owner;
 
-    public Type getType() {
+    public @Nullable Type getType() {
         return type;
     }
 
-    public void setType(Type type) {
+    public void setType(@Nullable Type type) {
         this.type = type;
     }
 
-    public String getNumber() {
+    public @Nullable String getNumber() {
         return number;
     }
 
-    public void setNumber(String number) {
+    public void setNumber(@Nullable String number) {
         this.number = number;
     }
 
-    public Person getOwner() {
+    public @Nullable Person getOwner() {
         return owner;
     }
 
@@ -66,12 +68,12 @@ public class Phone extends LocalGeneratedIdEntity {
     }
 
     @Transient
-    public String getEmail() {
-        return getOwner().getEmail();
+    public @Nullable String getEmail() {
+        return getOwner() == null ? null : getOwner().getEmail();
     }
 
     @Override
-    protected Stream<Function<Phone, Object>> identityGetters() {
+    protected Stream<Function<Phone, @Nullable Object>> identityGetters() {
         return Stream.of(Phone::getType, Phone::getNumber);
     }
 

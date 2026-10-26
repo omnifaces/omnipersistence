@@ -23,4 +23,7 @@
  * @see SwitchableXADataSource
  * @see PropertiesFileLoader
  */
+@NullMarked
 package org.omnifaces.persistence.datasource;
+
+import org.jspecify.annotations.NullMarked;

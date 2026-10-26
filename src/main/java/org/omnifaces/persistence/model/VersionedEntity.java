@@ -18,6 +18,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.Version;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>
  * Mapped superclass for versioned entity with generated ID. It extends from {@link TimestampedEntity} which in turn extends from {@link GeneratedIdEntity}, and
@@ -57,10 +59,10 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
     /** The version for optimistic locking, automatically managed by Jakarta Persistence. */
     @Version
     @Column(nullable = false)
-    private Long version;
+    private @Nullable Long version;
 
     @Override
-    public Long getVersion() {
+    public @Nullable Long getVersion() {
         return version;
     }
 

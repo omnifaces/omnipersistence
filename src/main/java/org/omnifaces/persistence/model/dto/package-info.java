@@ -21,4 +21,7 @@
  * @see org.omnifaces.persistence.service.BaseEntityService
  * @see org.omnifaces.persistence.criteria
  */
+@NullMarked
 package org.omnifaces.persistence.model.dto;
+
+import org.jspecify.annotations.NullMarked;

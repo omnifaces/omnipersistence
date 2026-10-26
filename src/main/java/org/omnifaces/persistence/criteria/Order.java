@@ -19,6 +19,8 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>, or <code>path &gt;=</code> a given value.
  * <p>
@@ -157,7 +159,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean applies(Object value) {
+    public boolean applies(@Nullable Object value) {
         if (!(value instanceof Comparable)) {
             return false;
         }

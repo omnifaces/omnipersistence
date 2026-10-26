@@ -18,6 +18,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
@@ -43,15 +44,15 @@ public class LocalGeneratedIdEntity extends BaseEntity<Long> {
 
     @Id
     @GeneratedValue(strategy = IDENTITY)
-    private Long id;
+    private @Nullable Long id;
 
     @Override
-    public Long getId() {
+    public @Nullable Long getId() {
         return id;
     }
 
     @Override
-    public void setId(Long id) {
+    public void setId(@Nullable Long id) {
         this.id = id;
     }
 

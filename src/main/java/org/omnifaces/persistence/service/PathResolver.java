@@ -14,6 +14,8 @@ package org.omnifaces.persistence.service;
 
 import jakarta.persistence.criteria.Expression;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Helper functional interface of {@link BaseEntityService}.
  *
@@ -23,7 +25,7 @@ import jakarta.persistence.criteria.Expression;
 @FunctionalInterface
 interface PathResolver {
 
-    Expression<?> get(String field);
+    Expression<?> get(@Nullable String field);
 
     default String join(String field) {
         return '@' + field;

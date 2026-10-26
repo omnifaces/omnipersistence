@@ -19,4 +19,7 @@
  *
  * @see org.omnifaces.persistence.service.BaseEntityService
  */
+@NullMarked
 package org.omnifaces.persistence;
+
+import org.jspecify.annotations.NullMarked;

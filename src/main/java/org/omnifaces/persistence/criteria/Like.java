@@ -25,6 +25,8 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Creates <code>path LIKE value</code>.
  * <p>
@@ -149,7 +151,7 @@ public final class Like extends Criteria<String> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         if (modelValue == null) {
             return false;
         }

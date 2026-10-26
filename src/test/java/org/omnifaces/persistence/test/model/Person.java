@@ -30,17 +30,19 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.validation.constraints.NotNull;
 
+import org.jspecify.annotations.Nullable;
+
 @Entity
 public class Person extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 
-    private @NotNull String email;
-    private @NotNull @Enumerated Gender gender;
-    private @NotNull LocalDate dateOfBirth;
+    private @NotNull @Nullable String email;
+    private @NotNull @Nullable @Enumerated Gender gender;
+    private @NotNull @Nullable LocalDate dateOfBirth;
 
     @OneToOne(cascade = PERSIST, fetch = LAZY)
-    private Address address;
+    private @Nullable Address address;
 
     @OneToMany(cascade = PERSIST)
     private List<Phone> phones = new ArrayList<>();
@@ -49,7 +51,7 @@ public class Person extends LocalGeneratedIdEntity {
     @Column(name = "\"groups\"") // "groups" has become a new reserved word since MySQL 8.0.2, so we need to quote it.
     private @Enumerated(STRING) Set<Group> groups = new HashSet<>();
 
-    public String getEmail() {
+    public @Nullable String getEmail() {
         return email;
     }
 
@@ -57,7 +59,7 @@ public class Person extends LocalGeneratedIdEntity {
         this.email = email;
     }
 
-    public Gender getGender() {
+    public @Nullable Gender getGender() {
         return gender;
     }
 
@@ -65,7 +67,7 @@ public class Person extends LocalGeneratedIdEntity {
         this.gender = gender;
     }
 
-    public LocalDate getDateOfBirth() {
+    public @Nullable LocalDate getDateOfBirth() {
         return dateOfBirth;
     }
 
@@ -73,7 +75,7 @@ public class Person extends LocalGeneratedIdEntity {
         this.dateOfBirth = dateOfBirth;
     }
 
-    public Address getAddress() {
+    public @Nullable Address getAddress() {
         return address;
     }
 

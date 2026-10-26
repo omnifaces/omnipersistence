@@ -14,6 +14,7 @@ package org.omnifaces.persistence.model;
 
 import java.io.Serializable;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -60,6 +61,7 @@ public interface Identifiable<I extends Comparable<I> & Serializable> extends Se
      *
      * @return The ID.
      */
+    @Nullable
     I getId();
 
     /**
@@ -67,6 +69,6 @@ public interface Identifiable<I extends Comparable<I> & Serializable> extends Se
      *
      * @param id The ID.
      */
-    void setId(I id);
+    void setId(@Nullable I id);
 
 }

@@ -17,6 +17,7 @@ import java.util.Map;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.ParameterExpression;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
 
 /**
@@ -29,7 +30,7 @@ class UncheckedParameterBuilder implements ParameterBuilder {
 
     private final String field;
     private final CriteriaBuilder criteriaBuilder;
-    private final Map<String, Object> parameters;
+    private final Map<String, @Nullable Object> parameters;
 
     public UncheckedParameterBuilder(String field, CriteriaBuilder criteriaBuilder, Map<String, Object> parameters) {
         this.field = field.replace('.', '$') + "_";
@@ -39,7 +40,7 @@ class UncheckedParameterBuilder implements ParameterBuilder {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> ParameterExpression<T> create(Object value) {
+    public <T> ParameterExpression<T> create(@Nullable Object value) {
         String name = field + parameters.size();
         parameters.put(name, value);
         Class<? extends Object> type = (value == null) ? Object.class : value.getClass();

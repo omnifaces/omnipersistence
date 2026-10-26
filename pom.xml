@@ -100,6 +100,14 @@
             <version>0.17</version>
         </dependency>
 
+        <!-- Nullness annotations -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>1.0.1</version>
+            <scope>compile</scope>
+        </dependency>
+
         <!-- Test dependencies. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

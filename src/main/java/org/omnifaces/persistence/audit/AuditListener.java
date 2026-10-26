@@ -37,6 +37,7 @@ import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.metamodel.Attribute;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.model.BaseEntity;
 
 /**
@@ -91,9 +92,9 @@ public class AuditListener {
     private static final Map<Class<?>, Map<PropertyDescriptor, Map<Serializable, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
 
     @Inject
-    private BeanManager beanManager;
+    private @Nullable BeanManager beanManager;
 
-    private Optional<BeanManager> optionalBeanManager;
+    private @Nullable Optional<BeanManager> optionalBeanManager;
 
     /**
      * Snapshots the initial values of auditable properties after the entity is loaded from the database.
@@ -125,7 +126,7 @@ public class AuditListener {
         });
     }
 
-    private static Map<PropertyDescriptor, Map<Serializable, Object>> getAuditableProperties(BaseEntity<?> entity) {
+    private static Map<PropertyDescriptor, Map<@Nullable Serializable, Object>> getAuditableProperties(BaseEntity<?> entity) {
         return AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
             var baseEntityService = getCurrentBaseEntityService();
             var auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
@@ -159,7 +160,7 @@ public class AuditListener {
         return optionalBeanManager;
     }
 
-    private BeanManager getBeanManager() {
+    private @Nullable BeanManager getBeanManager() {
         if (beanManager == null) {
             try {
                 beanManager = CDI.current().getBeanManager(); // Work around for CDI @Inject not working in JPA EntityListener (as observed in OpenJPA).

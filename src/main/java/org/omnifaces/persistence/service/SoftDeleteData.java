@@ -21,6 +21,7 @@ import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import java.lang.reflect.Field;
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
@@ -38,8 +39,8 @@ class SoftDeleteData {
 
     private Class<?> entityType;
     private final boolean softDeletable;
-    private final String fieldName;
-    private final String setterName;
+    private final @Nullable String fieldName;
+    private final @Nullable String setterName;
     private final boolean typeActive;
 
     public SoftDeleteData(Class<?> entityType) {

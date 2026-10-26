@@ -23,6 +23,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Transient;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>
  * Mapped superclass for timestamped entity with generated ID. It extends from {@link GeneratedIdEntity} which in turn extends from {@link BaseEntity}, and
@@ -64,11 +66,11 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
 
     /** The timestamp when this entity was first persisted. */
     @Column(nullable = false)
-    private Instant created;
+    private @Nullable Instant created;
 
     /** The timestamp when this entity was last modified. */
     @Column(nullable = false)
-    private Instant lastModified;
+    private @Nullable Instant lastModified;
 
     /** Internal flag to skip the automatic adjustment of the last modified timestamp during {@link #onPreUpdate()}. */
     @Transient
@@ -109,7 +111,7 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     }
 
     @Override
-    public Instant getCreated() {
+    public @Nullable Instant getCreated() {
         return created;
     }
 
@@ -119,7 +121,7 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     }
 
     @Override
-    public Instant getLastModified() {
+    public @Nullable Instant getLastModified() {
         return lastModified;
     }
 

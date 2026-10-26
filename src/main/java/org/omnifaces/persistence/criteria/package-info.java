@@ -30,4 +30,7 @@
  * @see org.omnifaces.persistence.model.dto.Page
  * @see org.omnifaces.persistence.service.BaseEntityService
  */
+@NullMarked
 package org.omnifaces.persistence.criteria;
+
+import org.jspecify.annotations.NullMarked;
