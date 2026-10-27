@@ -293,6 +293,7 @@
                             <file>${project.basedir}/src/main/eclipse-importorder.txt</file>
                         </importOrder>
                         <removeUnusedImports />
+                        <forbidWildcardImports />
                         <trimTrailingWhitespace />
                     </java>
                     <formats>
