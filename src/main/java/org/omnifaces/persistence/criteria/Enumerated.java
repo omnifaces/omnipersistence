@@ -14,8 +14,6 @@ package org.omnifaces.persistence.criteria;
 
 import static java.util.Objects.requireNonNull;
 
-import java.util.Objects;
-
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
@@ -81,7 +79,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
     public boolean applies(@Nullable Object modelValue) {
         return getValue() == null
             ? modelValue == null
-            : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getDeclaringClass()), getValue());
+            : modelValue != null && parseEnum(modelValue, getValue().getDeclaringClass()) == getValue();
     }
 
     @SuppressWarnings("unchecked")

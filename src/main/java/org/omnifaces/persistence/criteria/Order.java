@@ -187,7 +187,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     @Override
     public boolean equals(Object object) {
-        return super.equals(object) && Objects.equals(type, ((Order<?>) object).type);
+        return super.equals(object) && type == ((Order<?>) object).type;
     }
 
     @Override

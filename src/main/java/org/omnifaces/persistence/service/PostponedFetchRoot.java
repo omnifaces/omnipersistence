@@ -110,7 +110,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return sortedEntities;
     }
 
-    private static record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
+    private record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
     }
 
     private static <T> EntityRow<T> processEntityFetches(T entity, List<String> paths, Page page) {
