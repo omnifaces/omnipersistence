@@ -99,7 +99,7 @@ public enum Provider {
         }
 
         @Override
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(@Nullable E entity) {
+        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
             return invokeOnProxy(entity, "getPersistentClass", super::getEntityType);
         }
 
@@ -338,16 +338,12 @@ public enum Provider {
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
-     * @param entity The entity to get the type for, may be <code>null</code>.
-     * @return The actual entity type of the given entity, or <code>null</code> when <code>null</code> was supplied.
+     * @param entity The entity to get the type for, may not be <code>null</code>.
+     * @return The actual entity type of the given entity.
+     * @throws NullPointerException When given entity is <code>null</code>.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    @Nullable
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(@Nullable E entity) {
-        if (entity == null) {
-            return null;
-        }
-
+    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
         Class<? extends BaseEntity> entityType = entity.getClass();
 
         while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null) {
@@ -377,15 +373,11 @@ public enum Provider {
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
-     * @param entity The entity to get the table name for, may be <code>null</code>.
-     * @return The table name of the given entity, or <code>null</code> when <code>null</code> was supplied.
+     * @param entity The entity to get the table name for, may not be <code>null</code>.
+     * @return The table name of the given entity.
+     * @throws NullPointerException When given entity is <code>null</code>.
      */
-    @Nullable
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(@Nullable E entity) {
-        if (entity == null) {
-            return null;
-        }
-
+    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
         Class<E> entityType = getEntityType(entity);
         var table = entityType.getAnnotation(Table.class);
         return table != null ? table.name() : entityType.getSimpleName().toUpperCase();

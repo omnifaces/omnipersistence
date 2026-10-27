@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import static java.util.Objects.requireNonNull;
+
 import java.util.Objects;
 
 import jakarta.annotation.Nullable;
@@ -46,11 +48,12 @@ public final class Enumerated extends Criteria<Enum<?>> {
     /**
      * Returns a new enumerated criteria for the given enum constant.
      *
-     * @param value The enum constant, may be <code>null</code> to match <code>path IS NULL</code>.
+     * @param value The enum constant, may not be <code>null</code>.
      * @return A new enumerated criteria.
+     * @throws NullPointerException When given enum constant is <code>null</code>.
      */
-    public static Enumerated value(@Nullable Enum<?> value) {
-        return new Enumerated(value);
+    public static Enumerated value(Enum<?> value) {
+        return new Enumerated(requireNonNull(value, "value"));
     }
 
     /**
@@ -58,9 +61,10 @@ public final class Enumerated extends Criteria<Enum<?>> {
      * <p>
      * Parsing is case-insensitive by default.
      *
-     * @param searchValue The search value to parse (usually a String).
+     * @param searchValue The search value to parse (usually a String, or a {@link Criteria} such as {@link Like} to match against the enum constant names).
      * @param targetType The target enum class.
-     * @return A new enumerated criteria.
+     * @return A new enumerated criteria. When the search value is a {@link Criteria} which matches no enum constant, then its value is <code>null</code> and
+     * {@link #build(Expression, CriteriaBuilder, ParameterBuilder)} returns <code>null</code> to impose no restriction.
      * @throws IllegalArgumentException If the search value cannot be mapped to an enum constant.
      */
     public static Enumerated parse(Object searchValue, Class<Enum<?>> targetType) {
@@ -74,7 +78,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return getValue() == null
             ? modelValue == null
             : modelValue != null && Objects.equals(parseEnum(modelValue, getValue().getDeclaringClass()), getValue());

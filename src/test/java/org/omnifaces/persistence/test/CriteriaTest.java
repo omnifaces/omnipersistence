@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
@@ -44,7 +45,7 @@ import org.omnifaces.persistence.criteria.Order;
  * Tests focus on the {@code applies()} method (in-memory evaluation), factory methods, type checking, parsing, and the identity methods ({@code equals()},
  * {@code hashCode()}, {@code toString()}).
  * <p>
- * The {@code build()} method is not tested here as it requires a JPA CriteriaBuilder and is covered by integration tests.
+ * The {@code build()} method is generally not tested here as it requires a JPA CriteriaBuilder and is covered by integration tests.
  */
 public class CriteriaTest {
 
@@ -86,6 +87,7 @@ public class CriteriaTest {
             assertThrows(NullPointerException.class, () -> Like.contains(null));
             assertThrows(NullPointerException.class, () -> Bool.value(null));
             assertThrows(NullPointerException.class, () -> IgnoreCase.value(null));
+            assertThrows(NullPointerException.class, () -> Enumerated.value(null));
         }
 
         @Test
@@ -604,6 +606,35 @@ public class CriteriaTest {
         @Test
         void parseInvalidThrowsException() {
             assertThrows(IllegalArgumentException.class, () -> Enumerated.parse("INVALID", (Class<Enum<?>>) (Class<?>) TestEnum.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        void parseCriteriaMatchingConstantYieldsThatConstant() {
+            var enumerated = Enumerated.parse(Like.contains("ob"), (Class<Enum<?>>) (Class<?>) TestEnum.class);
+            assertEquals(TestEnum.MOBILE, enumerated.getValue());
+        }
+
+        /**
+         * A {@link Criteria} search value which matches no enum constant must yield an enumerated criteria with <code>null</code> value, not throw. The
+         * <code>@ElementCollection</code> predicate builders in <code>BaseEntityService</code> rely on this to skip the non-matching filter, e.g. a
+         * <code>Like.contains(globalFilter)</code> applied to an enum collection.
+         */
+        @SuppressWarnings("unchecked")
+        @Test
+        void parseCriteriaMatchingNoConstantYieldsNullValue() {
+            var enumerated = Enumerated.parse(Like.contains("xyz"), (Class<Enum<?>>) (Class<?>) TestEnum.class);
+            assertNull(enumerated.getValue());
+        }
+
+        /**
+         * An enumerated criteria with <code>null</code> value must impose no restriction, without touching the path or the builders.
+         */
+        @SuppressWarnings("unchecked")
+        @Test
+        void buildReturnsNullWhenParsedCriteriaMatchesNoConstant() {
+            var enumerated = Enumerated.parse(Like.contains("xyz"), (Class<Enum<?>>) (Class<?>) TestEnum.class);
+            assertNull(enumerated.build(null, null, null));
         }
 
         @Test

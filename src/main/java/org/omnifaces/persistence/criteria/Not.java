@@ -30,6 +30,7 @@ import jakarta.persistence.criteria.Predicate;
  * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE'
  * criteria.put("name", Not.value(Like.contains("test"))); // NOT (LOWER(name) LIKE '%test%')
  * criteria.put("role", Not.value(Enumerated.value(Role.ADMIN))); // role &lt;&gt; 'ADMIN'
+ * criteria.put("email", Not.value(null)); // email IS NOT NULL
  * </pre>
  *
  * @author Bauke Scholtz

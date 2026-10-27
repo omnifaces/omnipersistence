@@ -53,13 +53,16 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * criteria.put("role", Enumerated.value(Role.ADMIN)); // role = 'ADMIN'
  * criteria.put("active", Bool.value(true)); // active IS TRUE
  * criteria.put("score", Numeric.value(42)); // score = 42
+ * criteria.put("deleted", null); // deleted IS NULL
+ * criteria.put("email", Not.value(null)); // email IS NOT NULL
  * </pre>
  * <p>
  * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and turned into a predicate. Simply extend
  * this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}, and optionally override {@link #applies(Object)}.
  * <p>
- * A criteria value may by default not be <code>null</code>; the constructor then throws {@link NullPointerException}. The exceptions are {@link Enumerated} and
- * {@link Not}: <code>Enumerated.value(null)</code> matches <code>path IS NULL</code> and <code>Not.value(null)</code> matches <code>path IS NOT NULL</code>.
+ * A criteria value may by default not be <code>null</code>; the constructor then throws {@link NullPointerException}. The only exception is {@link Not}:
+ * <code>Not.value(null)</code> matches <code>path IS NOT NULL</code>. To match <code>path IS NULL</code>, put a plain <code>null</code> value in the criteria
+ * map.
  * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *
@@ -82,7 +85,7 @@ public abstract class Criteria<T> implements Serializable {
      * @throws NullPointerException When given criteria value is <code>null</code>.
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
-    protected Criteria(@Nullable T value) {
+    protected Criteria(T value) {
         this(value, false, false);
     }
 

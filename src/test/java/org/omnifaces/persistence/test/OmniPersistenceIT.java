@@ -30,6 +30,7 @@ import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -475,7 +476,9 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithNullCriteriaValues() {
-        var isNull = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(null))).build(), true);
+        var isNullCriteria = new HashMap<String, Object>();
+        isNullCriteria.put("gender", null);
+        var isNull = personService().getPage(Page.with().allMatch(isNullCriteria).build(), true);
         var isNotNull = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(null))).build(), true);
         assertEquals(0, isNull.size(), "No records have null gender");
         assertEquals(TOTAL_RECORDS, isNotNull.size(), "All records have non-null gender");

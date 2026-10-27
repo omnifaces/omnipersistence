@@ -155,7 +155,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * given criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
      */
     public Page(
-        @Nullable Integer offset, @Nullable Integer limit, @Nullable Identifiable<?> last, @Nullable Boolean reversed, LinkedHashMap<String, Boolean> ordering,
+        @Nullable Integer offset, @Nullable Integer limit, @Nullable Identifiable<?> last, @Nullable Boolean reversed,
+        @Nullable LinkedHashMap<String, Boolean> ordering,
         @Nullable Map<String, Object> requiredCriteria, @Nullable Map<String, Object> optionalCriteria
     )
     {
