@@ -281,11 +281,22 @@ class EntityMetadataTest {
         }
 
         @Test
-        void singularAttributeIsFollowedByItsJavaTypeRatherThanItsBindableJavaType() {
-            var quirkyMetamodel = new StubMetamodel()
-                .entity(Child.class, attribute("root", MANY_TO_ONE, Root.class, Map.of("getBindableJavaType", Object.class)))
-                .entity(Root.class, attribute("tags", ELEMENT_COLLECTION, String.class));
-            assertTrue(new EntityMetadata(Child.class).getAssociations(quirkyMetamodel.entityManager(), HIBERNATE).isElementCollection("root.tags"));
+        void singularAttributeWithElementTypeAsBindableJavaTypeIsCorrectedByProvider() throws NoSuchFieldException {
+            var openJpa = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManager(), OPENJPA);
+            assertTrue(openJpa.isElementCollection("root.tags"));
+
+            var hibernate = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManager(), HIBERNATE);
+            assertFalse(hibernate.isElementCollection("root.tags"));
+        }
+
+        /**
+         * Describes <code>root</code> the way OpenJPA does: with the element type of the field as bindable Java type, instead of the attribute type.
+         */
+        private StubMetamodel elementTypeAsBindableJavaTypeMetamodel() throws NoSuchFieldException {
+            var name = OneToManyReportedEntity.class.getDeclaredField("name");
+            return new StubMetamodel()
+                .entity(Child.class, attribute("root", MANY_TO_ONE, Root.class, Map.of("getBindableJavaType", Object.class, "getJavaMember", name)))
+                .entity(Root.class, attribute("tags", ELEMENT_COLLECTION, String.class, OneToManyReportedEntity.class.getDeclaredField("tags")));
         }
 
         @Test

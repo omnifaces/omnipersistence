@@ -42,6 +42,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
+import jakarta.persistence.metamodel.Bindable;
+import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -179,6 +181,12 @@ public enum Provider {
         }
 
         @Override
+        public Class<?> getBindableJavaType(Attribute<?, ?> attribute) {
+            // For some reason OpenJPA returns the element type of the field instead of the attribute type on a SingularAttribute.
+            return attribute instanceof SingularAttribute ? attribute.getJavaType() : super.getBindableJavaType(attribute);
+        }
+
+        @Override
         public void configureSecondLevelCache(Query query, boolean cacheable) {
             var openJpaQuery = OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query);
             invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
@@ -293,6 +301,19 @@ public enum Provider {
      */
     public boolean isManyOrOneToOne(Attribute<?, ?> attribute) {
         return isOneOf(attribute.getPersistentAttributeType(), MANY_TO_ONE, ONE_TO_ONE);
+    }
+
+    /**
+     * Returns the Java type of the given attribute as bound in a path: for a singular attribute the type of the attribute, and for a plural attribute the type
+     * of its elements. The default implementation returns {@link Bindable#getBindableJavaType()}, or {@link Attribute#getJavaType()} if the attribute is not
+     * {@link Bindable}.
+     *
+     * @param attribute The attribute to get the bindable Java type of.
+     * @return The Java type of the given attribute as bound in a path.
+     * @since 1.2
+     */
+    public Class<?> getBindableJavaType(Attribute<?, ?> attribute) {
+        return attribute instanceof Bindable<?> bindable ? bindable.getBindableJavaType() : attribute.getJavaType();
     }
 
     /**

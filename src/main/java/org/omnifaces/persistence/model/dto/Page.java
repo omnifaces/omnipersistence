@@ -214,6 +214,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * type is a DTO, or when the ordering contains an aggregated field.
      *
      * @return The ordering values of the last record of the previous page, or an empty map if there is none.
+     * @since 1.2
      */
     public Map<String, Object> getLastOrderingValues() {
         return lastOrderingValues;
@@ -401,6 +402,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * @throws IllegalStateException When a range is already set in this builder.
          * @return This builder.
          * @see Page#getLastOrderingValues()
+         * @since 1.2
          */
         public Builder range(int offset, int limit, Map<String, Object> lastOrderingValues, boolean reversed) {
             checkRangeNotSet();

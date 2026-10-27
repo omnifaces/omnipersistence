@@ -32,7 +32,6 @@ import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.metamodel.Attribute;
-import jakarta.persistence.metamodel.PluralAttribute;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -246,9 +245,8 @@ final class EntityMetadata {
             return unmodifiableMap(typeMappings);
         }
 
-        private static Class<?> getNestedType(Attribute<?, ?> attribute) {
-            // OpenJPA's SingularAttribute#getBindableJavaType() returns the element type of the field instead of the attribute type.
-            var javaType = attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute ? pluralAttribute.getBindableJavaType() : attribute.getJavaType();
+        private Class<?> getNestedType(Attribute<?, ?> attribute) {
+            var javaType = provider.getBindableJavaType(attribute);
             return BaseEntity.class.isAssignableFrom(javaType) ? javaType : null;
         }
 
