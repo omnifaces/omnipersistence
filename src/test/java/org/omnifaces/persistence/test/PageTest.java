@@ -459,6 +459,22 @@ public class PageTest {
             assertFalse(all.isReversed());
         }
 
+        @Test
+        void allPreservesMapEntriesWhenMapIsChanged() {
+            String requiredKey = "required";
+            String optionalKey = "optional";
+            Map<String, Object> required = new HashMap<>(Map.of(requiredKey, true));
+            Map<String, Object> optional = new HashMap<>(Map.of(optionalKey, true));
+            var page = Page.with().range(5, 20).orderBy("name", true).allMatch(required).anyMatch(optional).build();
+            var all = page.all();
+
+            // Changing original map should not impact Page
+            required.remove(requiredKey);
+            optional.remove(optionalKey);
+            assertEquals(all.getRequiredCriteria(), Map.of(requiredKey, true));
+            assertEquals(all.getOptionalCriteria(), Map.of(optionalKey, true));
+        }
+
     }
 
     @Nested
