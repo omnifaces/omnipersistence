@@ -731,6 +731,7 @@ public class PageTest {
         public String getUpperCaseName() {
             return name == null ? null : name.toUpperCase();
         }
+
     }
 
     /**

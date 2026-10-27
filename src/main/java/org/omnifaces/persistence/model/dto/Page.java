@@ -19,7 +19,7 @@ import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
-import static org.omnifaces.utils.reflect.Reflections.accessField;
+import static org.omnifaces.utils.reflect.Reflections.*;
 
 import java.io.Serializable;
 import java.util.LinkedHashMap;
@@ -490,7 +490,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                     return null;
                 }
 
-                value = accessField(value, property);
+                var currentValue = value;
+                value = findGetter(value.getClass(), property)
+                    .map(getter -> invokeMethod(currentValue, getter))
+                    .orElseGet(() -> accessField(currentValue, property));
             }
 
             return value;
