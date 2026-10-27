@@ -81,7 +81,7 @@ public enum Database {
      * @param aliases Optional aliases that might appear in the Jakarta Persistence dialect name.
      */
     Database(String... aliases) {
-        this.names = concat(Stream.of(name()), stream(aliases)).toList().toArray(new String[0]);
+        this.names = concat(Stream.of(name()), stream(aliases)).toArray(String[]::new);
     }
 
     /**

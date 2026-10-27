@@ -2114,7 +2114,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         if (!requiredPredicates.isEmpty()) {
             pageBuilder.shouldBuildCountSubquery(true);
-            var wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).collect(toList());
+            var wherePredicates = requiredPredicates.stream().filter(Alias::isWhere).toList();
 
             if (!wherePredicates.isEmpty()) {
                 restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
@@ -2130,7 +2130,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 }
             }
 
-            var havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).collect(toList());
+            var havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).toList();
 
             if (!havingPredicates.isEmpty()) {
                 groupByIfNecessary(query, pathResolver.get(null));
@@ -2374,7 +2374,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                     : buildTypedPredicate(fieldPath, resolvedType, field, item, query, criteriaBuilder, pathResolver, parameterBuilder)
             )
             .filter(Objects::nonNull)
-            .collect(toList());
+            .toList();
 
         if (predicates.isEmpty()) {
             if (elementCollectionField) {
