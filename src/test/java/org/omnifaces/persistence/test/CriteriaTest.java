@@ -85,7 +85,6 @@ public class CriteriaTest {
         void nullValueThrowsNullPointerException() {
             assertThrows(NullPointerException.class, () -> Numeric.value(null));
             assertThrows(NullPointerException.class, () -> Like.contains(null));
-            assertThrows(NullPointerException.class, () -> Bool.value(null));
             assertThrows(NullPointerException.class, () -> IgnoreCase.value(null));
             assertThrows(NullPointerException.class, () -> Enumerated.value(null));
         }
@@ -366,15 +365,29 @@ public class CriteriaTest {
     class BoolTest {
 
         @Test
-        void trueAppliesToTrue() {
+        void trueAppliesToTruePrimitive() {
             var bool = Bool.value(true);
             assertTrue(bool.applies(true));
             assertFalse(bool.applies(false));
         }
 
         @Test
-        void falseAppliesToFalse() {
+        void trueAppliesToTrue() {
+            var bool = Bool.value(Boolean.TRUE);
+            assertTrue(bool.applies(true));
+            assertFalse(bool.applies(false));
+        }
+
+        @Test
+        void falseAppliesToFalseBoolean() {
             var bool = Bool.value(false);
+            assertTrue(bool.applies(false));
+            assertFalse(bool.applies(true));
+        }
+
+        @Test
+        void falseAppliesToFalse() {
+            var bool = Bool.value(Boolean.FALSE);
             assertTrue(bool.applies(false));
             assertFalse(bool.applies(true));
         }
@@ -450,6 +463,10 @@ public class CriteriaTest {
             assertEquals(Bool.value(true), Bool.value(true));
             assertEquals(Bool.value(false), Bool.value(false));
             assertNotEquals(Bool.value(true), Bool.value(false));
+            assertEquals(Bool.value(Boolean.TRUE), Bool.value(Boolean.TRUE));
+            assertEquals(Bool.value(Boolean.FALSE), Bool.value(Boolean.FALSE));
+            assertEquals(Bool.value(true), Bool.value(Boolean.TRUE));
+            assertEquals(Bool.value(false), Bool.value(Boolean.FALSE));
         }
 
     }
