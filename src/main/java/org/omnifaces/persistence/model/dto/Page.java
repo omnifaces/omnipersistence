@@ -141,7 +141,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
         this.ordering = orderingOrDefault(ordering);
         this.lastOrderingValues = validateLastOrderingValues(lastOrderingValues, this.ordering);
-        this.reversed = (lastOrderingValues != null) && reversed;
+        this.reversed = !this.lastOrderingValues.isEmpty() && reversed;
         this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
         this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
     }
@@ -152,7 +152,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     private static Map<String, Object> validateLastOrderingValues(@Nullable Map<String, Object> lastOrderingValues, Map<String, Boolean> ordering) {
         if (lastOrderingValues == null) {
-            return null;
+            return emptyMap();
         }
 
         if (!lastOrderingValues.keySet().equals(ordering.keySet())) {
@@ -207,20 +207,19 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
     }
 
     /**
-     * Returns the ordering values of the last record of the previous page, if any. Map key represents property path as in {@link #getOrdering()}, in the same
-     * order, and map value represents the value of that property in the last record, which may be <code>null</code>. If not <code>null</code>, then value based
-     * paging will be performed instead of offset based paging when applicable. Value based paging is not applicable when the result type is a DTO, or when the
-     * ordering contains an aggregated field.
+     * Returns the ordering values of the last record of the previous page. This is empty when there is no such record. Otherwise it has exactly the keys of
+     * {@link #getOrdering()}, in the same order, and map value represents the value of that property in the last record, which may be <code>null</code>. If not
+     * empty, then value based paging will be performed instead of offset based paging when applicable. Value based paging is not applicable when the result
+     * type is a DTO, or when the ordering contains an aggregated field.
      *
-     * @return The ordering values of the last record of the previous page, if any.
+     * @return The ordering values of the last record of the previous page, or an empty map if there is none.
      */
-    @Nullable
     public Map<String, Object> getLastOrderingValues() {
         return lastOrderingValues;
     }
 
     /**
-     * Returns whether the value based paging is reversed. This is only used when {@link #getLastOrderingValues()} is not <code>null</code>.
+     * Returns whether the value based paging is reversed. This is only used when {@link #getLastOrderingValues()} is not empty.
      *
      * @return Whether the value based paging is reversed.
      */

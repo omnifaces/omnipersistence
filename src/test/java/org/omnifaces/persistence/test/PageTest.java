@@ -16,7 +16,6 @@ import static java.util.Collections.singletonMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
@@ -124,8 +123,8 @@ public class PageTest {
         }
 
         @Test
-        void lastOrderingValuesDefaultsToNull() {
-            assertNull(Page.of(0, 10).getLastOrderingValues());
+        void lastOrderingValuesDefaultsToEmptyMap() {
+            assertTrue(Page.of(0, 10).getLastOrderingValues().isEmpty());
         }
 
     }
@@ -342,6 +341,12 @@ public class PageTest {
         }
 
         @Test
+        void orderingValuesRangeWithEmptyMapThrowsException() {
+            var builder = Page.with().range(0, 10, Map.of(), false);
+            assertThrows(IllegalArgumentException.class, builder::build);
+        }
+
+        @Test
         void orderingValuesRangeWithNullThrowsException() {
             assertThrows(NullPointerException.class, () -> Page.with().range(0, 10, null, false));
         }
@@ -442,7 +447,7 @@ public class PageTest {
         @Test
         void allDropsLastOrderingValuesAndReversed() {
             var all = Page.with().range(0, 10, Map.of("id", 1L), true).build().all();
-            assertNull(all.getLastOrderingValues());
+            assertTrue(all.getLastOrderingValues().isEmpty());
             assertFalse(all.isReversed());
         }
 
