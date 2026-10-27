@@ -695,7 +695,7 @@ public class PageTest {
 
         private static final long serialVersionUID = 1L;
 
-        @SuppressWarnings({ "unused", "serial" })
+        @SuppressWarnings("unused")
         private final Object unserializableState = new Object();
 
     }
