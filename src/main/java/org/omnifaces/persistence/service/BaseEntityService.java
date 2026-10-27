@@ -1485,7 +1485,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
     protected Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
-        return ofNullable(entity.isPresent() ? fetchLazyCollections(entity.get(), getters) : null);
+        return entity.map(e -> fetchLazyCollections(e, getters));
     }
 
     /**
@@ -1525,7 +1525,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
     protected Optional<E> fetchLazyMaps(Optional<E> entity, Function<E, Map<?, ?>>... getters) {
-        return ofNullable(entity.isPresent() ? fetchLazyMaps(entity.get(), getters) : null);
+        return entity.map(e -> fetchLazyMaps(e, getters));
     }
 
     /**
@@ -1545,7 +1545,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return The same optional entity, useful if you want to continue using it immediately.
      */
     protected Optional<E> fetchLazyBlobs(Optional<E> entity) {
-        return ofNullable(entity.isPresent() ? fetchLazyBlobs(entity.get()) : null);
+        return entity.map(this::fetchLazyBlobs);
     }
 
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
