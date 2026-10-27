@@ -65,6 +65,7 @@ public class StartupServiceEJB {
         for (var i = 0; i < TOTAL_RECORDS; i++) {
             var person = new Person();
             person.setEmail("name" + i + "@example.com");
+            person.setNickname("nick" + i);
             person.setGender(genders[random.nextInt(genders.length)]);
             person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
 

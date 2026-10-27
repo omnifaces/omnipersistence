@@ -38,6 +38,7 @@ public class Person extends LocalGeneratedIdEntity {
     private @NotNull String email;
     private @NotNull @Enumerated Gender gender;
     private @NotNull LocalDate dateOfBirth;
+    private String nickname;
 
     @OneToOne(cascade = PERSIST, fetch = LAZY)
     private Address address;
@@ -71,6 +72,14 @@ public class Person extends LocalGeneratedIdEntity {
 
     public void setDateOfBirth(LocalDate dateOfBirth) {
         this.dateOfBirth = dateOfBirth;
+    }
+
+    public String nickname() {
+        return nickname;
+    }
+
+    public void setNickname(String nickname) {
+        this.nickname = nickname;
     }
 
     public Address getAddress() {

@@ -19,7 +19,9 @@ import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
-import static org.omnifaces.utils.reflect.Reflections.*;
+import static org.omnifaces.utils.reflect.Reflections.accessField;
+import static org.omnifaces.utils.reflect.Reflections.findGetter;
+import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
 import java.io.Serializable;
 import java.util.LinkedHashMap;
@@ -30,7 +32,9 @@ import java.util.function.Function;
 
 import jakarta.annotation.Nullable;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Criteria;
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -489,11 +493,13 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                 if (value == null) {
                     return null;
                 }
-
                 var currentValue = value;
-                value = findGetter(value.getClass(), property)
+                value = findGetter(currentValue.getClass(), property)
                     .map(getter -> invokeMethod(currentValue, getter))
-                    .orElseGet(() -> accessField(currentValue, property));
+                    .orElseGet(() -> {
+                        Object val = currentValue instanceof BaseEntity<?> e ? Provider.HIBERNATE.dereferenceProxy(e) : currentValue;
+                        return accessField(val, property);
+                    });
             }
 
             return value;
