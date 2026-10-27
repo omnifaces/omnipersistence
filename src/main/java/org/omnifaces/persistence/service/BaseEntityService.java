@@ -18,7 +18,6 @@ import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -47,7 +46,6 @@ import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
-import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
@@ -59,7 +57,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +64,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -82,8 +78,6 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.NonUniqueResultException;
@@ -106,7 +100,6 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
-import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
@@ -188,33 +181,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
     private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
     private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
-    private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING = "Computed soft delete mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
     private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults may be slightly inaccurate. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
     private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 
-    @SuppressWarnings("rawtypes")
-    private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Boolean> GENERATED_ID_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, SoftDeleteData> SOFT_DELETE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
+    private static final ClassValue<Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ClassValue<>() {
+
+        @Override
+        protected Entry<Class<?>, Class<?>> computeValue(Class<?> serviceType) {
+            return computeTypeMapping(serviceType.asSubclass(BaseEntityService.class));
+        }
+
+    };
 
     private final Class<I> identifierType;
     private final Class<E> entityType;
+    private final EntityMetadata metadata;
     private final boolean generatedId;
     private final SoftDeleteData softDeleteData;
 
     private Provider provider = Provider.UNKNOWN;
     private Database database = Database.UNKNOWN;
-    private Supplier<Set<String>> elementCollections = Collections::emptySet;
+    private java.util.function.Predicate<String> elementCollections = field -> false;
     private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
     private java.util.function.Predicate<String> oneToManys = field -> false;
     private Validator validator;
@@ -229,11 +219,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked")
     protected BaseEntityService() {
-        var typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
+        var typeMapping = TYPE_MAPPINGS.get(getClass());
         identifierType = (Class<I>) typeMapping.getKey();
         entityType = (Class<E>) typeMapping.getValue();
-        generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
-        softDeleteData = SOFT_DELETE_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeSoftDeleteMapping);
+        metadata = EntityMetadata.of(entityType);
+        generatedId = metadata.isGeneratedId();
+        softDeleteData = metadata.getSoftDeleteData();
     }
 
     /**
@@ -243,10 +234,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        elementCollections = () -> ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
-        manyOrOneToOnes = () -> MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
-        oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping).stream()
-            .anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
+        var associations = metadata.getAssociations(getEntityManager().getEntityManagerFactory(), getProvider());
+        elementCollections = associations::isElementCollection;
+        manyOrOneToOnes = associations::getManyOrOneToOnes;
+        oneToManys = associations::isOneToMany;
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
@@ -293,60 +284,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var entityType = actualTypeArguments.get(1);
         logger.log(FINE, () -> format(LOG_FINE_COMPUTED_TYPE_MAPPING, subclass, identifierType, entityType));
         return new SimpleEntry<>(identifierType, entityType);
-    }
-
-    private static boolean computeGeneratedIdMapping(Class<?> entityType) {
-        var generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || !listAnnotatedFields(entityType, Id.class, GeneratedValue.class).isEmpty();
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_GENERATED_ID_MAPPING, entityType, generatedId));
-        return generatedId;
-    }
-
-    private static SoftDeleteData computeSoftDeleteMapping(Class<?> entityType) {
-        var softDeleteData = new SoftDeleteData(entityType);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING, entityType, softDeleteData));
-        return softDeleteData;
-    }
-
-    private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
-        var elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isElementCollection);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
-        return elementCollectionMapping;
-    }
-
-    private Set<String> computeManyOrOneToOneMapping(Class<? extends BaseEntity<?>> entityType) {
-        var manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isManyOrOneToOne);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, manyOrOneToOneMapping));
-        return manyOrOneToOneMapping;
-    }
-
-    private Set<String> computeOneToManyMapping(Class<? extends BaseEntity<?>> entityType) {
-        var oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isOneToMany);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, entityType, oneToManyMapping));
-        return oneToManyMapping;
-    }
-
-    private Set<String> computeEntityMapping(
-        Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate
-    )
-    {
-        var entityMapping = new HashSet<String>(2);
-        var entity = getEntityManager().getMetamodel().entity(type);
-
-        for (var attribute : entity.getAttributes()) {
-            if (attributePredicate.test(attribute)) {
-                entityMapping.add(basePath + attribute.getName());
-            }
-
-            if (attribute instanceof Bindable<?> bindable) {
-                Class<?> nestedType = bindable.getBindableJavaType();
-
-                if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
-                    entityMapping.addAll(computeEntityMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
-                }
-            }
-        }
-
-        return unmodifiableSet(entityMapping);
     }
 
     // Getters --------------------------------------------------------------------------------------------------------
@@ -2033,13 +1970,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                                                                                                             // Hibernate may return a cartesian
                                                                                                                             // product and apply
                                                                                                                             // firstResult/maxResults in memory.
-            return new MappedPathResolver(root, paths, elementCollections.get(), manyOrOneToOnes.get());
+            return new MappedPathResolver(root, paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains
                                                                             // aggregated fields, so value based paging cannot be reliably used.
-            return new RootPathResolver(root, elementCollections.get(), manyOrOneToOnes.get());
+            return new RootPathResolver(root, elementCollections, manyOrOneToOnes);
         }
         else {
             throw new IllegalArgumentException(EXCEPTION_ILLEGAL_MAPPING);
@@ -2218,7 +2155,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             path = pathResolver.get(null);
         }
         else {
-            path = pathResolver.get(elementCollections.get().contains(field) ? pathResolver.join(field) : field);
+            path = pathResolver.get(elementCollections.test(field) ? pathResolver.join(field) : field);
             type = ID.equals(field) ? identifierType : path.getJavaType();
         }
 
@@ -2247,7 +2184,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
                 predicate = criteriaBuilder.isNull(path);
             }
-            else if (elementCollections.get().contains(field)) {
+            else if (elementCollections.test(field)) {
                 predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
             }
             else if (value instanceof Criteria<?> criteriaObject) {
@@ -2349,7 +2286,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var elementCollectionField = elementCollections.get().contains(field);
+        var elementCollectionField = elementCollections.test(field);
         Subquery<Long> subquery = null;
         Expression<?> fieldPath;
 
@@ -2358,7 +2295,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
             subquery = query.subquery(Long.class);
             Root<E> subqueryRoot = subquery.from(entityType);
-            fieldPath = new RootPathResolver(subqueryRoot, elementCollections.get(), manyOrOneToOnes.get()).get(pathResolver.join(field));
+            fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
             subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
         }
         else {

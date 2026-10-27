@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -560,6 +561,19 @@ public abstract class OmniPersistenceIT {
         var firstPage = personService().getPageWithGroups(Page.with().range(0, 10).anyMatch(Map.of("groups", Like.contains("user"))).build(), true);
         assertEquals(10, firstPage.size(), "First page returns exactly 10 persons, not fewer due to join row inflation");
         firstPage.forEach(p -> assertTrue(p.getGroups().contains(Group.USER), "Groups collection is populated after detachment"));
+    }
+
+    @Test
+    void testElementCollectionFilterOnPathBackThroughRootEntity() {
+        var direct = personService().getPage(Page.with().allMatch(Map.of("groups", Group.USER)).build(), true);
+        var viaPhoneOwner = personService().getPage(Page.with().allMatch(Map.of("phones.owner.groups", Group.USER)).build(), true);
+        assertFalse(direct.isEmpty(), "Some persons have group USER");
+        assertEquals(
+            direct.stream().map(Person::getId).collect(toSet()),
+            viaPhoneOwner.stream().map(Person::getId).collect(toSet()),
+            "Every person owns a phone, so filtering on phones.owner.groups matches the same persons as filtering on groups"
+        );
+        assertEquals(direct.getEstimatedTotalNumberOfResults(), viaPhoneOwner.getEstimatedTotalNumberOfResults(), "Counts match");
     }
 
     @Test
