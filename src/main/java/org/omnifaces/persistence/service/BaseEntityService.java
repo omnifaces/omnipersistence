@@ -234,7 +234,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        var associations = metadata.getAssociations(getEntityManager(), getProvider());
+        var associations = metadata.getAssociations(getEntityManager().getEntityManagerFactory(), getProvider());
         elementCollections = associations::isElementCollection;
         manyOrOneToOnes = associations::getManyOrOneToOnes;
         oneToManys = associations::isOneToMany;

@@ -37,7 +37,6 @@ import java.util.Map;
 import java.util.Set;
 
 import jakarta.persistence.ElementCollection;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -113,7 +112,7 @@ class EntityMetadataTest {
             .entity(NonBaseEntity.class, attribute("other", MANY_TO_ONE, Root.class));
 
         private Associations associations(EntityMetadata metadata) {
-            return metadata.getAssociations(metamodel.entityManager(), HIBERNATE);
+            return metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE);
         }
 
         @Test
@@ -137,6 +136,7 @@ class EntityMetadataTest {
         void unknownFieldNestedInOneToManyIsOneToMany() {
             var associations = associations(new EntityMetadata(Root.class));
             assertTrue(associations.isOneToMany("children.unknown"));
+            assertTrue(associations.isOneToMany("children.labels.junk"));
             assertTrue(associations.isOneToMany("children."));
         }
 
@@ -174,7 +174,7 @@ class EntityMetadataTest {
                 .entity(Order.class, attribute("billingAddress", MANY_TO_ONE, Address.class), attribute("shippingAddress", MANY_TO_ONE, Address.class))
                 .entity(Address.class, attribute("lines", ELEMENT_COLLECTION, String.class), attribute("countries", ONE_TO_MANY, Country.class))
                 .entity(Country.class, attribute("name", BASIC, String.class));
-            var associations = new EntityMetadata(Order.class).getAssociations(twoPathsMetamodel.entityManager(), HIBERNATE);
+            var associations = new EntityMetadata(Order.class).getAssociations(twoPathsMetamodel.entityManagerFactory(), HIBERNATE);
             assertTrue(associations.isElementCollection("billingAddress.lines"));
             assertTrue(associations.isElementCollection("shippingAddress.lines"));
             assertTrue(associations.isOneToMany("billingAddress.countries.name"));
@@ -240,9 +240,9 @@ class EntityMetadataTest {
         @Test
         void manyOrOneToOnesAreComputedOnlyOnce() {
             var metadata = new EntityMetadata(Root.class);
-            var first = metadata.getAssociations(metamodel.entityManager(), HIBERNATE).getManyOrOneToOnes();
+            var first = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
             var lookedUpTypesAfterFirst = metamodel.lookedUpTypes.size();
-            var second = metadata.getAssociations(metamodel.entityManager(), HIBERNATE).getManyOrOneToOnes();
+            var second = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
             assertSame(first, second);
             assertEquals(lookedUpTypesAfterFirst, metamodel.lookedUpTypes.size());
         }
@@ -257,12 +257,12 @@ class EntityMetadataTest {
 
         @Test
         void elementCollectionReportedAsOneToManyIsCorrectedByProvider() throws NoSuchFieldException {
-            var openJpa = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManager(), OPENJPA);
+            var openJpa = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManagerFactory(), OPENJPA);
             assertTrue(openJpa.isElementCollection("tags"));
             assertFalse(openJpa.isOneToMany("tags.x"));
             assertTrue(openJpa.isOneToMany("children.labels"));
 
-            var hibernate = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManager(), HIBERNATE);
+            var hibernate = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManagerFactory(), HIBERNATE);
             assertFalse(hibernate.isElementCollection("tags"));
             assertTrue(hibernate.isOneToMany("tags.x"));
         }
@@ -282,10 +282,10 @@ class EntityMetadataTest {
 
         @Test
         void singularAttributeWithElementTypeAsBindableJavaTypeIsCorrectedByProvider() throws NoSuchFieldException {
-            var openJpa = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManager(), OPENJPA);
+            var openJpa = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), OPENJPA);
             assertTrue(openJpa.isElementCollection("root.tags"));
 
-            var hibernate = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManager(), HIBERNATE);
+            var hibernate = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), HIBERNATE);
             assertFalse(hibernate.isElementCollection("root.tags"));
         }
 
@@ -304,8 +304,8 @@ class EntityMetadataTest {
             var metadata = new EntityMetadata(Root.class);
             var otherMetamodel = new StubMetamodel().entity(Root.class, attribute("tags", BASIC, String.class), attribute("other", ONE_TO_ONE, Parent.class))
                 .entity(Parent.class);
-            var associations = metadata.getAssociations(metamodel.entityManager(), HIBERNATE);
-            var otherAssociations = metadata.getAssociations(otherMetamodel.entityManager(), HIBERNATE);
+            var associations = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE);
+            var otherAssociations = metadata.getAssociations(otherMetamodel.entityManagerFactory(), HIBERNATE);
             assertTrue(associations.isElementCollection("tags"));
             assertFalse(otherAssociations.isElementCollection("tags"));
             assertEquals(Set.of("parent", "detail", "children.root"), associations.getManyOrOneToOnes());
@@ -377,15 +377,19 @@ class EntityMetadataTest {
 
         private final Map<Class<?>, Set<Attribute<?, ?>>> attributes = new HashMap<>();
         private final List<Class<?>> lookedUpTypes = new ArrayList<>();
-        private final EntityManagerFactory entityManagerFactory = stub(EntityManagerFactory.class, Map.of());
+        private final EntityManagerFactory entityManagerFactory = stub(EntityManagerFactory.class, Map.of("getMetamodel", metamodel()));
 
         StubMetamodel entity(Class<?> type, Attribute<?, ?>... entityAttributes) {
             attributes.put(type, new LinkedHashSet<>(List.of(entityAttributes)));
             return this;
         }
 
-        EntityManager entityManager() {
-            Metamodel metamodel = (Metamodel) Proxy.newProxyInstance(
+        EntityManagerFactory entityManagerFactory() {
+            return entityManagerFactory;
+        }
+
+        private Metamodel metamodel() {
+            return (Metamodel) Proxy.newProxyInstance(
                 EntityMetadataTest.class.getClassLoader(), new Class<?>[] { Metamodel.class },
                 (proxy, method, args) -> {
                     if (!"entity".equals(method.getName())) {
@@ -397,7 +401,6 @@ class EntityMetadataTest {
                     return stub(EntityType.class, Map.of("getAttributes", attributes.get(type)));
                 }
             );
-            return stub(EntityManager.class, Map.of("getMetamodel", metamodel, "getEntityManagerFactory", entityManagerFactory));
         }
 
     }

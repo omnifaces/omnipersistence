@@ -27,11 +27,11 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.Metamodel;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -102,18 +102,17 @@ final class EntityMetadata {
     }
 
     /**
-     * Returns the association mappings of this entity type as mapped by the persistence unit of the given entity manager. The mappings are resolved lazily per
-     * field path, and cached per entity manager factory.
+     * Returns the association mappings of this entity type as mapped by the persistence unit of the given entity manager factory. The mappings are resolved
+     * lazily per field path, and cached per entity manager factory.
      *
-     * @param entityManager The entity manager providing the entity manager factory and the metamodel.
+     * @param entityManagerFactory The entity manager factory providing the metamodel.
      * @param provider The provider to determine the association type with.
-     * @return The association mappings of this entity type as mapped by the persistence unit of the given entity manager.
+     * @return The association mappings of this entity type as mapped by the persistence unit of the given entity manager factory.
      */
-    Associations getAssociations(EntityManager entityManager, Provider provider) {
-        var entityManagerFactory = entityManager.getEntityManagerFactory();
+    Associations getAssociations(EntityManagerFactory entityManagerFactory, Provider provider) {
         return new Associations(
             mappingsPerFactory.computeIfAbsent(entityManagerFactory, k -> new FactoryMappings()),
-            ATTRIBUTE_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new ConcurrentHashMap<>()), entityManager, provider
+            ATTRIBUTE_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new ConcurrentHashMap<>()), entityManagerFactory.getMetamodel(), provider
         );
     }
 
@@ -125,16 +124,13 @@ final class EntityMetadata {
 
         private final FactoryMappings mappings;
         private final Map<Class<?>, Map<String, AttributeMapping>> attributeMappings;
-        private final EntityManager entityManager;
+        private final Metamodel metamodel;
         private final Provider provider;
 
-        private Associations(
-            FactoryMappings mappings, Map<Class<?>, Map<String, AttributeMapping>> attributeMappings, EntityManager entityManager, Provider provider
-        )
-        {
+        private Associations(FactoryMappings mappings, Map<Class<?>, Map<String, AttributeMapping>> attributeMappings, Metamodel metamodel, Provider provider) {
             this.mappings = mappings;
             this.attributeMappings = attributeMappings;
-            this.entityManager = entityManager;
+            this.metamodel = metamodel;
             this.provider = provider;
         }
 
@@ -200,17 +196,14 @@ final class EntityMetadata {
         private PathMapping resolvePathMapping(String field) {
             var attributeNames = field.split("\\.", -1);
             Class<?> type = entityType;
+            var lastIndex = attributeNames.length - 1;
             var nestedInOneToMany = false;
 
-            for (var i = 0; i < attributeNames.length; i++) {
+            for (var i = 0; i < lastIndex; i++) {
                 var attribute = getAttributeMappings(type).get(attributeNames[i]);
 
                 if (attribute == null) {
                     return PathMapping.unresolved(nestedInOneToMany);
-                }
-
-                if (i == attributeNames.length - 1) {
-                    return new PathMapping(true, attribute.elementCollection(), nestedInOneToMany);
                 }
 
                 nestedInOneToMany |= attribute.oneToMany();
@@ -222,7 +215,10 @@ final class EntityMetadata {
                 type = attribute.nestedType();
             }
 
-            return PathMapping.unresolved(false);
+            var lastAttribute = getAttributeMappings(type).get(attributeNames[lastIndex]);
+            return lastAttribute != null
+                ? new PathMapping(true, lastAttribute.elementCollection(), nestedInOneToMany)
+                : PathMapping.unresolved(nestedInOneToMany);
         }
 
         private Map<String, AttributeMapping> getAttributeMappings(Class<?> type) {
@@ -233,7 +229,7 @@ final class EntityMetadata {
         private Map<String, AttributeMapping> computeAttributeMappings(Class<?> type) {
             var typeMappings = new LinkedHashMap<String, AttributeMapping>();
 
-            for (var attribute : entityManager.getMetamodel().entity(type).getAttributes()) {
+            for (var attribute : metamodel.entity(type).getAttributes()) {
                 typeMappings.put(
                     attribute.getName(),
                     new AttributeMapping(
