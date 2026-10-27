@@ -321,20 +321,20 @@ public final class JPA {
         Root<E> root = query.from(attribute.getDeclaringType().getJavaType());
         Join<E, T> join;
 
-        if (attribute instanceof SingularAttribute) {
-            join = root.join((SingularAttribute<E, T>) attribute);
+        if (attribute instanceof SingularAttribute singularAttribute) {
+            join = root.join(singularAttribute);
         }
-        else if (attribute instanceof ListAttribute) {
-            join = root.join((ListAttribute<E, T>) attribute);
+        else if (attribute instanceof ListAttribute listAttribute) {
+            join = root.join(listAttribute);
         }
-        else if (attribute instanceof SetAttribute) {
-            join = root.join((SetAttribute<E, T>) attribute);
+        else if (attribute instanceof SetAttribute setAttribute) {
+            join = root.join(setAttribute);
         }
-        else if (attribute instanceof MapAttribute) {
-            join = root.join((MapAttribute<E, ?, T>) attribute);
+        else if (attribute instanceof MapAttribute mapAttribute) {
+            join = root.join(mapAttribute);
         }
-        else if (attribute instanceof CollectionAttribute) {
-            join = root.join((CollectionAttribute<E, T>) attribute);
+        else if (attribute instanceof CollectionAttribute collectionAttribute) {
+            join = root.join(collectionAttribute);
         }
         else {
             return 0L; // Unknown attribute type, just return 0.
@@ -360,8 +360,8 @@ public final class JPA {
         }
 
         List<Expression<String>> expressions = stream(expressionsOrStrings).map(expressionOrString -> {
-            if (expressionOrString instanceof Expression) {
-                return castAsString(builder, (Expression<?>) expressionOrString);
+            if (expressionOrString instanceof Expression expression) {
+                return castAsString(builder, expression);
             }
             else {
                 return builder.<String>literal(expressionOrString.toString());
@@ -443,11 +443,11 @@ public final class JPA {
     public static boolean isEnumeratedByOrdinal(Path<?> path) {
         Bindable<?> model = path.getModel();
 
-        if (model instanceof Attribute) {
-            var member = ((Attribute<?, ?>) model).getJavaMember();
+        if (model instanceof Attribute attribute) {
+            var member = attribute.getJavaMember();
 
-            if (member instanceof AnnotatedElement) {
-                var enumerated = ((AnnotatedElement) member).getAnnotation(Enumerated.class);
+            if (member instanceof AnnotatedElement annotatedElement) {
+                var enumerated = annotatedElement.getAnnotation(Enumerated.class);
 
                 if (enumerated != null) {
                     return enumerated.value() == EnumType.ORDINAL;

@@ -146,22 +146,22 @@ class RootPathResolver implements PathResolver {
     }
 
     private static void collectJoins(Path<?> path, Map<String, Path<?>> joins) {
-        if (path instanceof From) {
-            ((From<?, ?>) path).getJoins().forEach(join -> collectJoins(join, joins));
+        if (path instanceof From<?,?> from) {
+            from.getJoins().forEach(join -> collectJoins(join, joins));
         }
-        if (path instanceof FetchParent) {
+        if (path instanceof FetchParent<?,?> fetchParent) {
             try {
-                ((FetchParent<?, ?>) path).getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+                fetchParent.getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
             }
             catch (NullPointerException openJPAWillThrowThisOnEmptyFetches) {
                 // Ignore and continue.
             }
         }
-        if (path instanceof Join) {
-            joins.put(((Join<?, ?>) path).getAttribute().getName(), path);
+        if (path instanceof Join<?,?> join) {
+            joins.put(join.getAttribute().getName(), path);
         }
-        else if (path instanceof Fetch) {
-            joins.put(((Fetch<?, ?>) path).getAttribute().getName(), path);
+        else if (path instanceof Fetch<?,?> fetch ) {
+            joins.put(fetch.getAttribute().getName(), path);
         }
     }
 

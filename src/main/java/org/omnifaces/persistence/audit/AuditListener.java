@@ -129,7 +129,7 @@ public class AuditListener {
         return AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
             var baseEntityService = getCurrentBaseEntityService();
             var auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
-                .filter(a -> a.getJavaMember() instanceof Field && ((Field) a.getJavaMember()).isAnnotationPresent(Audit.class))
+                .filter(a -> a.getJavaMember() instanceof Field field && field.isAnnotationPresent(Audit.class))
                 .map(Attribute::getName)
                 .collect(toSet());
 
