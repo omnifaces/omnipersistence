@@ -64,7 +64,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -188,12 +187,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
     private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 
-    @SuppressWarnings("rawtypes")
-    private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
+    private static final ClassValue<Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ClassValue<>() {
+
+        @Override
+        protected Entry<Class<?>, Class<?>> computeValue(Class<?> serviceType) {
+            return computeTypeMapping(serviceType.asSubclass(BaseEntityService.class));
+        }
+
+    };
 
     private final Class<I> identifierType;
     private final Class<E> entityType;
     private final EntityMetadata metadata;
+    private final boolean generatedId;
+    private final SoftDeleteData softDeleteData;
 
     private Provider provider = Provider.UNKNOWN;
     private Database database = Database.UNKNOWN;
@@ -212,10 +219,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     @SuppressWarnings("unchecked")
     protected BaseEntityService() {
-        var typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
+        var typeMapping = TYPE_MAPPINGS.get(getClass());
         identifierType = (Class<I>) typeMapping.getKey();
         entityType = (Class<E>) typeMapping.getValue();
         metadata = EntityMetadata.of(entityType);
+        generatedId = metadata.isGeneratedId();
+        softDeleteData = metadata.getSoftDeleteData();
     }
 
     /**
@@ -225,9 +234,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        elementCollections = () -> metadata.getElementCollections(getEntityManager(), getProvider());
-        manyOrOneToOnes = () -> metadata.getManyOrOneToOnes(getEntityManager(), getProvider());
-        oneToManys = field -> metadata.isOneToMany(field, getEntityManager(), getProvider());
+        var associations = metadata.getAssociations(getEntityManager(), getProvider());
+        elementCollections = associations::getElementCollections;
+        manyOrOneToOnes = associations::getManyOrOneToOnes;
+        oneToManys = associations::isOneToMany;
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
@@ -321,7 +331,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Whether the ID is generated.
      */
     protected boolean isGeneratedId() {
-        return metadata.isGeneratedId();
+        return generatedId;
     }
 
     /**
@@ -700,7 +710,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected E getById(I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
 
-        if (entity != null && !includeSoftDeleted && metadata.getSoftDeleteData().isSoftDeleted(entity)) {
+        if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
             return null;
         }
 
@@ -736,10 +746,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Nullable
     public E getSoftDeletedById(I id) {
         return runWithCurrentInstance(() -> {
-            metadata.getSoftDeleteData().checkSoftDeletable();
+            softDeleteData.checkSoftDeletable();
             var entity = getEntityManager().find(entityType, id);
 
-            if (entity != null && !metadata.getSoftDeleteData().isSoftDeleted(entity)) {
+            if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
                 return null;
             }
 
@@ -786,7 +796,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             paramValues = Map.of("ids", copyOfIds);
         }
 
-        var whereClause = metadata.getSoftDeleteData().getWhereClause(includeSoftDeleted);
+        var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
         return list(
             select("")
                 + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (" + paramNames + ")"
@@ -827,7 +837,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected List<E> list(boolean includeSoftDeleted) {
         return list(
             select("")
-                + metadata.getSoftDeleteData().getWhereClause(includeSoftDeleted)
+                + softDeleteData.getWhereClause(includeSoftDeleted)
                 + " ORDER BY e.id DESC"
         );
     }
@@ -840,10 +850,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     public List<E> listSoftDeleted() {
         return runWithCurrentInstance(() -> {
-            metadata.getSoftDeleteData().checkSoftDeletable();
+            softDeleteData.checkSoftDeletable();
             return list(
                 select("")
-                    + metadata.getSoftDeleteData().getWhereClause(true)
+                    + softDeleteData.getWhereClause(true)
                     + " ORDER BY e.id DESC"
             );
         });
@@ -987,11 +997,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     public I persist(E entity) {
         return runWithCurrentInstance(() -> {
             if (entity.getId() != null) {
-                if (metadata.isGeneratedId() || exists(entity)) {
+                if (generatedId || exists(entity)) {
                     throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
                 }
             }
-            else if (!metadata.isGeneratedId()) {
+            else if (!generatedId) {
                 throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
             }
 
@@ -1027,7 +1037,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     public E update(E entity) {
         return runWithCurrentInstance(() -> {
             if (entity.getId() == null) {
-                if (metadata.isGeneratedId()) {
+                if (generatedId) {
                     throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
                 }
                 else {
@@ -1149,7 +1159,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E save(E entity) {
         return runWithCurrentInstance(() -> {
-            if (metadata.isGeneratedId() && entity.getId() == null || !metadata.isGeneratedId() && !exists(entity)) {
+            if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
                 persist(entity);
                 return entity;
             }
@@ -1208,8 +1218,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void softDelete(E entity) {
         runWithCurrentInstance(() -> {
-            metadata.getSoftDeleteData().checkSoftDeletable();
-            metadata.getSoftDeleteData().setSoftDeleted(manage(entity), true);
+            softDeleteData.checkSoftDeletable();
+            softDeleteData.setSoftDeleted(manage(entity), true);
         });
     }
 
@@ -1224,8 +1234,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void softUndelete(E entity) {
         runWithCurrentInstance(() -> {
-            metadata.getSoftDeleteData().checkSoftDeletable();
-            metadata.getSoftDeleteData().setSoftDeleted(manage(entity), false);
+            softDeleteData.checkSoftDeletable();
+            softDeleteData.setSoftDeleted(manage(entity), false);
         });
     }
 

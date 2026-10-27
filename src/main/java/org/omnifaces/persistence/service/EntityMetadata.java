@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.String.format;
+import static java.util.Collections.synchronizedMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.logging.Level.FINE;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
@@ -20,12 +21,14 @@ import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.metamodel.Attribute;
@@ -39,7 +42,8 @@ import org.omnifaces.persistence.model.GeneratedIdEntity;
 /**
  * Helper class of {@link BaseEntityService}. Holds the metadata derived from an entity type, which is identical for every service over that type. The generated
  * ID flag and the soft delete data are derived from the entity class itself. The association mappings are derived from the Jakarta Persistence metamodel, and
- * are therefore resolved lazily on first use.
+ * are therefore resolved lazily on first use, separately per {@link EntityManagerFactory}, because two persistence units or providers may map the same entity
+ * class differently. The caches do not keep entity classes or entity manager factories reachable.
  *
  * @author Bauke Scholtz
  * @since 1.2
@@ -48,13 +52,20 @@ final class EntityMetadata {
 
     private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
-    private static final Map<Class<?>, EntityMetadata> ENTITY_METADATA = new ConcurrentHashMap<>();
-
     private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
     private static final String LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING = "Computed soft delete mapping for %s: %s";
     private static final String LOG_FINE_COMPUTED_ASSOCIATION_MAPPING = "Computed %s mapping for %s: %s";
 
-    private enum Association {
+    private static final ClassValue<EntityMetadata> ENTITY_METADATA = new ClassValue<>() {
+
+        @Override
+        protected EntityMetadata computeValue(Class<?> entityType) {
+            return new EntityMetadata(entityType);
+        }
+
+    };
+
+    private enum AssociationType {
 
         ELEMENT_COLLECTION("@ElementCollection", Provider::isElementCollection),
         MANY_OR_ONE_TO_ONE("@ManyToOne/@OneToOne", Provider::isManyOrOneToOne),
@@ -63,7 +74,7 @@ final class EntityMetadata {
         private final String label;
         private final BiPredicate<Provider, Attribute<?, ?>> predicate;
 
-        Association(String label, BiPredicate<Provider, Attribute<?, ?>> predicate) {
+        AssociationType(String label, BiPredicate<Provider, Attribute<?, ?>> predicate) {
             this.label = label;
             this.predicate = predicate;
         }
@@ -73,7 +84,7 @@ final class EntityMetadata {
     private final Class<?> entityType;
     private final boolean generatedId;
     private final SoftDeleteData softDeleteData;
-    private final Map<Association, Set<String>> associations = new ConcurrentHashMap<>();
+    private final Map<EntityManagerFactory, Map<AssociationType, Set<String>>> associationsPerFactory = synchronizedMap(new WeakHashMap<>());
 
     EntityMetadata(Class<?> entityType) {
         this.entityType = entityType;
@@ -90,7 +101,7 @@ final class EntityMetadata {
      * @return The metadata of the given entity type.
      */
     static EntityMetadata of(Class<?> entityType) {
-        return ENTITY_METADATA.computeIfAbsent(entityType, EntityMetadata::new);
+        return ENTITY_METADATA.get(entityType);
     }
 
     boolean isGeneratedId() {
@@ -102,49 +113,79 @@ final class EntityMetadata {
     }
 
     /**
-     * Returns the paths of all <code>@ElementCollection</code> fields, including those of nested entities.
+     * Returns the association mappings of this entity type as mapped by the persistence unit of the given entity manager. The mappings themselves are resolved
+     * lazily on first use, once per entity manager factory.
      *
-     * @param entityManager The entity manager providing the metamodel.
+     * @param entityManager The entity manager providing the entity manager factory and the metamodel.
      * @param provider The provider to determine the association type with.
-     * @return The paths of all <code>@ElementCollection</code> fields.
+     * @return The association mappings of this entity type as mapped by the persistence unit of the given entity manager.
      */
-    Set<String> getElementCollections(EntityManager entityManager, Provider provider) {
-        return getAssociationMapping(Association.ELEMENT_COLLECTION, entityManager, provider);
+    Associations getAssociations(EntityManager entityManager, Provider provider) {
+        return new Associations(
+            associationsPerFactory.computeIfAbsent(entityManager.getEntityManagerFactory(), k -> new ConcurrentHashMap<>()), entityManager, provider
+        );
     }
 
     /**
-     * Returns the paths of all <code>@ManyToOne</code> and <code>@OneToOne</code> fields, including those of nested entities.
-     *
-     * @param entityManager The entity manager providing the metamodel.
-     * @param provider The provider to determine the association type with.
-     * @return The paths of all <code>@ManyToOne</code> and <code>@OneToOne</code> fields.
+     * The association mappings of an entity type within one persistence unit.
      */
-    Set<String> getManyOrOneToOnes(EntityManager entityManager, Provider provider) {
-        return getAssociationMapping(Association.MANY_OR_ONE_TO_ONE, entityManager, provider);
+    final class Associations {
+
+        private final Map<AssociationType, Set<String>> mappings;
+        private final EntityManager entityManager;
+        private final Provider provider;
+
+        private Associations(Map<AssociationType, Set<String>> mappings, EntityManager entityManager, Provider provider) {
+            this.mappings = mappings;
+            this.entityManager = entityManager;
+            this.provider = provider;
+        }
+
+        /**
+         * Returns the paths of all <code>@ElementCollection</code> fields, including those of nested entities.
+         *
+         * @return The paths of all <code>@ElementCollection</code> fields.
+         */
+        Set<String> getElementCollections() {
+            return getMapping(AssociationType.ELEMENT_COLLECTION);
+        }
+
+        /**
+         * Returns the paths of all <code>@ManyToOne</code> and <code>@OneToOne</code> fields, including those of nested entities.
+         *
+         * @return The paths of all <code>@ManyToOne</code> and <code>@OneToOne</code> fields.
+         */
+        Set<String> getManyOrOneToOnes() {
+            return getMapping(AssociationType.MANY_OR_ONE_TO_ONE);
+        }
+
+        /**
+         * Returns whether the given field path is nested in a <code>@OneToMany</code> field, e.g. <code>phones.number</code> when <code>phones</code> is a
+         * <code>@OneToMany</code> field.
+         *
+         * @param field The field path.
+         * @return Whether the given field path is nested in a <code>@OneToMany</code> field.
+         */
+        boolean isOneToMany(String field) {
+            return getMapping(AssociationType.ONE_TO_MANY).stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
+        }
+
+        private Set<String> getMapping(AssociationType type) {
+            var mapping = mappings.get(type);
+            return mapping != null ? mapping : mappings.computeIfAbsent(type, this::computeMapping);
+        }
+
+        private Set<String> computeMapping(AssociationType type) {
+            return computeAssociationMapping(type, entityManager.getMetamodel(), provider);
+        }
+
     }
 
-    /**
-     * Returns whether the given field path is nested in a <code>@OneToMany</code> field, e.g. <code>phones.number</code> when <code>phones</code> is a
-     * <code>@OneToMany</code> field.
-     *
-     * @param field The field path.
-     * @param entityManager The entity manager providing the metamodel.
-     * @param provider The provider to determine the association type with.
-     * @return Whether the given field path is nested in a <code>@OneToMany</code> field.
-     */
-    boolean isOneToMany(String field, EntityManager entityManager, Provider provider) {
-        return getAssociationMapping(Association.ONE_TO_MANY, entityManager, provider).stream().anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
-    }
-
-    private Set<String> getAssociationMapping(Association association, EntityManager entityManager, Provider provider) {
-        return associations.computeIfAbsent(association, k -> computeAssociationMapping(association, entityManager.getMetamodel(), provider));
-    }
-
-    private Set<String> computeAssociationMapping(Association association, Metamodel metamodel, Provider provider) {
+    private Set<String> computeAssociationMapping(AssociationType type, Metamodel metamodel, Provider provider) {
         var nestedTypes = new HashSet<Class<?>>();
         nestedTypes.add(entityType);
-        var mapping = computeEntityMapping(metamodel, entityType, "", nestedTypes, attribute -> association.predicate.test(provider, attribute));
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ASSOCIATION_MAPPING, association.label, entityType, mapping));
+        var mapping = computeEntityMapping(metamodel, entityType, "", nestedTypes, attribute -> type.predicate.test(provider, attribute));
+        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ASSOCIATION_MAPPING, type.label, entityType, mapping));
         return mapping;
     }
 

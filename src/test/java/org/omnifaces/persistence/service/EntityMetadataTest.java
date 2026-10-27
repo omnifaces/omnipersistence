@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.metamodel.Attribute;
@@ -48,10 +49,11 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
+import org.omnifaces.persistence.service.EntityMetadata.Associations;
 
 /**
- * Unit tests for {@link EntityMetadata}. The association mappings are resolved against a stub metamodel built from {@link Proxy} instances, describing
- * <code>Root</code> with a <code>@OneToMany</code> to <code>Child</code>, which has a <code>@ManyToOne</code> back to <code>Root</code>.
+ * Unit tests for {@link EntityMetadata}. The association mappings are resolved against a stub metamodel built from {@link Proxy} instances, see
+ * {@link AssociationMappings#metamodel}.
  */
 class EntityMetadataTest {
 
@@ -93,7 +95,7 @@ class EntityMetadataTest {
     }
 
     @Nested
-    class Associations {
+    class AssociationMappings {
 
         private final StubMetamodel metamodel = new StubMetamodel()
             .entity(
@@ -104,42 +106,60 @@ class EntityMetadataTest {
             .entity(Parent.class, attribute("name", BASIC, String.class))
             .entity(NonBaseEntity.class, attribute("other", MANY_TO_ONE, Root.class));
 
+        private Associations associations(EntityMetadata metadata) {
+            return metadata.getAssociations(metamodel.entityManager(), HIBERNATE);
+        }
+
         @Test
         void collectsElementCollectionsIncludingNestedOnes() {
-            assertEquals(Set.of("tags", "children.labels"), new EntityMetadata(Root.class).getElementCollections(metamodel.entityManager(), HIBERNATE));
+            assertEquals(
+                Set.of("tags", "children.labels"), associations(new EntityMetadata(Root.class)).getElementCollections()
+            );
         }
 
         @Test
         void collectsManyOrOneToOnesIncludingNestedOnes() {
-            assertEquals(Set.of("parent", "detail", "children.root"), new EntityMetadata(Root.class).getManyOrOneToOnes(metamodel.entityManager(), HIBERNATE));
+            assertEquals(
+                Set.of("parent", "detail", "children.root"),
+                associations(new EntityMetadata(Root.class)).getManyOrOneToOnes()
+            );
         }
 
         @Test
         void fieldNestedInOneToManyIsOneToMany() {
             var metadata = new EntityMetadata(Root.class);
-            assertTrue(metadata.isOneToMany("children.labels", metamodel.entityManager(), HIBERNATE));
-            assertFalse(metadata.isOneToMany("children", metamodel.entityManager(), HIBERNATE));
-            assertFalse(metadata.isOneToMany("parent.name", metamodel.entityManager(), HIBERNATE));
+            var associations = associations(metadata);
+            assertTrue(associations.isOneToMany("children.labels"));
+            assertFalse(associations.isOneToMany("children"));
+            assertFalse(associations.isOneToMany("parent.name"));
         }
 
         @Test
         void associationBackToRootTypeIsNotCrawled() {
-            new EntityMetadata(Root.class).getManyOrOneToOnes(metamodel.entityManager(), HIBERNATE);
+            associations(new EntityMetadata(Root.class)).getManyOrOneToOnes();
             assertEquals(List.of(Root.class, Child.class, Parent.class), metamodel.crawledTypes);
         }
 
         @Test
         void associationToNonBaseEntityTypeIsNotCrawled() {
-            new EntityMetadata(Root.class).getManyOrOneToOnes(metamodel.entityManager(), HIBERNATE);
+            associations(new EntityMetadata(Root.class)).getManyOrOneToOnes();
             assertFalse(metamodel.crawledTypes.contains(NonBaseEntity.class));
+        }
+
+        @Test
+        void mappingIsResolvedPerEntityManagerFactory() {
+            var metadata = new EntityMetadata(Root.class);
+            var otherMetamodel = new StubMetamodel().entity(Root.class, attribute("other", ONE_TO_ONE, Parent.class)).entity(Parent.class);
+            assertEquals(Set.of("parent", "detail", "children.root"), metadata.getAssociations(metamodel.entityManager(), HIBERNATE).getManyOrOneToOnes());
+            assertEquals(Set.of("other"), metadata.getAssociations(otherMetamodel.entityManager(), HIBERNATE).getManyOrOneToOnes());
         }
 
         @Test
         void mappingIsComputedOnlyOnce() {
             var metadata = new EntityMetadata(Root.class);
-            var first = metadata.getElementCollections(metamodel.entityManager(), HIBERNATE);
+            var first = metadata.getAssociations(metamodel.entityManager(), HIBERNATE).getElementCollections();
             var crawledTypesAfterFirst = metamodel.crawledTypes.size();
-            var second = metadata.getElementCollections(metamodel.entityManager(), HIBERNATE);
+            var second = metadata.getAssociations(metamodel.entityManager(), HIBERNATE).getElementCollections();
             assertSame(first, second);
             assertEquals(crawledTypesAfterFirst, metamodel.crawledTypes.size());
         }
@@ -183,6 +203,7 @@ class EntityMetadataTest {
 
         private final Map<Class<?>, Set<Attribute<?, ?>>> attributes = new HashMap<>();
         private final List<Class<?>> crawledTypes = new ArrayList<>();
+        private final EntityManagerFactory entityManagerFactory = stub(EntityManagerFactory.class, Map.of());
 
         StubMetamodel entity(Class<?> type, Attribute<?, ?>... entityAttributes) {
             attributes.put(type, new LinkedHashSet<>(List.of(entityAttributes)));
@@ -202,7 +223,7 @@ class EntityMetadataTest {
                     return stub(EntityType.class, Map.of("getAttributes", attributes.get(type)));
                 }
             );
-            return stub(EntityManager.class, Map.of("getMetamodel", metamodel));
+            return stub(EntityManager.class, Map.of("getMetamodel", metamodel, "getEntityManagerFactory", entityManagerFactory));
         }
 
     }
