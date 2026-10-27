@@ -307,6 +307,26 @@ public class PageTest {
         }
 
         @Test
+        void cursorRangeReadsOrderingValueOfLazyProxyViaItsGetter() {
+            var parent = new TestEntity();
+            parent.setName("parent");
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setParent(new LazyTestEntityProxy(parent));
+            var page = Page.with().range(entity, 10, false).orderBy("parent.name", true).build();
+            assertEquals(Map.of("parent.name", "parent"), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeReadsOrderingValueOfPropertyWithoutField() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setName("name");
+            var page = Page.with().range(entity, 10, false).orderBy("upperCaseName", true).build();
+            assertEquals(Map.of("upperCaseName", "NAME"), page.getLastOrderingValues());
+        }
+
+        @Test
         void cursorRangeExtractsNullValueOfNestedPathWithNullIntermediate() {
             var entity = new TestEntity();
             entity.setId(42L);
@@ -687,6 +707,30 @@ public class PageTest {
 
         public void setParent(TestEntity parent) {
             this.parent = parent;
+        }
+
+        public String getUpperCaseName() {
+            return name == null ? null : name.toUpperCase();
+        }
+
+    }
+
+    /**
+     * Mimics a lazy loading proxy: a subclass whose own fields stay empty, and whose getters delegate to the loaded entity.
+     */
+    static class LazyTestEntityProxy extends TestEntity {
+
+        private static final long serialVersionUID = 1L;
+
+        private final TestEntity target;
+
+        LazyTestEntityProxy(TestEntity target) {
+            this.target = target;
+        }
+
+        @Override
+        public String getName() {
+            return target.getName();
         }
 
     }
