@@ -66,6 +66,12 @@ public class BaseEntityListener {
     private Optional<BeanManager> optionalBeanManager;
 
     /**
+     * Default constructor.
+     */
+    public BaseEntityListener() {
+    }
+
+    /**
      * Fires the {@link Created} event after the entity has been persisted.
      *
      * @param entity The entity that was persisted.

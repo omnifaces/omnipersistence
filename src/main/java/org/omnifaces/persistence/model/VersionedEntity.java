@@ -60,6 +60,12 @@ public abstract class VersionedEntity<I extends Comparable<I> & Serializable> ex
     @Column(nullable = false)
     private Long version;
 
+    /**
+     * Default constructor.
+     */
+    protected VersionedEntity() {
+    }
+
     @Override
     @Nullable
     public Long getVersion() {

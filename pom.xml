@@ -200,8 +200,10 @@
                 <configuration>
                     <compilerArgs>
                         <arg>-Xlint:unchecked</arg>
+                        <arg>-Xlint:rawtypes</arg>
                         <arg>-Xlint:deprecation</arg>
                     </compilerArgs>
+                    <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
                     <showDeprecation>true</showDeprecation>
                 </configuration>
@@ -255,11 +257,11 @@
                 <version>3.12.0</version>
                 <configuration>
                     <javadocExecutable>${java.home}/bin/javadoc</javadocExecutable>
-                    <javadocVersion>${javase.version}</javadocVersion>
                     <release>${javase.version}</release>
                     <notimestamp>true</notimestamp>
                     <splitindex>true</splitindex>
                     <doclint>all</doclint>
+                    <failOnWarnings>true</failOnWarnings>
                     <doctitle>OmniPersistence API documentation</doctitle>
                     <links>
                         <link>https://docs.oracle.com/en/java/javase/${javase.version}/docs/api/</link>

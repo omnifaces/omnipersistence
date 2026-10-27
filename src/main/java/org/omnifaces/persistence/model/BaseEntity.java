@@ -105,6 +105,12 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
     private static final long serialVersionUID = 1L;
 
     /**
+     * Default constructor.
+     */
+    protected BaseEntity() {
+    }
+
+    /**
      * Returns the getters that define entity identity. The default implementation returns {@link BaseEntity#getId()}.
      * <p>
      * Override to use natural/business key(s), e.g.:

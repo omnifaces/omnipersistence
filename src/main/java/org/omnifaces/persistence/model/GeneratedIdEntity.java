@@ -58,6 +58,12 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
     @GeneratedValue(strategy = IDENTITY)
     private I id;
 
+    /**
+     * Default constructor.
+     */
+    protected GeneratedIdEntity() {
+    }
+
     @Override
     @Nullable
     public I getId() {

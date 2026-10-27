@@ -107,12 +107,19 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     // Properties -----------------------------------------------------------------------------------------------------
 
+    /** Zero-based offset of the page. */
     private final int offset;
+    /** Maximum amount of records to be matched. */
     private final int limit;
+    /** Last entity of the previous page, if any. */
     private final Identifiable<?> last;
+    /** Whether value based paging is reversed. */
     private final boolean reversed;
+    /** Ordering of results, keyed by property path, valued by whether to sort ascending. */
     private final Map<String, Boolean> ordering;
+    /** Criteria of which each entity must match all. */
     private final Map<String, Object> requiredCriteria;
+    /** Criteria of which each entity must match at least one. */
     private final Map<String, Object> optionalCriteria;
 
     // Constructors ---------------------------------------------------------------------------------------------------
@@ -324,6 +331,12 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * @since 1.0
      */
     public static class Builder {
+
+        /**
+         * Default constructor. Use {@link Page#with()} to get started.
+         */
+        public Builder() {
+        }
 
         private Integer offset;
         private Integer limit;

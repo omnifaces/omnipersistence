@@ -28,6 +28,12 @@ import javax.sql.XADataSource;
  */
 public class SwitchableXADataSource extends SwitchableCommonDataSource implements XADataSource {
 
+    /**
+     * Default constructor.
+     */
+    public SwitchableXADataSource() {
+    }
+
     @Override
     public XADataSource getWrapped() {
         return (XADataSource) super.getWrapped();

@@ -61,6 +61,12 @@ public class CommonDataSourceWrapper implements CommonDataSource {
     );
 
     /**
+     * Default constructor.
+     */
+    public CommonDataSourceWrapper() {
+    }
+
+    /**
      * Initializes the wrapper with the given data source. This method performs introspection on the wrapped instance to discover its available properties.
      *
      * @param wrapped The data source to wrap.

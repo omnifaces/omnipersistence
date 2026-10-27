@@ -90,7 +90,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
             return enumValue;
         }
         else if (targetType.isEnum()) {
-            var criteria = searchValue instanceof Criteria c ? c : IgnoreCase.value(searchValue.toString());
+            var criteria = searchValue instanceof Criteria<?> c ? c : IgnoreCase.value(searchValue.toString());
 
             for (Enum<?> enumConstant : ((Class<Enum<?>>) targetType).getEnumConstants()) {
                 if (criteria.applies(enumConstant.name())) {

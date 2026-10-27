@@ -96,6 +96,12 @@ public class AuditListener {
     private Optional<BeanManager> optionalBeanManager;
 
     /**
+     * Default constructor.
+     */
+    public AuditListener() {
+    }
+
+    /**
      * Snapshots the initial values of auditable properties after the entity is loaded from the database.
      *
      * @param entity The entity that was loaded.

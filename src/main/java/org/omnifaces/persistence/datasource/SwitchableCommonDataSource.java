@@ -62,6 +62,12 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
     private String configFile;
     private final Map<String, Object> tempValues = new HashMap<>();
 
+    /**
+     * Default constructor.
+     */
+    public SwitchableCommonDataSource() {
+    }
+
     @Override
     public void set(String name, Object value) {
         if (init) {

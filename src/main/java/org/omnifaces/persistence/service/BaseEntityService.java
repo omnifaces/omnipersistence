@@ -2332,7 +2332,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         alias.in(in.size());
-        return path.in(in.toArray(new Expression[in.size()]));
+        return path.in(in.toArray(Expression<?>[]::new));
     }
 
     private <T extends E> Predicate buildArrayPredicate(

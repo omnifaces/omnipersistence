@@ -76,6 +76,12 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     private boolean skipAdjustLastModified;
 
     /**
+     * Default constructor.
+     */
+    protected TimestampedEntity() {
+    }
+
+    /**
      * Sets the created and lastModified timestamps to the current time before persisting.
      */
     @PrePersist
