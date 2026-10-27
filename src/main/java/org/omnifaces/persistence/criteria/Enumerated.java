@@ -86,7 +86,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
 
     @SuppressWarnings("unchecked")
     private static Enum<?> parseEnum(Object searchValue, Class<?> targetType) throws IllegalArgumentException {
-        if (searchValue instanceof Enum enumValue) {
+        if (searchValue instanceof Enum<?> enumValue) {
             return enumValue;
         }
         else if (targetType.isEnum()) {

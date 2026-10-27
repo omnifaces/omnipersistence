@@ -146,10 +146,10 @@ class RootPathResolver implements PathResolver {
     }
 
     private static void collectJoins(Path<?> path, Map<String, Path<?>> joins) {
-        if (path instanceof From<?,?> from) {
+        if (path instanceof From<?, ?> from) {
             from.getJoins().forEach(join -> collectJoins(join, joins));
         }
-        if (path instanceof FetchParent<?,?> fetchParent) {
+        if (path instanceof FetchParent<?, ?> fetchParent) {
             try {
                 fetchParent.getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
             }
@@ -157,10 +157,10 @@ class RootPathResolver implements PathResolver {
                 // Ignore and continue.
             }
         }
-        if (path instanceof Join<?,?> join) {
+        if (path instanceof Join<?, ?> join) {
             joins.put(join.getAttribute().getName(), path);
         }
-        else if (path instanceof Fetch<?,?> fetch ) {
+        else if (path instanceof Fetch<?, ?> fetch) {
             joins.put(fetch.getAttribute().getName(), path);
         }
     }

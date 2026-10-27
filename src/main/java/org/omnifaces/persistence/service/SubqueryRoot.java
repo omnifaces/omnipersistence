@@ -63,17 +63,18 @@ class SubqueryRoot<X> extends RootWrapper<X> {
     public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
         Join<X, Y> join;
 
-        if (attribute instanceof ListAttribute listAttribute) {
-            join = join(listAttribute);
+        // Explicit casts: javac rejects a generic type pattern here as unsafe, and a raw type pattern loses the type arguments.
+        if (attribute instanceof ListAttribute) {
+            join = join((ListAttribute<X, Y>) attribute);
         }
-        else if (attribute instanceof SetAttribute setAttribute) {
-            join = join(setAttribute);
+        else if (attribute instanceof SetAttribute) {
+            join = join((SetAttribute<X, Y>) attribute);
         }
-        else if (attribute instanceof MapAttribute mapAttribute) {
-            join = join(mapAttribute);
+        else if (attribute instanceof MapAttribute) {
+            join = join((MapAttribute<X, ?, Y>) attribute);
         }
-        else if (attribute instanceof CollectionAttribute collectionAttribute) {
-            join = join(collectionAttribute);
+        else if (attribute instanceof CollectionAttribute) {
+            join = join((CollectionAttribute<X, Y>) attribute);
         }
         else {
             throw new UnsupportedOperationException();
@@ -87,17 +88,17 @@ class SubqueryRoot<X> extends RootWrapper<X> {
     public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType joinType) {
         Join<X, Y> join;
 
-        if (attribute instanceof ListAttribute listAttribute) {
-            join = join(listAttribute, joinType);
+        if (attribute instanceof ListAttribute) {
+            join = join((ListAttribute<X, Y>) attribute, joinType);
         }
-        else if (attribute instanceof SetAttribute setAttribute) {
-            join = join(setAttribute, joinType);
+        else if (attribute instanceof SetAttribute) {
+            join = join((SetAttribute<X, Y>) attribute, joinType);
         }
-        else if (attribute instanceof MapAttribute mapAttribute) {
-            join = join(mapAttribute, joinType);
+        else if (attribute instanceof MapAttribute) {
+            join = join((MapAttribute<X, ?, Y>) attribute, joinType);
         }
-        else if (attribute instanceof CollectionAttribute collectionAttribute) {
-            join = join(collectionAttribute, joinType);
+        else if (attribute instanceof CollectionAttribute) {
+            join = join((CollectionAttribute<X, Y>) attribute, joinType);
         }
         else {
             throw new UnsupportedOperationException();

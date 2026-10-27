@@ -62,7 +62,7 @@ public final class Not extends Criteria<Object> {
 
     @Override
     public boolean applies(@Nullable Object modelValue) {
-        if (modelValue instanceof Criteria criteria) {
+        if (modelValue instanceof Criteria<?> criteria) {
             return !criteria.applies(getValue());
         }
         else {

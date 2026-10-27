@@ -2235,11 +2235,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var alias = Alias.create(getProvider(), path, field);
         var value = criteria;
-        var negated = value instanceof Not;
+        var negated = false;
         Predicate predicate;
 
-        if (negated) {
-            value = ((Not) value).getValue();
+        if (value instanceof Not not) {
+            negated = true;
+            value = not.getValue();
         }
 
         try {
