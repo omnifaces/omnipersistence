@@ -134,7 +134,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     private Page(
         @Nullable Integer offset, @Nullable Integer limit, @Nullable Map<String, Object> lastOrderingValues, boolean reversed,
-        @Nullable Map<String, Boolean> ordering, @Nullable Map<String, Object> requiredCriteria, @Nullable Map<String, Object> optionalCriteria
+        @Nullable LinkedHashMap<String, Boolean> ordering, // TODO: Use SequencedMap once Java 21 is the baseline.
+        @Nullable Map<String, Object> requiredCriteria, @Nullable Map<String, Object> optionalCriteria
     )
     {
         this.offset = validateIntegerArgument("offset", offset, 0, 0);
@@ -300,7 +301,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
      */
     public Page all() {
-        return new Page(null, null, null, false, ordering, requiredCriteria, optionalCriteria);
+        return new Page(null, null, null, false, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
     }
 
     /**

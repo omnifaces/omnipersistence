@@ -187,6 +187,14 @@ public class PageTest {
         }
 
         @Test
+        void orderingKeepsInsertionOrder() {
+            var page = Page.with().range(0, 10).orderBy("name", true).orderBy("email", false).orderBy("id", true).orderBy("dateOfBirth", false).build();
+            var expectedOrder = List.of("name", "email", "id", "dateOfBirth");
+            assertEquals(expectedOrder, List.copyOf(page.getOrdering().keySet()));
+            assertEquals(expectedOrder, List.copyOf(page.all().getOrdering().keySet()));
+        }
+
+        @Test
         void buildsWithRequiredCriteria() {
             var criteria = Map.<String, Object>of("name", Like.contains("john"));
             var page = Page.with().range(0, 10).allMatch(criteria).build();
