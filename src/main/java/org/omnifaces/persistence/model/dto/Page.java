@@ -143,8 +143,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         this.ordering = orderingOrDefault(ordering);
         this.lastOrderingValues = validateLastOrderingValues(lastOrderingValues, this.ordering);
         this.reversed = !this.lastOrderingValues.isEmpty() && reversed;
-        this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
-        this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
+        this.requiredCriteria = requiredCriteria != null ? Map.copyOf(requiredCriteria) : emptyMap();
+        this.optionalCriteria = optionalCriteria != null ? Map.copyOf(optionalCriteria) : emptyMap();
     }
 
     private static Map<String, Boolean> orderingOrDefault(@Nullable Map<String, Boolean> ordering) {

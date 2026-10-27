@@ -459,6 +459,16 @@ public class PageTest {
             assertFalse(all.isReversed());
         }
 
+        @Test
+        void allPreservesMapEntriesWhenMapIsChanges() {
+            Map<String, Object> required = new HashMap<>(Map.of("active", true));
+            var page = Page.with().range(5, 20).orderBy("name", true).allMatch(required).build();
+            var all = page.all();
+
+            // Changing original map should not impact Page
+            required.remove("active");
+            assertEquals(page.getRequiredCriteria(), Map.of("active", true));
+        }
     }
 
     @Nested
