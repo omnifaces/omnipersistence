@@ -18,7 +18,6 @@ import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -47,7 +46,6 @@ import static org.omnifaces.utils.reflect.Reflections.getActualTypeArguments;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
-import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import static org.omnifaces.utils.reflect.Reflections.map;
 import static org.omnifaces.utils.stream.Streams.stream;
 
@@ -59,7 +57,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,8 +79,6 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.NonUniqueResultException;
@@ -106,7 +101,6 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
-import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
@@ -188,11 +182,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
     private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
     private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
-    private static final String LOG_FINE_COMPUTED_GENERATED_ID_MAPPING = "Computed generated ID mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING = "Computed soft delete mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING = "Computed @ElementCollection mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING = "Computed @ManyToOne/@OneToOne mapping for %s: %s";
-    private static final String LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING = "Computed @OneToMany mapping for %s: %s";
     private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults may be slightly inaccurate. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
@@ -201,16 +190,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     @SuppressWarnings("rawtypes")
     private static final Map<Class<? extends BaseEntityService>, Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Boolean> GENERATED_ID_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, SoftDeleteData> SOFT_DELETE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ELEMENT_COLLECTION_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> MANY_OR_ONE_TO_ONE_MAPPINGS = new ConcurrentHashMap<>();
-    private static final Map<Class<? extends BaseEntity<?>>, Set<String>> ONE_TO_MANY_MAPPINGS = new ConcurrentHashMap<>();
 
     private final Class<I> identifierType;
     private final Class<E> entityType;
-    private final boolean generatedId;
-    private final SoftDeleteData softDeleteData;
+    private final EntityMetadata metadata;
 
     private Provider provider = Provider.UNKNOWN;
     private Database database = Database.UNKNOWN;
@@ -232,8 +215,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var typeMapping = TYPE_MAPPINGS.computeIfAbsent(getClass(), BaseEntityService::computeTypeMapping);
         identifierType = (Class<I>) typeMapping.getKey();
         entityType = (Class<E>) typeMapping.getValue();
-        generatedId = GENERATED_ID_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeGeneratedIdMapping);
-        softDeleteData = SOFT_DELETE_MAPPINGS.computeIfAbsent(entityType, BaseEntityService::computeSoftDeleteMapping);
+        metadata = EntityMetadata.of(entityType);
     }
 
     /**
@@ -243,10 +225,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        elementCollections = () -> ELEMENT_COLLECTION_MAPPINGS.computeIfAbsent(entityType, this::computeElementCollectionMapping);
-        manyOrOneToOnes = () -> MANY_OR_ONE_TO_ONE_MAPPINGS.computeIfAbsent(entityType, this::computeManyOrOneToOneMapping);
-        oneToManys = field -> ONE_TO_MANY_MAPPINGS.computeIfAbsent(entityType, this::computeOneToManyMapping).stream()
-            .anyMatch(oneToMany -> field.startsWith(oneToMany + '.'));
+        elementCollections = () -> metadata.getElementCollections(getEntityManager(), getProvider());
+        manyOrOneToOnes = () -> metadata.getManyOrOneToOnes(getEntityManager(), getProvider());
+        oneToManys = field -> metadata.isOneToMany(field, getEntityManager(), getProvider());
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
@@ -295,60 +276,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return new SimpleEntry<>(identifierType, entityType);
     }
 
-    private static boolean computeGeneratedIdMapping(Class<?> entityType) {
-        var generatedId = GeneratedIdEntity.class.isAssignableFrom(entityType) || !listAnnotatedFields(entityType, Id.class, GeneratedValue.class).isEmpty();
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_GENERATED_ID_MAPPING, entityType, generatedId));
-        return generatedId;
-    }
-
-    private static SoftDeleteData computeSoftDeleteMapping(Class<?> entityType) {
-        var softDeleteData = new SoftDeleteData(entityType);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_SOFT_DELETE_MAPPING, entityType, softDeleteData));
-        return softDeleteData;
-    }
-
-    private Set<String> computeElementCollectionMapping(Class<? extends BaseEntity<?>> entityType) {
-        var elementCollectionMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isElementCollection);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ELEMENTCOLLECTION_MAPPING, entityType, elementCollectionMapping));
-        return elementCollectionMapping;
-    }
-
-    private Set<String> computeManyOrOneToOneMapping(Class<? extends BaseEntity<?>> entityType) {
-        var manyOrOneToOneMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isManyOrOneToOne);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, manyOrOneToOneMapping));
-        return manyOrOneToOneMapping;
-    }
-
-    private Set<String> computeOneToManyMapping(Class<? extends BaseEntity<?>> entityType) {
-        var oneToManyMapping = computeEntityMapping(entityType, "", new HashSet<>(), getProvider()::isOneToMany);
-        logger.log(FINE, () -> format(LOG_FINE_COMPUTED_ONE_TO_MANY_MAPPING, entityType, oneToManyMapping));
-        return oneToManyMapping;
-    }
-
-    private Set<String> computeEntityMapping(
-        Class<?> type, String basePath, Set<Class<?>> nestedTypes, java.util.function.Predicate<Attribute<?, ?>> attributePredicate
-    )
-    {
-        var entityMapping = new HashSet<String>(2);
-        var entity = getEntityManager().getMetamodel().entity(type);
-
-        for (var attribute : entity.getAttributes()) {
-            if (attributePredicate.test(attribute)) {
-                entityMapping.add(basePath + attribute.getName());
-            }
-
-            if (attribute instanceof Bindable<?> bindable) {
-                Class<?> nestedType = bindable.getBindableJavaType();
-
-                if (BaseEntity.class.isAssignableFrom(nestedType) && nestedType != entityType && nestedTypes.add(nestedType)) {
-                    entityMapping.addAll(computeEntityMapping(nestedType, basePath + attribute.getName() + '.', nestedTypes, attributePredicate));
-                }
-            }
-        }
-
-        return unmodifiableSet(entityMapping);
-    }
-
     // Getters --------------------------------------------------------------------------------------------------------
 
     /**
@@ -394,7 +321,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Whether the ID is generated.
      */
     protected boolean isGeneratedId() {
-        return generatedId;
+        return metadata.isGeneratedId();
     }
 
     /**
@@ -773,7 +700,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected E getById(I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
 
-        if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
+        if (entity != null && !includeSoftDeleted && metadata.getSoftDeleteData().isSoftDeleted(entity)) {
             return null;
         }
 
@@ -809,10 +736,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Nullable
     public E getSoftDeletedById(I id) {
         return runWithCurrentInstance(() -> {
-            softDeleteData.checkSoftDeletable();
+            metadata.getSoftDeleteData().checkSoftDeletable();
             var entity = getEntityManager().find(entityType, id);
 
-            if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
+            if (entity != null && !metadata.getSoftDeleteData().isSoftDeleted(entity)) {
                 return null;
             }
 
@@ -859,7 +786,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             paramValues = Map.of("ids", copyOfIds);
         }
 
-        var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
+        var whereClause = metadata.getSoftDeleteData().getWhereClause(includeSoftDeleted);
         return list(
             select("")
                 + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (" + paramNames + ")"
@@ -900,7 +827,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected List<E> list(boolean includeSoftDeleted) {
         return list(
             select("")
-                + softDeleteData.getWhereClause(includeSoftDeleted)
+                + metadata.getSoftDeleteData().getWhereClause(includeSoftDeleted)
                 + " ORDER BY e.id DESC"
         );
     }
@@ -913,10 +840,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     public List<E> listSoftDeleted() {
         return runWithCurrentInstance(() -> {
-            softDeleteData.checkSoftDeletable();
+            metadata.getSoftDeleteData().checkSoftDeletable();
             return list(
                 select("")
-                    + softDeleteData.getWhereClause(true)
+                    + metadata.getSoftDeleteData().getWhereClause(true)
                     + " ORDER BY e.id DESC"
             );
         });
@@ -1060,11 +987,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     public I persist(E entity) {
         return runWithCurrentInstance(() -> {
             if (entity.getId() != null) {
-                if (generatedId || exists(entity)) {
+                if (metadata.isGeneratedId() || exists(entity)) {
                     throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
                 }
             }
-            else if (!generatedId) {
+            else if (!metadata.isGeneratedId()) {
                 throw new IllegalEntityStateException(entity, "Entity has no generated ID. You need to manually set it.");
             }
 
@@ -1100,7 +1027,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     public E update(E entity) {
         return runWithCurrentInstance(() -> {
             if (entity.getId() == null) {
-                if (generatedId) {
+                if (metadata.isGeneratedId()) {
                     throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
                 }
                 else {
@@ -1222,7 +1149,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E save(E entity) {
         return runWithCurrentInstance(() -> {
-            if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
+            if (metadata.isGeneratedId() && entity.getId() == null || !metadata.isGeneratedId() && !exists(entity)) {
                 persist(entity);
                 return entity;
             }
@@ -1281,8 +1208,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void softDelete(E entity) {
         runWithCurrentInstance(() -> {
-            softDeleteData.checkSoftDeletable();
-            softDeleteData.setSoftDeleted(manage(entity), true);
+            metadata.getSoftDeleteData().checkSoftDeletable();
+            metadata.getSoftDeleteData().setSoftDeleted(manage(entity), true);
         });
     }
 
@@ -1297,8 +1224,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void softUndelete(E entity) {
         runWithCurrentInstance(() -> {
-            softDeleteData.checkSoftDeletable();
-            softDeleteData.setSoftDeleted(manage(entity), false);
+            metadata.getSoftDeleteData().checkSoftDeletable();
+            metadata.getSoftDeleteData().setSoftDeleted(manage(entity), false);
         });
     }
 
