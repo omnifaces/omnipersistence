@@ -12,7 +12,6 @@
  */
 package org.omnifaces.persistence.model.dto;
 
-import static java.lang.Boolean.TRUE;
 import static java.lang.Integer.MAX_VALUE;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
@@ -20,12 +19,14 @@ import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
+import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 
 import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 import jakarta.annotation.Nullable;
 
@@ -89,6 +90,13 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * PartialResultList&lt;Foo&gt; second = fooService.getPage(page2, false);
  * </pre>
  *
+ * <pre>
+ *
+ * // Cursor-based (keyset) paging without holding the entity: only the ordering values of the last seen record are needed.
+ * Page page2 = Page.with().range(10, 10, Map.of("id", lastSeenId), false).orderBy("id", true).build();
+ * PartialResultList&lt;Foo&gt; second = fooService.getPage(page2, false);
+ * </pre>
+ *
  * @author Bauke Scholtz
  * @since 1.0
  * @see BaseEntityService
@@ -111,8 +119,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
     private final int offset;
     /** Maximum amount of records to be matched. */
     private final int limit;
-    /** Last entity of the previous page, if any. */
-    private final Identifiable<?> last;
+    /** Ordering values of the last record of the previous page, if any. */
+    private final Map<String, Object> lastOrderingValues;
     /** Whether value based paging is reversed. */
     private final boolean reversed;
     /** Ordering of results, keyed by property path, valued by whether to sort ascending. */
@@ -124,56 +132,47 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     // Constructors ---------------------------------------------------------------------------------------------------
 
-    /**
-     * Creates a new Page. You can for convenience also use {@link Page#of(int, int)} or the {@link Page#with()} builder.
-     *
-     * @param offset Zero-based offset of the page. May not be negative. Defaults to 0 when <code>null</code>.
-     * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE} when <code>null</code>.
-     * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to
-     * <code>{"id",false}</code>.
-     * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given
-     * criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
-     * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of
-     * given criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
-     */
-    public Page(
-        @Nullable Integer offset, @Nullable Integer limit, @Nullable LinkedHashMap<String, Boolean> ordering, @Nullable Map<String, Object> requiredCriteria,
-        @Nullable Map<String, Object> optionalCriteria
-    )
-    {
-        this(offset, limit, null, null, ordering, requiredCriteria, optionalCriteria);
-    }
-
-    /**
-     * Creates a new Page whereby value based paging will be performed instead of offset based paging when applicable. Value based paging is not applicable when
-     * the result type is a DTO, or when the ordering contains an aggregated field.
-     *
-     * @param offset Zero-based offset of the page. May not be negative. Defaults to 0 when <code>null</code>.
-     * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE} when <code>null</code>.
-     * @param last Last entity of the previous page. When not <code>null</code>, then value based paging will be performed instead of offset based paging when
-     * applicable.
-     * @param reversed Whether value based paging is reversed. This is ignored when last entity is <code>null</code>. Defaults to <code>false</code> when
-     * <code>null</code>.
-     * @param ordering Ordering of results. Map key represents property path and map value represents whether to sort ascending. Defaults to
-     * <code>{"id",false}</code>.
-     * @param requiredCriteria Required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given
-     * criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
-     * @param optionalCriteria Optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of
-     * given criteria. Defaults to an empty <code>Map</code> when <code>null</code>.
-     */
-    public Page(
-        @Nullable Integer offset, @Nullable Integer limit, @Nullable Identifiable<?> last, @Nullable Boolean reversed,
-        @Nullable LinkedHashMap<String, Boolean> ordering,
+    private Page(
+        @Nullable Integer offset, @Nullable Integer limit, @Nullable Map<String, Object> lastOrderingValues, boolean reversed,
+        @Nullable LinkedHashMap<String, Boolean> ordering, // TODO: Use SequencedMap once Java 21 is the baseline.
         @Nullable Map<String, Object> requiredCriteria, @Nullable Map<String, Object> optionalCriteria
     )
     {
         this.offset = validateIntegerArgument("offset", offset, 0, 0);
         this.limit = validateIntegerArgument("limit", limit, 1, MAX_VALUE);
-        this.last = last;
-        this.reversed = (last != null) && (reversed == TRUE);
-        this.ordering = !isEmpty(ordering) ? unmodifiableMap(ordering) : singletonMap(ID, false);
+        this.ordering = orderingOrDefault(ordering);
+        this.lastOrderingValues = validateLastOrderingValues(lastOrderingValues, this.ordering);
+        this.reversed = !this.lastOrderingValues.isEmpty() && reversed;
         this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
         this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
+    }
+
+    private static Map<String, Boolean> orderingOrDefault(@Nullable Map<String, Boolean> ordering) {
+        return !isEmpty(ordering) ? unmodifiableMap(new LinkedHashMap<>(ordering)) : singletonMap(ID, false);
+    }
+
+    private static Map<String, Object> validateLastOrderingValues(@Nullable Map<String, Object> lastOrderingValues, Map<String, Boolean> ordering) {
+        if (lastOrderingValues == null) {
+            return emptyMap();
+        }
+
+        if (!lastOrderingValues.keySet().equals(ordering.keySet())) {
+            throw new IllegalArgumentException(
+                "Argument 'lastOrderingValues' must have exactly the keys of ordering " + ordering.keySet() + " but has " + lastOrderingValues.keySet()
+            );
+        }
+
+        return unmodifiableMap(collectOrderingValues(ordering, lastOrderingValues::get));
+    }
+
+    private static Map<String, Object> collectOrderingValues(Map<String, Boolean> ordering, Function<String, Object> valueOfField) {
+        var orderingValues = new LinkedHashMap<String, Object>(ordering.size());
+
+        for (var field : ordering.keySet()) {
+            orderingValues.put(field, valueOfField.apply(field));
+        }
+
+        return orderingValues;
     }
 
     private static int validateIntegerArgument(String argumentName, Integer argumentValue, int minValue, int defaultValue) {
@@ -209,18 +208,19 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
     }
 
     /**
-     * Returns the last entity of the previous page, if any. If not <code>null</code>, then value based paging will be performed instead of offset based paging
-     * when applicable.
+     * Returns the ordering values of the last record of the previous page. This is empty when there is no such record. Otherwise it has exactly the keys of
+     * {@link #getOrdering()}, in the same order, and map value represents the value of that property in the last record, which may be <code>null</code>. If not
+     * empty, then value based paging will be performed instead of offset based paging when applicable. Value based paging is not applicable when the result
+     * type is a DTO, or when the ordering contains an aggregated field.
      *
-     * @return The last entity of the previous page, if any.
+     * @return The ordering values of the last record of the previous page, or an empty map if there is none.
      */
-    @Nullable
-    public Identifiable<?> getLast() {
-        return last;
+    public Map<String, Object> getLastOrderingValues() {
+        return lastOrderingValues;
     }
 
     /**
-     * Returns whether the value based paging is reversed. This is only used when {@link #getLast()} is not <code>null</code>.
+     * Returns whether the value based paging is reversed. This is only used when {@link #getLastOrderingValues()} is not empty.
      *
      * @return Whether the value based paging is reversed.
      */
@@ -269,7 +269,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
         return Objects.equals(offset, other.offset)
             && Objects.equals(limit, other.limit)
-            && Objects.equals(last, other.last)
+            && Objects.equals(lastOrderingValues, other.lastOrderingValues)
             && Objects.equals(reversed, other.reversed)
             && Objects.equals(ordering, other.ordering)
             && Objects.equals(requiredCriteria, other.requiredCriteria)
@@ -278,7 +278,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     @Override
     public int hashCode() {
-        return Objects.hash(Page.class, offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
+        return Objects.hash(Page.class, offset, limit, lastOrderingValues, reversed, ordering, requiredCriteria, optionalCriteria);
     }
 
     @Override
@@ -286,7 +286,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         return new StringBuilder("Page[")
             .append(offset).append(",")
             .append(limit).append(",")
-            .append(last).append(",")
+            .append(lastOrderingValues).append(",")
             .append(reversed).append(",")
             .append(ordering).append(",")
             .append(new TreeMap<>(requiredCriteria)).append(",")
@@ -301,7 +301,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * @return A clone of the current page which returns all results matching the current ordering, required criteria and optional criteria.
      */
     public Page all() {
-        return new Page(null, null, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
+        return new Page(null, null, null, false, new LinkedHashMap<>(ordering), requiredCriteria, optionalCriteria);
     }
 
     /**
@@ -341,13 +341,14 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         private Integer offset;
         private Integer limit;
         private Identifiable<?> last;
+        private Map<String, Object> lastOrderingValues;
         private boolean reversed;
         private final LinkedHashMap<String, Boolean> ordering = new LinkedHashMap<>(2);
         private Map<String, Object> requiredCriteria;
         private Map<String, Object> optionalCriteria;
 
         /**
-         * Set the range for offset-based paging. Mutually exclusive with {@link #range(Identifiable, int, boolean)}.
+         * Set the range for offset-based paging. Mutually exclusive with the other <code>range</code> methods.
          *
          * @param offset Zero-based offset of the page. May not be negative. Defaults to 0.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
@@ -355,10 +356,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * @return This builder.
          */
         public Builder range(int offset, int limit) {
-            if (this.offset != null || this.last != null) {
-                throw new IllegalStateException("Range is already set");
-            }
-
+            checkRangeNotSet();
             this.offset = offset;
             this.limit = limit;
             return this;
@@ -366,7 +364,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
         /**
          * Set the range for cursor-based (value-based) paging. Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the last entity,
-         * keeping performance stable regardless of page depth. Mutually exclusive with {@link #range(int, int)}.
+         * keeping performance stable regardless of page depth. Mutually exclusive with the other <code>range</code> methods.
+         * <p>
+         * The page does not retain the entity: {@link #build()} extracts the values of the ordering fields from it via their getters. A nested property path
+         * whose intermediate value is <code>null</code> gets the value <code>null</code>.
          *
          * @param last Last entity of the previous page. May not be <code>null</code>.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
@@ -374,16 +375,46 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * @throws NullPointerException When last entity is <code>null</code>.
          * @throws IllegalStateException When a range is already set in this builder.
          * @return This builder.
+         * @see Page#getLastOrderingValues()
          */
         public Builder range(Identifiable<?> last, int limit, boolean reversed) {
-            if (this.offset != null || this.last != null) {
-                throw new IllegalStateException("Range is already set");
-            }
-
+            checkRangeNotSet();
             this.last = requireNonNull(last, "last");
             this.limit = limit;
             this.reversed = reversed;
             return this;
+        }
+
+        /**
+         * Set the range for cursor-based (value-based) paging. Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the ordering
+         * values of the last record of the previous page, keeping performance stable regardless of page depth. Mutually exclusive with the other
+         * <code>range</code> methods.
+         *
+         * @param offset Zero-based offset of the page, as reported by the result. May not be negative. This is only applied as SQL {@code OFFSET} when value
+         * based paging is not applicable.
+         * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
+         * @param lastOrderingValues Ordering values of the last record of the previous page. Map key represents property path and map value represents the
+         * value of that property in the last record, which may be <code>null</code>. Each value must be of the Java type of the property, e.g. a
+         * <code>Long</code> for a <code>Long</code> ID. The keys must be exactly the keys of the ordering. May not be <code>null</code>.
+         * @param reversed Whether to navigate in reverse order (i.e. towards the previous page).
+         * @throws NullPointerException When last ordering values is <code>null</code>.
+         * @throws IllegalStateException When a range is already set in this builder.
+         * @return This builder.
+         * @see Page#getLastOrderingValues()
+         */
+        public Builder range(int offset, int limit, Map<String, Object> lastOrderingValues, boolean reversed) {
+            checkRangeNotSet();
+            this.offset = offset;
+            this.limit = limit;
+            this.lastOrderingValues = requireNonNull(lastOrderingValues, "lastOrderingValues");
+            this.reversed = reversed;
+            return this;
+        }
+
+        private void checkRangeNotSet() {
+            if (limit != null) {
+                throw new IllegalStateException("Range is already set");
+            }
         }
 
         /**
@@ -439,9 +470,28 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * Build the page.
          *
          * @return The built page.
+         * @throws IllegalArgumentException When the keys of the last ordering values do not match the keys of the ordering.
+         * @throws IllegalStateException When the last entity has no getter for an ordering field.
          */
         public Page build() {
-            return new Page(offset, limit, last, reversed, ordering, requiredCriteria, optionalCriteria);
+            var orderingValues = last != null
+                ? collectOrderingValues(orderingOrDefault(ordering), field -> invokeNestedGetter(last, field))
+                : lastOrderingValues;
+            return new Page(offset, limit, orderingValues, reversed, ordering, requiredCriteria, optionalCriteria);
+        }
+
+        private static Object invokeNestedGetter(Object instance, String path) {
+            var value = instance;
+
+            for (var property : path.split("\\.")) {
+                if (value == null) {
+                    return null;
+                }
+
+                value = invokeGetter(value, property);
+            }
+
+            return value;
         }
 
     }

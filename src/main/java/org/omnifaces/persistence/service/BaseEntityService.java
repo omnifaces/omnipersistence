@@ -2160,7 +2160,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     @SuppressWarnings("unchecked")
-    private <T extends E, V extends Comparable<V>> Predicate buildValueBasedPagingPredicate(
+    private <V extends Comparable<V>> Predicate buildValueBasedPagingPredicate(
         Page page, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
@@ -2170,11 +2170,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var predicates = new ArrayList<Predicate>(page.getOrdering().size());
         var orderByFields = new HashMap<Expression<V>, ParameterExpression<V>>();
-        var last = (T) page.getLast();
+        var lastOrderingValues = page.getLastOrderingValues();
 
         for (var order : page.getOrdering().entrySet()) {
             var field = order.getKey();
-            var value = invokeGetter(last, field);
+            var value = lastOrderingValues.get(field);
             var path = (Expression<V>) pathResolver.get(field);
             ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameters).create(value);
             var predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
