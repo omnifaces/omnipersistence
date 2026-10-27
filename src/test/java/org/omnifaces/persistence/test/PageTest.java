@@ -36,6 +36,17 @@ import org.omnifaces.persistence.model.dto.Page;
  */
 public class PageTest {
 
+    /**
+     * Keys which a {@link HashMap} iterates in a different order than they were inserted.
+     */
+    private static final List<String> CRITERIA_INSERTION_ORDER = List.of("name", "email", "id", "dateOfBirth");
+
+    private static Map<String, Object> criteriaInInsertionOrder() {
+        var criteria = new LinkedHashMap<String, Object>();
+        CRITERIA_INSERTION_ORDER.forEach(key -> criteria.put(key, Like.contains(key)));
+        return criteria;
+    }
+
     @Nested
     class Constants {
 
@@ -192,6 +203,29 @@ public class PageTest {
             var expectedOrder = List.of("name", "email", "id", "dateOfBirth");
             assertEquals(expectedOrder, List.copyOf(page.getOrdering().keySet()));
             assertEquals(expectedOrder, List.copyOf(page.all().getOrdering().keySet()));
+        }
+
+        @Test
+        void requiredCriteriaKeepsInsertionOrder() {
+            var page = Page.with().allMatch(criteriaInInsertionOrder()).build();
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.getRequiredCriteria().keySet()));
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.all().getRequiredCriteria().keySet()));
+        }
+
+        @Test
+        void optionalCriteriaKeepsInsertionOrder() {
+            var page = Page.with().anyMatch(criteriaInInsertionOrder()).build();
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.getOptionalCriteria().keySet()));
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.all().getOptionalCriteria().keySet()));
+        }
+
+        @Test
+        void criteriaWithNullValueIsAccepted() {
+            var criteria = new HashMap<String, Object>();
+            criteria.put("name", null);
+            var page = Page.with().allMatch(criteria).anyMatch(criteria).build();
+            assertEquals(singletonMap("name", null), page.getRequiredCriteria());
+            assertEquals(singletonMap("name", null), page.getOptionalCriteria());
         }
 
         @Test
@@ -459,22 +493,6 @@ public class PageTest {
             assertFalse(all.isReversed());
         }
 
-        @Test
-        void allPreservesMapEntriesWhenMapIsChanged() {
-            String requiredKey = "required";
-            String optionalKey = "optional";
-            Map<String, Object> required = new HashMap<>(Map.of(requiredKey, true));
-            Map<String, Object> optional = new HashMap<>(Map.of(optionalKey, true));
-            var page = Page.with().range(5, 20).orderBy("name", true).allMatch(required).anyMatch(optional).build();
-            var all = page.all();
-
-            // Changing original map should not impact Page
-            required.remove(requiredKey);
-            optional.remove(optionalKey);
-            assertEquals(all.getRequiredCriteria(), Map.of(requiredKey, true));
-            assertEquals(all.getOptionalCriteria(), Map.of(optionalKey, true));
-        }
-
     }
 
     @Nested
@@ -584,6 +602,26 @@ public class PageTest {
             var page = builder.build();
             builder.orderBy("name", true);
             assertEquals(Map.of("id", true), page.getOrdering());
+        }
+
+        @Test
+        void requiredCriteriaIsNotAffectedByLaterChangesOfGivenMap() {
+            var criteria = new HashMap<String, Object>(Map.of("name", "test"));
+            var page = Page.with().allMatch(criteria).build();
+            criteria.put("name", "changed");
+            criteria.put("new", "value");
+            assertEquals(Map.of("name", "test"), page.getRequiredCriteria());
+            assertEquals(Map.of("name", "test"), page.all().getRequiredCriteria());
+        }
+
+        @Test
+        void optionalCriteriaIsNotAffectedByLaterChangesOfGivenMap() {
+            var criteria = new HashMap<String, Object>(Map.of("name", "test"));
+            var page = Page.with().anyMatch(criteria).build();
+            criteria.put("name", "changed");
+            criteria.put("new", "value");
+            assertEquals(Map.of("name", "test"), page.getOptionalCriteria());
+            assertEquals(Map.of("name", "test"), page.all().getOptionalCriteria());
         }
 
         @Test
