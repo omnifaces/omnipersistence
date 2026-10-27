@@ -14,6 +14,7 @@ package org.omnifaces.persistence.model;
 
 import java.io.Serializable;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
@@ -74,6 +75,7 @@ public abstract class VersionedBaseEntity<I extends Comparable<I> & Serializable
     private Long version;
 
     @Override
+    @Nullable
     public Long getVersion() {
         return version;
     }

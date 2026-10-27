@@ -28,6 +28,8 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import jakarta.annotation.Nullable;
+
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -724,12 +726,13 @@ public class BaseEntityTest {
         }
 
         @Override
+        @Nullable
         public Long getId() {
             return id;
         }
 
         @Override
-        public void setId(Long id) {
+        public void setId(@Nullable Long id) {
             this.id = id;
         }
 

@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -87,7 +88,7 @@ public final class Numeric extends Criteria<Number> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return modelValue != null && Objects.equals(parseNumber(modelValue, getValue().getClass()), getValue());
     }
 

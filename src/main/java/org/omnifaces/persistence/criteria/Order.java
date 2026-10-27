@@ -14,6 +14,7 @@ package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.ParameterExpression;
@@ -157,7 +158,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean applies(Object value) {
+    public boolean applies(@Nullable Object value) {
         if (!(value instanceof Comparable)) {
             return false;
         }

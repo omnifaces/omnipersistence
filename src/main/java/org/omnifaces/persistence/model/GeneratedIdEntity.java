@@ -16,6 +16,7 @@ import static jakarta.persistence.GenerationType.IDENTITY;
 
 import java.io.Serializable;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
@@ -58,12 +59,13 @@ public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> 
     private I id;
 
     @Override
+    @Nullable
     public I getId() {
         return id;
     }
 
     @Override
-    public void setId(I id) {
+    public void setId(@Nullable I id) {
         this.id = id;
     }
 

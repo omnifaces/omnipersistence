@@ -31,6 +31,8 @@ import java.util.logging.Logger;
 
 import javax.sql.CommonDataSource;
 
+import jakarta.annotation.Nullable;
+
 /**
  * <p>
  * A wrapper around a {@link CommonDataSource} that delegates all property access to the wrapped data source via reflection-based JavaBeans introspection. This
@@ -89,6 +91,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The property value, or <code>null</code> when the wrapped data source does not have the property.
      */
     @SuppressWarnings("unchecked")
+    @Nullable
     public <T> T get(String name) {
 
         PropertyDescriptor property = dataSourceProperties.get(name);

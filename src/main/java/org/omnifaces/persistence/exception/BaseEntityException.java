@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.exception;
 
+import jakarta.annotation.Nullable;
 import jakarta.ejb.ApplicationException;
 import jakarta.persistence.PersistenceException;
 
@@ -43,7 +44,7 @@ public abstract class BaseEntityException extends PersistenceException {
      * @param entity The entity associated with this exception, may be <code>null</code> when the exception is not about a specific entity instance.
      * @param message The detail message.
      */
-    public BaseEntityException(BaseEntity<?> entity, String message) {
+    public BaseEntityException(@Nullable BaseEntity<?> entity, String message) {
         super(message);
         this.entity = entity;
     }
@@ -55,6 +56,7 @@ public abstract class BaseEntityException extends PersistenceException {
      * @return The entity associated with this exception, or <code>null</code> when the exception is not about a specific entity instance.
      */
     @SuppressWarnings("unchecked")
+    @Nullable
     public <E extends BaseEntity<?>> E getEntity() {
         return (E) entity;
     }

@@ -75,6 +75,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.StreamSupport;
 
+import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.ElementCollection;
@@ -258,6 +259,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @return The currently active {@link BaseEntityService} instance, or <code>null</code>.
      */
+    @Nullable
     public static BaseEntityService<?, ?> getCurrentBaseEntityService() {
         return CURRENT_INSTANCE.get();
     }
@@ -755,6 +757,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param id Entity ID to get entity by.
      * @return Found entity, or <code>null</code> if there is none.
      */
+    @Nullable
     public E getById(I id) {
         return runWithCurrentInstance(() -> getById(id, false));
     }
@@ -766,6 +769,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, or <code>null</code> if there is none.
      */
+    @Nullable
     protected E getById(I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
 
@@ -783,6 +787,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entityGraphName Entity graph name.
      * @return Found entity, or <code>null</code> if there is none.
      */
+    @Nullable
     public E getByIdWithLoadGraph(I id, String entityGraphName) {
         return runWithCurrentInstance(() -> {
             var entityGraph = entityManager.getEntityGraph(entityGraphName);
@@ -801,6 +806,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found soft deleted entity, or <code>null</code> if there is none.
      * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
+    @Nullable
     public E getSoftDeletedById(I id) {
         return runWithCurrentInstance(() -> {
             softDeleteData.checkSoftDeletable();
@@ -1383,7 +1389,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
      */
     @SuppressWarnings({ "hiding", "unchecked" })
-    protected <E> E manageIfNecessary(E entity) {
+    @Nullable
+    protected <E> E manageIfNecessary(@Nullable E entity) {
         if (entity == null) {
             return null;
         }

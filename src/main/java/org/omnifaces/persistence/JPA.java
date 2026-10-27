@@ -35,6 +35,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import jakarta.annotation.Nullable;
 import jakarta.enterprise.inject.Typed;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
@@ -160,6 +161,7 @@ public final class JPA {
      * @return Single result of given typed query, or <code>null</code> if there is none.
      * @throws NonUniqueResultException When there is no unique result.
      */
+    @Nullable
     public static <T> T getSingleResultOrNull(TypedQuery<T> typedQuery) {
         try {
             return typedQuery.getSingleResult();
@@ -179,6 +181,7 @@ public final class JPA {
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
+    @Nullable
     public static <T> T getSingleResultOrNull(Query query) {
         try {
             return (T) query.getSingleResult();
@@ -224,6 +227,7 @@ public final class JPA {
      * @param typedQuery The involved typed query.
      * @return First result of given typed query, or <code>null</code> if there is none.
      */
+    @Nullable
     public static <T> T getFirstResultOrNull(TypedQuery<T> typedQuery) {
         return findFirstResult(typedQuery).orElse(null);
     }
@@ -238,6 +242,7 @@ public final class JPA {
      * @throws ClassCastException When <code>T</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
+    @Nullable
     public static <T> T getFirstResultOrNull(Query query) {
         return (T) findFirstResult(query).orElse(null);
     }

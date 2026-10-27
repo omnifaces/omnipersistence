@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -72,7 +73,7 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         return modelValue instanceof Comparable && getValue().contains((T) modelValue);
     }
 

@@ -15,6 +15,7 @@ package org.omnifaces.persistence.criteria;
 import java.io.Serializable;
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.ParameterExpression;
@@ -81,11 +82,11 @@ public abstract class Criteria<T> implements Serializable {
      * @throws NullPointerException When given criteria value is <code>null</code>.
      * @throws IllegalArgumentException When given criteria value cannot be reasonably parsed.
      */
-    protected Criteria(T value) {
+    protected Criteria(@Nullable T value) {
         this(value, false, false);
     }
 
-    Criteria(T value, boolean nestable, boolean nullable) {
+    Criteria(@Nullable T value, boolean nestable, boolean nullable) {
         if (value instanceof Criteria && (!nestable || value.getClass() == getClass())) {
             throw new IllegalArgumentException("You cannot nest " + value + " in " + this);
         }
@@ -109,6 +110,7 @@ public abstract class Criteria<T> implements Serializable {
      * @param parameterBuilder You must use this to create a {@link ParameterExpression} for the criteria value.
      * @return A predicate for the criteria value, or <code>null</code> to impose no restriction.
      */
+    @Nullable
     public abstract Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder);
 
     /**
@@ -120,7 +122,7 @@ public abstract class Criteria<T> implements Serializable {
      * @throws IllegalArgumentException When given model value cannot be reasonably parsed.
      * @throws UnsupportedOperationException When this method is not implemented yet.
      */
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         throw new UnsupportedOperationException("This method is not implemented yet.");
     }
 
@@ -178,7 +180,7 @@ public abstract class Criteria<T> implements Serializable {
          * @param value The parameter value, may be <code>null</code>.
          * @return A new parameter expression.
          */
-        <T> ParameterExpression<T> create(Object value);
+        <T> ParameterExpression<T> create(@Nullable Object value);
 
     }
 

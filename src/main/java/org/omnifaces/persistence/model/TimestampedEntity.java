@@ -17,6 +17,7 @@ import static java.time.Instant.now;
 import java.io.Serializable;
 import java.time.Instant;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
@@ -109,6 +110,7 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     }
 
     @Override
+    @Nullable
     public Instant getCreated() {
         return created;
     }
@@ -119,6 +121,7 @@ public abstract class TimestampedEntity<I extends Comparable<I> & Serializable> 
     }
 
     @Override
+    @Nullable
     public Instant getLastModified() {
         return lastModified;
     }

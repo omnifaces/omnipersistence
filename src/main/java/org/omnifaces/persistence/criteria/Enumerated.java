@@ -14,6 +14,7 @@ package org.omnifaces.persistence.criteria;
 
 import java.util.Objects;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -38,7 +39,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
 
     private static final long serialVersionUID = 1L;
 
-    private Enumerated(Enum<?> value) {
+    private Enumerated(@Nullable Enum<?> value) {
         super(value, false, true);
     }
 
@@ -48,7 +49,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
      * @param value The enum constant, may be <code>null</code> to match <code>path IS NULL</code>.
      * @return A new enumerated criteria.
      */
-    public static Enumerated value(Enum<?> value) {
+    public static Enumerated value(@Nullable Enum<?> value) {
         return new Enumerated(value);
     }
 
@@ -67,6 +68,7 @@ public final class Enumerated extends Criteria<Enum<?>> {
     }
 
     @Override
+    @Nullable
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         return getValue() == null ? null : criteriaBuilder.equal(path, parameterBuilder.create(getValue()));
     }

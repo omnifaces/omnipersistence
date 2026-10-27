@@ -20,6 +20,7 @@ import static org.omnifaces.utils.stream.Streams.stream;
 import java.util.Objects;
 import java.util.Set;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
@@ -149,7 +150,7 @@ public final class Like extends Criteria<String> {
     }
 
     @Override
-    public boolean applies(Object modelValue) {
+    public boolean applies(@Nullable Object modelValue) {
         if (modelValue == null) {
             return false;
         }

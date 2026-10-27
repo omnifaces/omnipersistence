@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.model;
 
+import jakarta.annotation.Nullable;
+
 /**
  * <p>
  * Base interface for versioned entity. Implemented by {@link VersionedBaseEntity} and {@link VersionedEntity}.
@@ -28,6 +30,7 @@ public interface Versioned {
      *
      * @return The version, or <code>null</code> if the entity is not persisted yet.
      */
+    @Nullable
     Long getVersion();
 
 }
