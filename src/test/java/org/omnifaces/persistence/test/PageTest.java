@@ -36,6 +36,17 @@ import org.omnifaces.persistence.model.dto.Page;
  */
 public class PageTest {
 
+    /**
+     * Keys which a {@link HashMap} iterates in a different order than they were inserted.
+     */
+    private static final List<String> CRITERIA_INSERTION_ORDER = List.of("name", "email", "id", "dateOfBirth");
+
+    private static Map<String, Object> criteriaInInsertionOrder() {
+        var criteria = new LinkedHashMap<String, Object>();
+        CRITERIA_INSERTION_ORDER.forEach(key -> criteria.put(key, Like.contains(key)));
+        return criteria;
+    }
+
     @Nested
     class Constants {
 
@@ -195,6 +206,29 @@ public class PageTest {
         }
 
         @Test
+        void requiredCriteriaKeepsInsertionOrder() {
+            var page = Page.with().allMatch(criteriaInInsertionOrder()).build();
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.getRequiredCriteria().keySet()));
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.all().getRequiredCriteria().keySet()));
+        }
+
+        @Test
+        void optionalCriteriaKeepsInsertionOrder() {
+            var page = Page.with().anyMatch(criteriaInInsertionOrder()).build();
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.getOptionalCriteria().keySet()));
+            assertEquals(CRITERIA_INSERTION_ORDER, List.copyOf(page.all().getOptionalCriteria().keySet()));
+        }
+
+        @Test
+        void criteriaWithNullValueIsAccepted() {
+            var criteria = new HashMap<String, Object>();
+            criteria.put("name", null);
+            var page = Page.with().allMatch(criteria).anyMatch(criteria).build();
+            assertEquals(singletonMap("name", null), page.getRequiredCriteria());
+            assertEquals(singletonMap("name", null), page.getOptionalCriteria());
+        }
+
+        @Test
         void buildsWithRequiredCriteria() {
             var criteria = Map.<String, Object>of("name", Like.contains("john"));
             var page = Page.with().range(0, 10).allMatch(criteria).build();
@@ -280,6 +314,26 @@ public class PageTest {
             entity.setParent(parent);
             var page = Page.with().range(entity, 10, false).orderBy("parent.name", true).build();
             assertEquals(Map.of("parent.name", "parent"), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeReadsOrderingValueOfLazyProxyViaItsGetter() {
+            var parent = new TestEntity();
+            parent.setName("parent");
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setParent(new LazyTestEntityProxy(parent));
+            var page = Page.with().range(entity, 10, false).orderBy("parent.name", true).build();
+            assertEquals(Map.of("parent.name", "parent"), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeReadsOrderingValueOfPropertyWithoutField() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setName("name");
+            var page = Page.with().range(entity, 10, false).orderBy("upperCaseName", true).build();
+            assertEquals(Map.of("upperCaseName", "NAME"), page.getLastOrderingValues());
         }
 
         @Test
@@ -581,6 +635,26 @@ public class PageTest {
         }
 
         @Test
+        void requiredCriteriaIsNotAffectedByLaterChangesOfGivenMap() {
+            var criteria = new HashMap<String, Object>(Map.of("name", "test"));
+            var page = Page.with().allMatch(criteria).build();
+            criteria.put("name", "changed");
+            criteria.put("new", "value");
+            assertEquals(Map.of("name", "test"), page.getRequiredCriteria());
+            assertEquals(Map.of("name", "test"), page.all().getRequiredCriteria());
+        }
+
+        @Test
+        void optionalCriteriaIsNotAffectedByLaterChangesOfGivenMap() {
+            var criteria = new HashMap<String, Object>(Map.of("name", "test"));
+            var page = Page.with().anyMatch(criteria).build();
+            criteria.put("name", "changed");
+            criteria.put("new", "value");
+            assertEquals(Map.of("name", "test"), page.getOptionalCriteria());
+            assertEquals(Map.of("name", "test"), page.all().getOptionalCriteria());
+        }
+
+        @Test
         void orderingIsUnmodifiable() {
             var page = Page.with().orderBy("name", true).build();
             assertThrows(UnsupportedOperationException.class, () -> page.getOrdering().put("new", false));
@@ -652,6 +726,28 @@ public class PageTest {
 
         public void setFieldWithoutStandardGetter(String fieldWithoutStandardGetter) {
             this.fieldWithoutStandardGetter = fieldWithoutStandardGetter;
+        public String getUpperCaseName() {
+            return name == null ? null : name.toUpperCase();
+        }
+
+    }
+
+    /**
+     * Mimics a lazy loading proxy: a subclass whose own fields stay empty, and whose getters delegate to the loaded entity.
+     */
+    static class LazyTestEntityProxy extends TestEntity {
+
+        private static final long serialVersionUID = 1L;
+
+        private final TestEntity target;
+
+        LazyTestEntityProxy(TestEntity target) {
+            this.target = target;
+        }
+
+        @Override
+        public String getName() {
+            return target.getName();
         }
 
     }
@@ -660,7 +756,7 @@ public class PageTest {
 
         private static final long serialVersionUID = 1L;
 
-        @SuppressWarnings({ "unused", "serial" })
+        @SuppressWarnings("unused")
         private final Object unserializableState = new Object();
 
     }

@@ -14,6 +14,8 @@ package org.omnifaces.persistence.test.service;
 
 import static jakarta.transaction.Transactional.TxType.REQUIRED;
 
+import java.util.Map;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -28,6 +30,12 @@ public class PhoneServiceCDI extends PhoneService {
     @Transactional(REQUIRED)
     public PartialResultList<Phone> getPageWithOwners(Page page, boolean count) {
         return super.getPageWithOwners(page, count);
+    }
+
+    @Override
+    @Transactional(REQUIRED)
+    public Map<String, Object> getLastOrderingValuesOfCursorRangeFrom(Long phoneId, String orderingField) {
+        return super.getLastOrderingValuesOfCursorRangeFrom(phoneId, orderingField);
     }
 
 }

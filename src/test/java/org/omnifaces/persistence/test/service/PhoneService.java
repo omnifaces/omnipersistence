@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import java.util.Map;
+
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Phone;
@@ -25,6 +27,14 @@ public abstract class PhoneService extends BaseEntityService<Long, Phone> {
 
     public PartialResultList<Phone> getAllWithOwners() {
         return getPageWithOwners(Page.ALL, false);
+    }
+
+    /**
+     * Loads the phone and builds a cursor range from it in the same transaction, so that its lazy associations are still loadable.
+     */
+    public Map<String, Object> getLastOrderingValuesOfCursorRangeFrom(Long phoneId, String orderingField) {
+        var phone = getById(phoneId);
+        return Page.with().range(phone, 10, false).orderBy(orderingField, true).build().getLastOrderingValues();
     }
 
 }

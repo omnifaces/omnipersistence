@@ -752,6 +752,13 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testCursorRangeFromEntityReadsOrderingValueThroughLazyAssociation() {
+        var phone = phoneService().getAllWithOwners().get(0);
+        var lastOrderingValues = phoneService().getLastOrderingValuesOfCursorRangeFrom(phone.getId(), "owner.email");
+        assertEquals(Map.of("owner.email", phone.getOwner().getEmail()), lastOrderingValues, "Ordering value is read through the lazy owner");
+    }
+
+    @Test
     void testCursorBasedPagingWithOrderingValues() {
         var page1 = personService().getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
         var lastSeenId = page1.get(page1.size() - 1).getId();

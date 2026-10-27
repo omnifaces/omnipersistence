@@ -143,8 +143,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         this.ordering = orderingOrDefault(ordering);
         this.lastOrderingValues = validateLastOrderingValues(lastOrderingValues, this.ordering);
         this.reversed = !this.lastOrderingValues.isEmpty() && reversed;
-        this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(requiredCriteria) : emptyMap();
-        this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(optionalCriteria) : emptyMap();
+        this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(new LinkedHashMap<>(requiredCriteria)) : emptyMap();
+        this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(new LinkedHashMap<>(optionalCriteria)) : emptyMap();
     }
 
     private static Map<String, Boolean> orderingOrDefault(@Nullable Map<String, Boolean> ordering) {
@@ -238,7 +238,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
     }
 
     /**
-     * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+     * Returns the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria. The
+     * iteration order is the one of the map given to the builder.
      *
      * @return The required criteria.
      */
@@ -248,6 +249,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     /**
      * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+     * The iteration order is the one of the map given to the builder.
      *
      * @return The optional criteria.
      */
