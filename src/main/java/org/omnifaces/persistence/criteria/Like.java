@@ -131,7 +131,7 @@ public final class Like extends Criteria<String> {
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         Class<?> type = path.getJavaType();
 
-        if (type.isEnum() && path instanceof Path && isEnumeratedByOrdinal((Path<?>) path)) {
+        if (type.isEnum() && path instanceof Path p && isEnumeratedByOrdinal(p)) {
             Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
             return matches.isEmpty()
                 ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1))

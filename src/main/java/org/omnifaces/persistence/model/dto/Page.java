@@ -252,15 +252,13 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     @Override
     public boolean equals(Object object) {
-        if (!(object instanceof Page)) {
+        if (!(object instanceof Page other)) {
             return false;
         }
 
         if (object == this) {
             return true;
         }
-
-        Page other = (Page) object;
 
         return Objects.equals(offset, other.offset)
             && Objects.equals(limit, other.limit)

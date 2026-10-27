@@ -107,11 +107,11 @@ public final class Bool extends Criteria<Boolean> {
         if (value == null) {
             return false;
         }
-        if (value instanceof Boolean) {
-            return (Boolean) value;
+        if (value instanceof Boolean bool) {
+            return bool;
         }
-        else if (value instanceof Number) {
-            return ((Number) value).doubleValue() > 0;
+        else if (value instanceof Number number) {
+            return number.doubleValue() > 0;
         }
         else {
             String valueAsString = value.toString();

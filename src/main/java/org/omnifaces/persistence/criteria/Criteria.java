@@ -147,8 +147,8 @@ public abstract class Criteria<T> implements Serializable {
     public static Object unwrap(Object possibleCriteria) {
         Object value = possibleCriteria;
 
-        while (value instanceof Criteria) {
-            value = ((Criteria<?>) value).getValue();
+        while (value instanceof Criteria criteria) {
+            value = criteria.getValue();
         }
 
         return value;
