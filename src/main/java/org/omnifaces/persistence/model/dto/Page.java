@@ -22,6 +22,7 @@ import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -143,8 +144,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         this.ordering = orderingOrDefault(ordering);
         this.lastOrderingValues = validateLastOrderingValues(lastOrderingValues, this.ordering);
         this.reversed = !this.lastOrderingValues.isEmpty() && reversed;
-        this.requiredCriteria = requiredCriteria != null ? Map.copyOf(requiredCriteria) : emptyMap();
-        this.optionalCriteria = optionalCriteria != null ? Map.copyOf(optionalCriteria) : emptyMap();
+        this.requiredCriteria = requiredCriteria != null ? unmodifiableMap(new HashMap<>(requiredCriteria)) : emptyMap();
+        this.optionalCriteria = optionalCriteria != null ? unmodifiableMap(new HashMap<>(optionalCriteria)) : emptyMap();
     }
 
     private static Map<String, Boolean> orderingOrDefault(@Nullable Map<String, Boolean> ordering) {
