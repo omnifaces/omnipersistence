@@ -42,7 +42,7 @@ public final class Bool extends Criteria<Boolean> {
 
     private static final long serialVersionUID = 1L;
 
-    private Bool(Boolean value) {
+    private Bool(boolean value) {
         super(value);
     }
 
@@ -52,7 +52,7 @@ public final class Bool extends Criteria<Boolean> {
      * @param value The boolean value.
      * @return A new boolean criteria.
      */
-    public static Bool value(Boolean value) {
+    public static Bool value(boolean value) {
         return new Bool(value);
     }
 
@@ -103,7 +103,7 @@ public final class Bool extends Criteria<Boolean> {
      * @param value The value to check, may be <code>null</code>.
      * @return True if the value is truthy, false otherwise, including when the value is <code>null</code>.
      */
-    public static Boolean isTruthy(@Nullable Object value) {
+    public static boolean isTruthy(@Nullable Object value) {
         if (value == null) {
             return false;
         }
