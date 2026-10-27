@@ -751,6 +751,50 @@ public abstract class OmniPersistenceIT {
         page2.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated after cursor-based paging"));
     }
 
+    @Test
+    void testCursorBasedPagingWithOrderingValues() {
+        var page1 = personService().getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        var lastSeenId = page1.get(page1.size() - 1).getId();
+        var page2 = personService().getPage(Page.with().range(10, 10, Map.of("id", lastSeenId), false).orderBy("id", true).build(), false);
+        var offsetPage2 = personService().getPage(Page.with().range(10, 10).orderBy("id", true).build(), false);
+
+        assertEquals(
+            offsetPage2.stream().map(Person::getId).toList(),
+            page2.stream().map(Person::getId).toList(),
+            "Cursor by ordering values returns same persons as offset based second page in same order"
+        );
+    }
+
+    @Test
+    void testCursorBasedPagingWithOrderingValuesReversed() {
+        var page1 = personService().getPage(Page.with().range(0, 10).orderBy("id", true).build(), false);
+        var page2 = personService().getPage(Page.with().range(10, 10).orderBy("id", true).build(), false);
+        var firstOfPage2Id = page2.get(0).getId();
+        var backToPage1 = personService().getPage(Page.with().range(0, 10, Map.of("id", firstOfPage2Id), true).orderBy("id", true).build(), false);
+
+        assertEquals(
+            page1.stream().map(Person::getId).toList(),
+            backToPage1.stream().map(Person::getId).toList(),
+            "Reversed cursor by ordering values returns same persons as original page 1 in same order"
+        );
+    }
+
+    @Test
+    void testCursorBasedPagingWithOrderingValuesOfMultipleFields() {
+        var page1 = personService().getPage(Page.with().range(0, 10).orderBy("dateOfBirth", true).orderBy("id", true).build(), false);
+        var lastSeen = page1.get(page1.size() - 1);
+        var lastOrderingValues = Map.<String, Object>of("dateOfBirth", lastSeen.getDateOfBirth(), "id", lastSeen.getId());
+        var page2 = personService()
+            .getPage(Page.with().range(10, 10, lastOrderingValues, false).orderBy("dateOfBirth", true).orderBy("id", true).build(), false);
+        var offsetPage2 = personService().getPage(Page.with().range(10, 10).orderBy("dateOfBirth", true).orderBy("id", true).build(), false);
+
+        assertEquals(
+            offsetPage2.stream().map(Person::getId).toList(),
+            page2.stream().map(Person::getId).toList(),
+            "Cursor by ordering values of multiple fields returns same persons as offset based second page in same order"
+        );
+    }
+
     // @SoftDeletable -------------------------------------------------------------------------------------------------
 
     @Test

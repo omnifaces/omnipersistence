@@ -257,6 +257,13 @@ Page page2 = Page.with().range(lastSeen, 10, false).orderBy("id", true).build();
 PartialResultList<Person> second = personService.getPage(page2, false);
 ```
 
+The entity itself is not needed, only its ordering values.
+Pass them as a map whose keys are exactly the ordering fields, for example when only the ID of the last seen record is kept across requests:
+
+```java
+Page page2 = Page.with().range(10, 10, Map.of("id", lastSeenId), false).orderBy("id", true).build();
+```
+
 ---
 
 ## 4. Search criteria

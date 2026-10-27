@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test;
 
+import static java.util.Collections.singletonMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -20,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Nested;
@@ -90,45 +94,38 @@ public class PageTest {
     class Defaults {
 
         @Test
-        void nullOffsetDefaultsToZero() {
-            var page = new Page(null, 10, null, null, null);
-            assertEquals(0, page.getOffset());
+        void unsetOffsetDefaultsToZero() {
+            assertEquals(0, Page.with().build().getOffset());
         }
 
         @Test
-        void nullLimitDefaultsToMaxValue() {
-            var page = new Page(0, null, null, null, null);
-            assertEquals(Integer.MAX_VALUE, page.getLimit());
+        void unsetLimitDefaultsToMaxValue() {
+            assertEquals(Integer.MAX_VALUE, Page.with().build().getLimit());
         }
 
         @Test
-        void nullOrderingDefaultsToIdDescending() {
-            var page = new Page(0, 10, null, null, null);
-            assertEquals(Map.of("id", false), page.getOrdering());
+        void unsetOrderingDefaultsToIdDescending() {
+            assertEquals(Map.of("id", false), Page.with().build().getOrdering());
         }
 
         @Test
-        void nullRequiredCriteriaDefaultsToEmptyMap() {
-            var page = new Page(0, 10, null, null, null);
-            assertTrue(page.getRequiredCriteria().isEmpty());
+        void unsetRequiredCriteriaDefaultsToEmptyMap() {
+            assertTrue(Page.with().build().getRequiredCriteria().isEmpty());
         }
 
         @Test
-        void nullOptionalCriteriaDefaultsToEmptyMap() {
-            var page = new Page(0, 10, null, null, null);
-            assertTrue(page.getOptionalCriteria().isEmpty());
+        void unsetOptionalCriteriaDefaultsToEmptyMap() {
+            assertTrue(Page.with().build().getOptionalCriteria().isEmpty());
         }
 
         @Test
-        void reversedIsFalseWithoutLastEntity() {
-            var page = new Page(0, 10, null, null, null, null, null);
-            assertFalse(page.isReversed());
+        void reversedIsFalseWithoutLastOrderingValues() {
+            assertFalse(Page.of(0, 10).isReversed());
         }
 
         @Test
-        void lastEntityDefaultsToNull() {
-            var page = Page.of(0, 10);
-            assertNull(page.getLast());
+        void lastOrderingValuesDefaultsToNull() {
+            assertNull(Page.of(0, 10).getLastOrderingValues());
         }
 
     }
@@ -218,7 +215,7 @@ public class PageTest {
             var entity = new TestEntity();
             entity.setId(42L);
             var page = Page.with().range(entity, 10, false).orderBy("id", true).build();
-            assertEquals(entity, page.getLast());
+            assertEquals(Map.of("id", 42L), page.getLastOrderingValues());
             assertEquals(10, page.getLimit());
             assertFalse(page.isReversed());
         }
@@ -229,6 +226,136 @@ public class PageTest {
             entity.setId(42L);
             var page = Page.with().range(entity, 10, true).build();
             assertTrue(page.isReversed());
+        }
+
+        @Test
+        void cursorRangeExtractsValuesOfAllOrderingFieldsInOrder() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setName("name");
+            var page = Page.with().range(entity, 10, false).orderBy("name", true).orderBy("id", false).build();
+            assertEquals(List.of("name", "id"), List.copyOf(page.getLastOrderingValues().keySet()));
+            assertEquals(Map.of("name", "name", "id", 42L), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeExtractsValuesOfDefaultOrdering() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            var page = Page.with().range(entity, 10, false).build();
+            assertEquals(Map.of("id", 42L), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeExtractsNullValue() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            var page = Page.with().range(entity, 10, false).orderBy("name", true).build();
+            assertEquals(singletonMap("name", null), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeExtractsValueOfNestedPath() {
+            var parent = new TestEntity();
+            parent.setName("parent");
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setParent(parent);
+            var page = Page.with().range(entity, 10, false).orderBy("parent.name", true).build();
+            assertEquals(Map.of("parent.name", "parent"), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeExtractsNullValueOfNestedPathWithNullIntermediate() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            var page = Page.with().range(entity, 10, false).orderBy("parent.name", true).build();
+            assertEquals(singletonMap("parent.name", null), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeExtractsNullValueOfDeeplyNestedPathWithNullIntermediate() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setParent(new TestEntity());
+            var page = Page.with().range(entity, 10, false).orderBy("parent.parent.name", true).build();
+            assertEquals(singletonMap("parent.parent.name", null), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeWithNestedPathWithoutGetterThrowsException() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            entity.setParent(new TestEntity());
+            var builder = Page.with().range(entity, 10, false).orderBy("parent.nonExistent", true);
+            assertThrows(IllegalStateException.class, builder::build);
+        }
+
+        @Test
+        void cursorRangeWithOrderingFieldWithoutGetterThrowsException() {
+            var entity = new TestEntity();
+            entity.setId(42L);
+            var builder = Page.with().range(entity, 10, false).orderBy("nonExistent", true);
+            assertThrows(IllegalStateException.class, builder::build);
+        }
+
+        @Test
+        void buildsWithOrderingValuesRange() {
+            var page = Page.with().range(20, 10, Map.of("id", 42L), true).orderBy("id", true).build();
+            assertEquals(20, page.getOffset());
+            assertEquals(10, page.getLimit());
+            assertEquals(Map.of("id", 42L), page.getLastOrderingValues());
+            assertTrue(page.isReversed());
+        }
+
+        @Test
+        void orderingValuesRangeAcceptsNullValue() {
+            var page = Page.with().range(0, 10, singletonMap("name", null), false).orderBy("name", true).build();
+            assertEquals(singletonMap("name", null), page.getLastOrderingValues());
+        }
+
+        @Test
+        void orderingValuesRangeFollowsOrderOfOrdering() {
+            var lastOrderingValues = new LinkedHashMap<String, Object>();
+            lastOrderingValues.put("id", 42L);
+            lastOrderingValues.put("name", "name");
+            var page = Page.with().range(0, 10, lastOrderingValues, false).orderBy("name", true).orderBy("id", true).build();
+            assertEquals(List.of("name", "id"), List.copyOf(page.getLastOrderingValues().keySet()));
+        }
+
+        @Test
+        void orderingValuesRangeMatchesDefaultOrdering() {
+            var page = Page.with().range(0, 10, Map.of("id", 42L), false).build();
+            assertEquals(Map.of("id", 42L), page.getLastOrderingValues());
+        }
+
+        @Test
+        void orderingValuesRangeWithMissingKeyThrowsException() {
+            var builder = Page.with().range(0, 10, Map.of("name", "name"), false).orderBy("name", true).orderBy("id", true);
+            assertThrows(IllegalArgumentException.class, builder::build);
+        }
+
+        @Test
+        void orderingValuesRangeWithExtraKeyThrowsException() {
+            var builder = Page.with().range(0, 10, Map.of("name", "name", "id", 42L), false).orderBy("name", true);
+            assertThrows(IllegalArgumentException.class, builder::build);
+        }
+
+        @Test
+        void orderingValuesRangeWithNullThrowsException() {
+            assertThrows(NullPointerException.class, () -> Page.with().range(0, 10, null, false));
+        }
+
+        @Test
+        void orderingValuesRangeAfterOffsetRangeThrowsException() {
+            assertThrows(IllegalStateException.class, () -> Page.with().range(0, 10).range(0, 10, Map.of("id", 1L), false));
+        }
+
+        @Test
+        void orderingValuesRangeAfterCursorRangeThrowsException() {
+            var entity = new TestEntity();
+            entity.setId(1L);
+            assertThrows(IllegalStateException.class, () -> Page.with().range(entity, 10, false).range(0, 10, Map.of("id", 1L), false));
         }
 
         @Test
@@ -312,6 +439,13 @@ public class PageTest {
             assertEquals(page.getRequiredCriteria(), all.getRequiredCriteria());
         }
 
+        @Test
+        void allDropsLastOrderingValuesAndReversed() {
+            var all = Page.with().range(0, 10, Map.of("id", 1L), true).build().all();
+            assertNull(all.getLastOrderingValues());
+            assertFalse(all.isReversed());
+        }
+
     }
 
     @Nested
@@ -333,6 +467,20 @@ public class PageTest {
         @Test
         void differentLimitNotEqual() {
             assertNotEquals(Page.of(0, 10), Page.of(0, 20));
+        }
+
+        @Test
+        void cursorRangesWithSameOrderingValuesAreEqual() {
+            var entity1 = new TestEntity();
+            entity1.setId(1L);
+            entity1.setName("same");
+            var entity2 = new TestEntity();
+            entity2.setId(2L);
+            entity2.setName("same");
+            var page1 = Page.with().range(entity1, 10, false).orderBy("name", true).build();
+            var page2 = Page.with().range(entity2, 10, false).orderBy("name", true).build();
+            assertEquals(page1, page2);
+            assertEquals(page1.hashCode(), page2.hashCode());
         }
 
         @Test
@@ -379,6 +527,37 @@ public class PageTest {
         }
 
         @Test
+        void lastOrderingValuesIsUnmodifiable() {
+            var page = Page.with().range(0, 10, Map.of("id", 1L), false).build();
+            assertThrows(UnsupportedOperationException.class, () -> page.getLastOrderingValues().put("new", "value"));
+        }
+
+        @Test
+        void lastOrderingValuesIsNotAffectedByLaterChangesOfGivenMap() {
+            var lastOrderingValues = new HashMap<String, Object>(Map.of("id", 1L));
+            var page = Page.with().range(0, 10, lastOrderingValues, false).build();
+            lastOrderingValues.put("id", 2L);
+            assertEquals(Map.of("id", 1L), page.getLastOrderingValues());
+        }
+
+        @Test
+        void lastOrderingValuesIsNotAffectedByLaterChangesOfLastEntity() {
+            var entity = new TestEntity();
+            entity.setId(1L);
+            var page = Page.with().range(entity, 10, false).build();
+            entity.setId(2L);
+            assertEquals(Map.of("id", 1L), page.getLastOrderingValues());
+        }
+
+        @Test
+        void orderingIsNotAffectedByLaterChangesOfBuilder() {
+            var builder = Page.with().range(0, 10, Map.of("id", 1L), false).orderBy("id", true);
+            var page = builder.build();
+            builder.orderBy("name", true);
+            assertEquals(Map.of("id", true), page.getOrdering());
+        }
+
+        @Test
         void orderingIsUnmodifiable() {
             var page = Page.with().orderBy("name", true).build();
             assertThrows(UnsupportedOperationException.class, () -> page.getOrdering().put("new", false));
@@ -404,6 +583,15 @@ public class PageTest {
         }
 
         @Test
+        void pageWithCursorRangeDoesNotSerializeLastEntity() throws Exception {
+            var last = new EntityWithUnserializableState();
+            last.setId(42L);
+            var page = Page.with().range(last, 10, false).orderBy("id", true).build();
+
+            assertEquals(page, serializeAndDeserialize(page));
+        }
+
+        @Test
         void constantsSurviveSerialization() throws Exception {
             assertEquals(Page.ALL, serializeAndDeserialize(Page.ALL));
             assertEquals(Page.ONE, serializeAndDeserialize(Page.ONE));
@@ -414,6 +602,34 @@ public class PageTest {
     static class TestEntity extends GeneratedIdEntity<Long> {
 
         private static final long serialVersionUID = 1L;
+
+        private String name;
+        private TestEntity parent;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public TestEntity getParent() {
+            return parent;
+        }
+
+        public void setParent(TestEntity parent) {
+            this.parent = parent;
+        }
+
+    }
+
+    static class EntityWithUnserializableState extends GeneratedIdEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+
+        @SuppressWarnings({ "unused", "serial" })
+        private final Object unserializableState = new Object();
 
     }
 

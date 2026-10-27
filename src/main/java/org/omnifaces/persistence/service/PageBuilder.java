@@ -39,7 +39,7 @@ class PageBuilder<T> {
         this.cacheable = cacheable;
         this.resultType = resultType;
         this.queryBuilder = queryBuilder;
-        this.canBuildValueBasedPagingPredicate = page.getLast() != null;
+        this.canBuildValueBasedPagingPredicate = page.getLastOrderingValues() != null;
     }
 
     public Root<?> getEntityQueryRoot() {
