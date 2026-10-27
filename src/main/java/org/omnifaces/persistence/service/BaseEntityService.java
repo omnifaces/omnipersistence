@@ -204,7 +204,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private Provider provider = Provider.UNKNOWN;
     private Database database = Database.UNKNOWN;
-    private Supplier<Set<String>> elementCollections = Collections::emptySet;
+    private java.util.function.Predicate<String> elementCollections = field -> false;
     private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
     private java.util.function.Predicate<String> oneToManys = field -> false;
     private Validator validator;
@@ -235,7 +235,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
         var associations = metadata.getAssociations(getEntityManager(), getProvider());
-        elementCollections = associations::getElementCollections;
+        elementCollections = associations::isElementCollection;
         manyOrOneToOnes = associations::getManyOrOneToOnes;
         oneToManys = associations::isOneToMany;
 
@@ -1970,13 +1970,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                                                                                                             // Hibernate may return a cartesian
                                                                                                                             // product and apply
                                                                                                                             // firstResult/maxResults in memory.
-            return new MappedPathResolver(root, paths, elementCollections.get(), manyOrOneToOnes.get());
+            return new MappedPathResolver(root, paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains
                                                                             // aggregated fields, so value based paging cannot be reliably used.
-            return new RootPathResolver(root, elementCollections.get(), manyOrOneToOnes.get());
+            return new RootPathResolver(root, elementCollections, manyOrOneToOnes);
         }
         else {
             throw new IllegalArgumentException(EXCEPTION_ILLEGAL_MAPPING);
@@ -2155,7 +2155,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             path = pathResolver.get(null);
         }
         else {
-            path = pathResolver.get(elementCollections.get().contains(field) ? pathResolver.join(field) : field);
+            path = pathResolver.get(elementCollections.test(field) ? pathResolver.join(field) : field);
             type = ID.equals(field) ? identifierType : path.getJavaType();
         }
 
@@ -2184,7 +2184,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
                 predicate = criteriaBuilder.isNull(path);
             }
-            else if (elementCollections.get().contains(field)) {
+            else if (elementCollections.test(field)) {
                 predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
             }
             else if (value instanceof Criteria<?> criteriaObject) {
@@ -2286,7 +2286,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var elementCollectionField = elementCollections.get().contains(field);
+        var elementCollectionField = elementCollections.test(field);
         Subquery<Long> subquery = null;
         Expression<?> fieldPath;
 
@@ -2295,7 +2295,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
             subquery = query.subquery(Long.class);
             Root<E> subqueryRoot = subquery.from(entityType);
-            fieldPath = new RootPathResolver(subqueryRoot, elementCollections.get(), manyOrOneToOnes.get()).get(pathResolver.join(field));
+            fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
             subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
         }
         else {

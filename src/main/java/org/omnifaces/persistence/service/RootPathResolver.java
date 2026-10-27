@@ -19,6 +19,8 @@ import static org.omnifaces.utils.reflect.Reflections.findGetter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import jakarta.persistence.Transient;
 import jakarta.persistence.criteria.Expression;
@@ -45,10 +47,10 @@ class RootPathResolver implements PathResolver {
     private final Root<?> root;
     private final Map<String, Path<?>> joins;
     private final Map<String, Path<?>> paths;
-    private final Set<String> elementCollections;
-    private final Set<String> manyOrOneToOnes;
+    private final Predicate<String> elementCollections;
+    private final Supplier<Set<String>> manyOrOneToOnes;
 
-    public RootPathResolver(Root<?> root, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
+    public RootPathResolver(Root<?> root, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes) {
         this.root = root;
         this.joins = getJoins(root);
         this.paths = new HashMap<>();
@@ -77,7 +79,7 @@ class RootPathResolver implements PathResolver {
         for (int i = 0; i < depth; i++) {
             String attribute = attributes[i];
 
-            if (i + 1 < depth || elementCollections.contains(originalField)) {
+            if (i + 1 < depth || elementCollections.test(originalField)) {
                 path = explicitJoin || !joins.containsKey(attribute) ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
             }
             else {
@@ -127,7 +129,7 @@ class RootPathResolver implements PathResolver {
     }
 
     private Path<?> guessManyOrOneToOnePath(String attribute) {
-        for (String manyOrOneToOne : manyOrOneToOnes) {
+        for (String manyOrOneToOne : manyOrOneToOnes.get()) {
             try {
                 return (Path<?>) get(manyOrOneToOne + "." + attribute);
             }

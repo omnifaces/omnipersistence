@@ -14,6 +14,8 @@ package org.omnifaces.persistence.service;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Root;
@@ -28,7 +30,7 @@ class MappedPathResolver extends RootPathResolver {
 
     private final Map<String, Expression<?>> paths;
 
-    public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Set<String> elementCollections, Set<String> manyOrOneToOnes) {
+    public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes) {
         super(root, elementCollections, manyOrOneToOnes);
         this.paths = paths;
     }
