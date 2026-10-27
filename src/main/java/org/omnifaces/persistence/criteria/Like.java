@@ -176,7 +176,7 @@ public final class Like extends Criteria<String> {
 
     @Override
     public boolean equals(Object object) {
-        return super.equals(object) && Objects.equals(type, ((Like) object).type);
+        return super.equals(object) && type == ((Like) object).type;
     }
 
     @Override

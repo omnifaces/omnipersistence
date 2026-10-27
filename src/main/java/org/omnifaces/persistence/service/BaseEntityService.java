@@ -1967,7 +1967,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private static void setMappedParameters(Query query, Map<String, Object> mappedParameters) {
         logger.log(FINER, () -> format(LOG_FINER_SET_PARAMETER_VALUES, mappedParameters));
-        mappedParameters.entrySet().forEach(parameter -> query.setParameter(parameter.getKey(), parameter.getValue()));
+        mappedParameters.forEach(query::setParameter);
     }
 
     private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
@@ -2120,7 +2120,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, wherePredicates);
             }
 
-            var inPredicates = wherePredicates.stream().filter(Alias::isIn).collect(toList());
+            var inPredicates = wherePredicates.stream().filter(Alias::isIn).toList();
 
             for (var inPredicate : inPredicates) {
                 var countPredicate = buildCountPredicateIfNecessary(inPredicate, criteriaBuilder, query, pathResolver);
@@ -2210,7 +2210,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var field = parameter.getKey();
         var criteria = parameter.getValue();
         var value = Criteria.unwrap(criteria);
-        Expression<?> path = null;
+        Expression<?> path;
         Class<?> type = null;
 
         if (oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())) {
@@ -2325,7 +2325,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .map(item -> createElementCollectionCriteria(type, item).getValue())
             .filter(Objects::nonNull)
             .map(parameterBuilder::create)
-            .collect(toList());
+            .toList();
 
         if (in.isEmpty()) {
             return null;

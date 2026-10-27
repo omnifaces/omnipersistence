@@ -14,7 +14,6 @@ package org.omnifaces.persistence;
 
 import static java.util.Arrays.stream;
 import static java.util.logging.Level.WARNING;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.concat;
 import static org.omnifaces.utils.Lang.startsWithOneOf;
 
@@ -82,7 +81,7 @@ public enum Database {
      * @param aliases Optional aliases that might appear in the Jakarta Persistence dialect name.
      */
     Database(String... aliases) {
-        this.names = concat(Stream.of(name()), stream(aliases)).collect(toList()).toArray(new String[0]);
+        this.names = concat(Stream.of(name()), stream(aliases)).toList().toArray(new String[0]);
     }
 
     /**

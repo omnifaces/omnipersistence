@@ -13,7 +13,6 @@
 package org.omnifaces.persistence;
 
 import static java.util.Optional.ofNullable;
-import static java.util.stream.Collectors.toList;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.service.BaseEntityService.getCurrentBaseEntityService;
@@ -365,9 +364,9 @@ public final class JPA {
                 return castAsString(builder, expression);
             }
             else {
-                return builder.<String>literal(expressionOrString.toString());
+                return builder.literal(expressionOrString.toString());
             }
-        }).collect(toList());
+        }).toList();
 
         Expression<String> result = expressions.get(0);
 

@@ -76,7 +76,7 @@ public @interface SoftDeletable {
     /**
      * Defines the types of the soft delete column.
      */
-    public enum Type {
+    enum Type {
 
         /**
          * Indicates that the associated column is a column holding deleted state. All entities that haven't been soft deleted will thus have false in the soft
@@ -96,6 +96,6 @@ public @interface SoftDeletable {
      *
      * @return The soft deletable type.
      */
-    public Type type() default Type.DELETED;
+    Type type() default Type.DELETED;
 
 }
