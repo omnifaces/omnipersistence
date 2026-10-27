@@ -14,6 +14,7 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.BASIC;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
@@ -43,9 +44,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
-import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.Metamodel;
+import jakarta.persistence.metamodel.PluralAttribute;
+import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -279,6 +281,14 @@ class EntityMetadataTest {
         }
 
         @Test
+        void singularAttributeIsFollowedByItsJavaTypeRatherThanItsBindableJavaType() {
+            var quirkyMetamodel = new StubMetamodel()
+                .entity(Child.class, attribute("root", MANY_TO_ONE, Root.class, Map.of("getBindableJavaType", Object.class)))
+                .entity(Root.class, attribute("tags", ELEMENT_COLLECTION, String.class));
+            assertTrue(new EntityMetadata(Child.class).getAssociations(quirkyMetamodel.entityManager(), HIBERNATE).isElementCollection("root.tags"));
+        }
+
+        @Test
         void mappingIsResolvedPerEntityManagerFactory() {
             var metadata = new EntityMetadata(Root.class);
             var otherMetamodel = new StubMetamodel().entity(Root.class, attribute("tags", BASIC, String.class), attribute("other", ONE_TO_ONE, Parent.class))
@@ -309,16 +319,25 @@ class EntityMetadataTest {
 
     // Stub metamodel -------------------------------------------------------------------------------------------------
 
+    private static final Set<PersistentAttributeType> PLURAL_ATTRIBUTE_TYPES = Set.of(ONE_TO_MANY, MANY_TO_MANY, ELEMENT_COLLECTION);
+
     private static Attribute<?, ?> attribute(String name, PersistentAttributeType type, Class<?> javaType) {
-        return stub(Attribute.class, Map.of("getName", name, "getPersistentAttributeType", type, "getBindableJavaType", javaType), Bindable.class);
+        return attribute(name, type, javaType, Map.of());
     }
 
     private static Attribute<?, ?> attribute(String name, PersistentAttributeType type, Class<?> javaType, Field javaMember) {
-        return stub(
-            Attribute.class,
-            Map.of("getName", name, "getPersistentAttributeType", type, "getBindableJavaType", javaType, "getJavaMember", javaMember),
-            Bindable.class
-        );
+        return attribute(name, type, javaType, Map.of("getJavaMember", javaMember));
+    }
+
+    /**
+     * Stubs a plural attribute for collection types, else a singular attribute, both with the given type as Java type and as bindable Java type.
+     */
+    private static Attribute<?, ?> attribute(String name, PersistentAttributeType type, Class<?> javaType, Map<String, Object> additionalReturnValues) {
+        var returnValues = new HashMap<String, Object>(Map.of("getName", name, "getPersistentAttributeType", type, "getBindableJavaType", javaType));
+        returnValues.put("getJavaType", javaType);
+        returnValues.putAll(additionalReturnValues);
+        Class<?> attributeType = PLURAL_ATTRIBUTE_TYPES.contains(type) ? PluralAttribute.class : SingularAttribute.class;
+        return (Attribute<?, ?>) stub(attributeType, returnValues);
     }
 
     @SuppressWarnings("unchecked")

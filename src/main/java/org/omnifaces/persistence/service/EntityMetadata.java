@@ -31,7 +31,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import jakarta.persistence.metamodel.Bindable;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.PluralAttribute;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -234,18 +235,21 @@ final class EntityMetadata {
             var typeMappings = new LinkedHashMap<String, AttributeMapping>();
 
             for (var attribute : entityManager.getMetamodel().entity(type).getAttributes()) {
-                var nestedType = attribute instanceof Bindable<?> bindable && BaseEntity.class.isAssignableFrom(bindable.getBindableJavaType())
-                    ? bindable.getBindableJavaType()
-                    : null;
                 typeMappings.put(
                     attribute.getName(),
                     new AttributeMapping(
-                        provider.isElementCollection(attribute), provider.isOneToMany(attribute), provider.isManyOrOneToOne(attribute), nestedType
+                        provider.isElementCollection(attribute), provider.isOneToMany(attribute), provider.isManyOrOneToOne(attribute), getNestedType(attribute)
                     )
                 );
             }
 
             return unmodifiableMap(typeMappings);
+        }
+
+        private static Class<?> getNestedType(Attribute<?, ?> attribute) {
+            // OpenJPA's SingularAttribute#getBindableJavaType() returns the element type of the field instead of the attribute type.
+            var javaType = attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute ? pluralAttribute.getBindableJavaType() : attribute.getJavaType();
+            return BaseEntity.class.isAssignableFrom(javaType) ? javaType : null;
         }
 
         private Set<String> computeManyOrOneToOneMapping() {
