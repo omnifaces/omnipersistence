@@ -726,10 +726,11 @@ public class PageTest {
 
         public void setFieldWithoutStandardGetter(String fieldWithoutStandardGetter) {
             this.fieldWithoutStandardGetter = fieldWithoutStandardGetter;
+        }
+
         public String getUpperCaseName() {
             return name == null ? null : name.toUpperCase();
         }
-
     }
 
     /**
