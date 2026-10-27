@@ -497,7 +497,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
                 value = findGetter(currentValue.getClass(), property)
                     .map(getter -> invokeMethod(currentValue, getter))
                     .orElseGet(() -> {
-                        Object val = currentValue instanceof BaseEntity<?> e ? Provider.HIBERNATE.dereferenceProxy(e) : currentValue;
+                        var val = currentValue instanceof BaseEntity<?> e ? Provider.HIBERNATE.dereferenceProxy(e) : currentValue;
                         return accessField(val, property);
                     });
             }
