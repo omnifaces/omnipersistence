@@ -51,6 +51,8 @@ Pick the base class that matches what your entity needs:
 | `TimestampedEntity<I>` | ✅ | ✅ | — |
 | `VersionedBaseEntity<I>` | — | ✅ | ✅ |
 | `VersionedEntity<I>` | ✅ | ✅ | ✅ |
+| `LockedBaseEntity<I>` | — | — | ✅ |
+| `LockedEntity<I>` | ✅ | — | ✅ |
 
 All of them provide correct implementations of `equals`, `hashCode`, `compareTo` and `toString` based on entity ID out of the box.
 
@@ -416,6 +418,18 @@ public class Document extends VersionedEntity<Long> {
 }
 // concurrent updates throw OptimisticLockException automatically
 ```
+
+Use `LockedEntity` to get only the `@Version` column, without `created` and `lastModified`:
+
+```java
+@Entity
+public class InventoryItem extends LockedEntity<Long> {
+    private int quantity;
+}
+// concurrent orders decrementing the same quantity throw OptimisticLockException
+```
+
+Both `VersionedEntity` and `LockedEntity` have a `…BaseEntity` variant for when you define the `@Id` column yourself.
 
 ---
 

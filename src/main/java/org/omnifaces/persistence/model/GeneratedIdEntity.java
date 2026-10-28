@@ -44,6 +44,7 @@ import jakarta.persistence.MappedSuperclass;
  * @see BaseEntity
  * @see TimestampedEntity
  * @see VersionedEntity
+ * @see LockedEntity
  */
 @MappedSuperclass
 public abstract class GeneratedIdEntity<I extends Comparable<I> & Serializable> extends BaseEntity<I> {

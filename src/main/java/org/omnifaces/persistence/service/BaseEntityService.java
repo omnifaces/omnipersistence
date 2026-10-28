@@ -122,6 +122,8 @@ import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.LockedBaseEntity;
+import org.omnifaces.persistence.model.LockedEntity;
 import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.SoftDeletable;
 import org.omnifaces.persistence.model.TimestampedBaseEntity;
@@ -143,9 +145,11 @@ import org.omnifaces.utils.reflect.Getter;
  * <li>{@link BaseEntity}
  * <li>{@link TimestampedBaseEntity}
  * <li>{@link VersionedBaseEntity}
+ * <li>{@link LockedBaseEntity}
  * <li>{@link GeneratedIdEntity}
  * <li>{@link TimestampedEntity}
  * <li>{@link VersionedEntity}
+ * <li>{@link LockedEntity}
  * </ul>
  *
  * <h2>Logging</h2>

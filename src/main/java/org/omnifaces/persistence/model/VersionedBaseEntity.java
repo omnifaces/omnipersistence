@@ -23,9 +23,9 @@ import jakarta.persistence.Version;
 /**
  * <p>
  * Mapped superclass for versioned entity. It extends from {@link TimestampedBaseEntity} and implements {@link Versioned}. In addition to the "created" and
- * "lastModified" columns, it specifies a {@link Version} column, named "version". The {@link Id} column needs to be manually taken care of. On pre persist,
- * Jakarta Persistence will automatically set version to 0. On pre update, Jakarta Persistence will automatically increment version with 1. This is useful for
- * optimistic locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when a concurrent update is detected.
+ * "lastModified" columns, it specifies a {@link Version} column, named "version". The {@link Id} column needs to be manually taken care of. On persist, Jakarta
+ * Persistence will automatically initialize the version. On update, Jakarta Persistence will automatically increment the version. This is useful for optimistic
+ * locking; Jakarta Persistence will throw {@link jakarta.persistence.OptimisticLockException} when a concurrent update is detected.
  * <p>
  * Usage example:
  *
@@ -52,13 +52,15 @@ import jakarta.persistence.Version;
  * }
  * </pre>
  * <p>
- * If you'd like a generated ID instead, use {@link VersionedEntity}.
+ * If you'd like a generated ID instead, use {@link VersionedEntity}. If you'd like optimistic locking without "created" and "lastModified" columns, use
+ * {@link LockedBaseEntity}.
  *
  * @param <I> The generic ID type.
  * @author Bauke Scholtz
  * @since 1.0
  * @see VersionedEntity
  * @see TimestampedBaseEntity
+ * @see LockedBaseEntity
  * @see Versioned
  */
 @MappedSuperclass
