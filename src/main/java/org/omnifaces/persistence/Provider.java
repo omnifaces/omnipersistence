@@ -87,7 +87,7 @@ public enum Provider {
 
         @Override
         public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxy(E entity) {
-            return HIBERNATE_PROXY.get().isInstance(entity);
+            return HIBERNATE_PROXY.map(clazz -> clazz.isInstance(entity)).orElse(false);
         }
 
         @Override

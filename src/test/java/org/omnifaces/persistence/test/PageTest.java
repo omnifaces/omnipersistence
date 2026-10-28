@@ -252,6 +252,16 @@ public class PageTest {
         }
 
         @Test
+        void buildsWithOrderByFieldWithoutStandardGetter() {
+            var entity = new TestEntity();
+            entity.setFieldWithoutStandardGetter("foo");
+            var page = Page.with().range(entity, 10, false).orderBy("fieldWithoutStandardGetter", true).build();
+            assertEquals(Map.of("fieldWithoutStandardGetter", "foo"), page.getLastOrderingValues());
+            assertEquals(10, page.getLimit());
+            assertFalse(page.isReversed());
+        }
+
+        @Test
         void buildsWithCursorRange() {
             var entity = new TestEntity();
             entity.setId(42L);
@@ -692,6 +702,7 @@ public class PageTest {
 
         private String name;
         private TestEntity parent;
+        private String fieldWithoutStandardGetter;
 
         public String getName() {
             return name;
@@ -707,6 +718,14 @@ public class PageTest {
 
         public void setParent(TestEntity parent) {
             this.parent = parent;
+        }
+
+        public String fieldWithoutStandardGetter() {
+            return fieldWithoutStandardGetter;
+        }
+
+        public void setFieldWithoutStandardGetter(String fieldWithoutStandardGetter) {
+            this.fieldWithoutStandardGetter = fieldWithoutStandardGetter;
         }
 
         public String getUpperCaseName() {
