@@ -389,8 +389,8 @@ public enum Provider {
     }
 
     /**
-     * Returns the table name of the given entity. The default implementation returns the {@link Table} annotation of {@link #getEntityType(BaseEntity)} or else
-     * defaults to entity class' simple name in upper cased form.
+     * Returns the table name of the given entity. The default implementation returns the name of the {@link Table} annotation of
+     * {@link #getEntityType(BaseEntity)} or else defaults to entity class' simple name in upper cased form when there is no such annotation or it has no name.
      *
      * @param <I> The generic ID type.
      * @param <E> The generic entity type.
@@ -401,7 +401,7 @@ public enum Provider {
     public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
         Class<E> entityType = getEntityType(entity);
         var table = entityType.getAnnotation(Table.class);
-        return table != null ? table.name() : entityType.getSimpleName().toUpperCase();
+        return table != null && !table.name().isEmpty() ? table.name() : entityType.getSimpleName().toUpperCase();
     }
 
     /**
