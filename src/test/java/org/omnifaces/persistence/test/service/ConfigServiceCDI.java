@@ -32,4 +32,16 @@ public class ConfigServiceCDI extends ConfigService {
         super.updateKey(id, newKey);
     }
 
+    @Override
+    @Transactional(REQUIRED)
+    public void updateValueWhileConcurrentlyUpdated(Long id, String newValue, Runnable concurrentUpdate) {
+        super.updateValueWhileConcurrentlyUpdated(id, newValue, concurrentUpdate);
+    }
+
+    @Override
+    @Transactional(REQUIRED)
+    public void updateValueTwice(Long id, String firstValue, String secondValue) {
+        super.updateValueTwice(id, firstValue, secondValue);
+    }
+
 }

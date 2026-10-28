@@ -38,6 +38,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import jakarta.inject.Inject;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
@@ -77,6 +78,7 @@ import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
+import org.omnifaces.persistence.test.service.PlainConfigUpdater;
 import org.omnifaces.persistence.test.service.TestAuditListener;
 
 @ExtendWith(ArquillianExtension.class)
@@ -119,6 +121,9 @@ public abstract class OmniPersistenceIT {
     protected abstract BaseEntityService<String, Lookup> lookupService();
 
     protected abstract ConfigService configService();
+
+    @Inject
+    private PlainConfigUpdater plainConfigUpdater;
 
     protected abstract BaseEntityService<Long, InventoryItem> inventoryItemService();
 
@@ -1105,60 +1110,71 @@ public abstract class OmniPersistenceIT {
 
     // @Audit ---------------------------------------------------------------------------------------------------------
 
+    private Config persistAuditedConfig(String key, String value) {
+        var config = new Config();
+        config.setKey(key);
+        config.setValue(value);
+        configService().persist(config);
+        TestAuditListener.clearChanges();
+        return config;
+    }
+
+    private static List<String> auditedValueChanges() {
+        return TestAuditListener.getChanges().stream()
+            .filter(change -> "value".equals(change.getPropertyName()))
+            .map(change -> change.getOldValue() + " -> " + change.getNewValue())
+            .toList();
+    }
+
+    @Test
+    void testAuditTracksChangesOfSameEntityInConcurrentPersistenceContexts() {
+        var config = persistAuditedConfig("audit.concurrent", "original");
+        configService().updateValueWhileConcurrentlyUpdated(config.getId(), "outer", () -> plainConfigUpdater.updateValue(config.getId(), "inner"));
+        assertEquals(List.of("original -> inner", "original -> outer"), auditedValueChanges(), "Both changes were audited against their own snapshot");
+    }
+
+    @Test
+    void testAuditTracksEachChangeOfSameEntityInSamePersistenceContext() {
+        var config = persistAuditedConfig("audit.twice", "original");
+        configService().updateValueTwice(config.getId(), "first", "second");
+        assertEquals(List.of("original -> first", "first -> second"), auditedValueChanges(), "Each flushed change was audited");
+    }
+
+    @Test
+    void testAuditTracksChangeOutsideService() {
+        var config = persistAuditedConfig("audit.plain", "original");
+        plainConfigUpdater.updateValue(config.getId(), "plain");
+        assertEquals(List.of("original -> plain"), auditedValueChanges(), "Change via plain entity manager was audited");
+    }
+
     @Test
     void testAuditTracksValueChange() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.key");
-        config.setValue("original");
-        configService().persist(config);
-
+        var config = persistAuditedConfig("audit.key", "original");
         configService().updateValue(config.getId(), "modified");
+        assertEquals(List.of("original -> modified"), auditedValueChanges(), "Value change was audited");
+    }
 
-        var changes = TestAuditListener.getChanges();
-        assertFalse(changes.isEmpty(), "Audit changes were recorded");
-
-        var valueChange = changes.stream()
-            .filter(c -> "value".equals(c.getPropertyName()))
-            .findFirst();
-        assertTrue(valueChange.isPresent(), "Value change was audited");
-        assertEquals("original", valueChange.get().getOldValue(), "Old value is correct");
-        assertEquals("modified", valueChange.get().getNewValue(), "New value is correct");
+    @Test
+    void testAuditTracksValueChangeOfDetachedEntity() {
+        var config = persistAuditedConfig("audit.detached", "original");
+        var detachedConfig = configService().getById(config.getId());
+        detachedConfig.setValue("modified");
+        configService().update(detachedConfig);
+        assertEquals(List.of("original -> modified"), auditedValueChanges(), "Value change of detached entity was audited");
     }
 
     @Test
     void testAuditDoesNotTrackNonAuditedField() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.notrack");
-        config.setValue("stable");
-        configService().persist(config);
-
+        var config = persistAuditedConfig("audit.notrack", "stable");
         configService().updateKey(config.getId(), "audit.notrack.changed");
-
-        var keyChanges = TestAuditListener.getChanges().stream()
-            .filter(c -> "key".equals(c.getPropertyName()))
-            .toList();
-        assertTrue(keyChanges.isEmpty(), "Non-audited field 'key' should not produce audit changes");
+        assertTrue(TestAuditListener.getChanges().isEmpty(), "Non-audited field 'key' should not produce audit changes");
     }
 
     @Test
     void testAuditDoesNotTrackUnchangedValue() {
-        TestAuditListener.clearChanges();
-
-        var config = new Config();
-        config.setKey("audit.same");
-        config.setValue("unchanged");
-        configService().persist(config);
-
+        var config = persistAuditedConfig("audit.same", "unchanged");
         configService().updateValue(config.getId(), "unchanged");
-
-        var valueChanges = TestAuditListener.getChanges().stream()
-            .filter(c -> "value".equals(c.getPropertyName()))
-            .toList();
-        assertTrue(valueChanges.isEmpty(), "Unchanged value should not produce audit changes");
+        assertEquals(List.of(), auditedValueChanges(), "Unchanged value should not produce audit changes");
     }
 
 }

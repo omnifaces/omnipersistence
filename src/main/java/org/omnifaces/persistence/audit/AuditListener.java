@@ -13,21 +13,21 @@
 package org.omnifaces.persistence.audit;
 
 import static java.beans.Introspector.getBeanInfo;
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toConcurrentMap;
+import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toSet;
-import static org.omnifaces.persistence.service.BaseEntityService.getCurrentBaseEntityService;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
+import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.beans.IntrospectionException;
 import java.beans.PropertyDescriptor;
-import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
@@ -35,7 +35,6 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
-import jakarta.persistence.metamodel.Attribute;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
@@ -50,6 +49,11 @@ import org.omnifaces.persistence.model.BaseEntity;
  * <li>Put {@link Audit} annotation on fields of interest.
  * <li>Observe the {@link AuditedChange} CDI event.
  * </ol>
+ * <p>
+ * Only instances which went through {@link PostLoad} in the current persistence context are audited, so an entity which is persisted and then modified in the
+ * same persistence context is not audited. Each flush of a change is audited against the values of the previous flush. The {@link Audit} fields must be of a
+ * basic type, such as a string, number, date or enum, and not an entity or collection, because the values are kept until the entity instance itself is
+ * released.
  * <p>
  * Entity example:
  *
@@ -88,7 +92,20 @@ import org.omnifaces.persistence.model.BaseEntity;
  */
 public class AuditListener {
 
-    private static final Map<Class<?>, Map<PropertyDescriptor, Map<Serializable, Object>>> AUDITABLE_PROPERTIES = new ConcurrentHashMap<>();
+    private static final ClassValue<List<PropertyDescriptor>> AUDITABLE_PROPERTIES = new ClassValue<>() {
+
+        @Override
+        protected List<PropertyDescriptor> computeValue(Class<?> type) {
+            return computeAuditableProperties(type);
+        }
+
+    };
+
+    /**
+     * The values of the auditable properties per entity instance, as loaded or last updated. Each persistence context has its own instance of the same entity,
+     * so the key must be the instance itself, and its entry is released along with it.
+     */
+    static final WeakIdentityMap<BaseEntity<?>, Map<String, Object>> SNAPSHOTS = new WeakIdentityMap<>();
 
     @Inject
     private BeanManager beanManager;
@@ -108,53 +125,75 @@ public class AuditListener {
      */
     @PostLoad
     public void beforeUpdate(BaseEntity<?> entity) {
-        getAuditableProperties(entity).forEach((property, values) -> values.put(entity.getId(), invokeMethod(entity, property.getReadMethod())));
+        var auditableProperties = AUDITABLE_PROPERTIES.get(entity.getClass());
+
+        if (!auditableProperties.isEmpty()) {
+            SNAPSHOTS.put(entity, readValues(entity, auditableProperties));
+        }
     }
 
     /**
-     * Compares current values with the snapshot taken during {@link PostLoad} and fires an {@link AuditedChange} event if a difference is detected.
+     * Compares current values with the snapshot taken during {@link PostLoad} or the previous {@link PreUpdate} and fires an {@link AuditedChange} event for
+     * each difference.
      *
      * @param entity The entity being updated.
      */
     @PreUpdate
     public void afterUpdate(BaseEntity<?> entity) {
-        getAuditableProperties(entity).forEach((property, values) -> {
-            var id = entity.getId();
-            if (values.containsKey(id)) {
-                Object newValue = invokeMethod(entity, property.getReadMethod());
-                Object oldValue = values.remove(id);
-
-                if (!Objects.equals(oldValue, newValue)) {
-                    fireAuditedChangeEvent(entity, property.getName(), oldValue, newValue);
-                }
-            }
-        });
+        detectChanges(entity).forEach(this::fireAuditedChangeEvent);
     }
 
-    private static Map<PropertyDescriptor, Map<Serializable, Object>> getAuditableProperties(BaseEntity<?> entity) {
-        return AUDITABLE_PROPERTIES.computeIfAbsent(entity.getClass(), k -> {
-            var baseEntityService = getCurrentBaseEntityService();
-            var auditablePropertyNames = baseEntityService.getMetamodel(entity).getDeclaredAttributes().stream()
-                .filter(a -> a.getJavaMember() instanceof Field field && field.isAnnotationPresent(Audit.class))
-                .map(Attribute::getName)
-                .collect(toSet());
+    /**
+     * Returns the changes of the auditable properties of the given entity since its snapshot, and replaces the snapshot with the current values.
+     *
+     * @param entity The entity being updated.
+     * @return The changes of the auditable properties of the given entity since its snapshot, or an empty list if it has no snapshot.
+     */
+    static List<AuditedChange> detectChanges(BaseEntity<?> entity) {
+        var oldValues = SNAPSHOTS.get(entity);
 
-            try {
-                return stream(getBeanInfo(baseEntityService.getProvider().getEntityType(entity)).getPropertyDescriptors())
-                    .filter(p -> auditablePropertyNames.contains(p.getName()))
-                    .collect(toConcurrentMap(identity(), v -> new ConcurrentHashMap<>()));
+        if (oldValues == null) {
+            return emptyList();
+        }
+
+        var newValues = readValues(entity, AUDITABLE_PROPERTIES.get(entity.getClass()));
+        SNAPSHOTS.put(entity, newValues);
+        var changes = new ArrayList<AuditedChange>();
+
+        for (var newValue : newValues.entrySet()) {
+            var oldValue = oldValues.get(newValue.getKey());
+
+            if (!Objects.equals(oldValue, newValue.getValue())) {
+                changes.add(new AuditedChange(entity, entity.getClass().getSimpleName(), newValue.getKey(), oldValue, newValue.getValue()));
             }
-            catch (IntrospectionException e) {
-                throw new UnsupportedOperationException(e);
-            }
-        });
+        }
+
+        return changes;
     }
 
-    private void fireAuditedChangeEvent(BaseEntity<?> entity, String propertyName, Object oldValue, Object newValue) {
-        findBeanManager().ifPresent(
-            beanManager -> beanManager.getEvent()
-                .fire(new AuditedChange(entity, entity.getClass().getSimpleName(), propertyName, oldValue, newValue))
-        );
+    private static List<PropertyDescriptor> computeAuditableProperties(Class<?> type) {
+        var auditableFieldNames = listAnnotatedFields(type, Audit.class).stream().map(Field::getName).collect(toSet());
+
+        try {
+            return stream(getBeanInfo(type).getPropertyDescriptors()).filter(property -> auditableFieldNames.contains(property.getName())).toList();
+        }
+        catch (IntrospectionException e) {
+            throw new UnsupportedOperationException(e);
+        }
+    }
+
+    private static Map<String, Object> readValues(BaseEntity<?> entity, List<PropertyDescriptor> properties) {
+        var values = new LinkedHashMap<String, Object>(properties.size());
+
+        for (var property : properties) {
+            values.put(property.getName(), invokeMethod(entity, property.getReadMethod()));
+        }
+
+        return values;
+    }
+
+    private void fireAuditedChangeEvent(AuditedChange change) {
+        findBeanManager().ifPresent(beanManager -> beanManager.getEvent().fire(change));
     }
 
     private Optional<BeanManager> findBeanManager() {
