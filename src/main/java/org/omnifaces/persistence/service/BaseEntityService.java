@@ -37,6 +37,7 @@ import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
+import static org.omnifaces.persistence.audit.AuditListener.copySnapshot;
 import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.coalesce;
@@ -1060,7 +1061,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 logConstraintViolations(validator.validate(entity));
             }
 
-            return getEntityManager().merge(entity);
+            var managed = getEntityManager().merge(entity);
+            copySnapshot(entity, managed);
+            return managed;
         });
     }
 

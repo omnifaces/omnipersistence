@@ -33,10 +33,12 @@ import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
@@ -141,6 +143,25 @@ public class AuditListener {
     @PreUpdate
     public void afterUpdate(BaseEntity<?> entity) {
         detectChanges(entity).forEach(this::fireAuditedChangeEvent);
+    }
+
+    /**
+     * Lets the given managed entity be audited against the snapshot of the given detached entity it was merged from, if it has no snapshot of its own. Some
+     * persistence providers, such as OpenJPA, do not invoke {@link PostLoad} on the managed entity returned by {@link EntityManager#merge(Object)}.
+     * {@link BaseEntityService#update(BaseEntity)} invokes this after merging.
+     *
+     * @param detached The detached entity which was merged.
+     * @param managed The managed entity returned by the merge.
+     * @since 1.2
+     */
+    public static void copySnapshot(BaseEntity<?> detached, BaseEntity<?> managed) {
+        if (detached != managed && SNAPSHOTS.get(managed) == null) {
+            var snapshot = SNAPSHOTS.get(detached);
+
+            if (snapshot != null) {
+                SNAPSHOTS.put(managed, snapshot);
+            }
+        }
     }
 
     /**

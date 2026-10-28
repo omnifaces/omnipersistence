@@ -99,6 +99,24 @@ class AuditListenerTest {
     }
 
     @Test
+    void mergedEntityWithoutSnapshotIsDetectedAgainstSnapshotOfDetachedEntity() {
+        var detached = loaded(new AuditedEntity(), "original");
+        var managed = new AuditedEntity();
+        managed.setValue("modified");
+        AuditListener.copySnapshot(detached, managed);
+        assertEquals(List.of("value: original -> modified"), changes(managed));
+    }
+
+    @Test
+    void mergedEntityWithSnapshotKeepsItsOwnSnapshot() {
+        var detached = loaded(new AuditedEntity(), "stale");
+        var managed = loaded(new AuditedEntity(), "current");
+        managed.setValue("modified");
+        AuditListener.copySnapshot(detached, managed);
+        assertEquals(List.of("value: current -> modified"), changes(managed));
+    }
+
+    @Test
     void snapshotIsReleasedWithItsEntity() throws InterruptedException {
         assumeFalse(isExplicitGcDisabled(), "System.gc() is disabled");
         var snapshotsBefore = AuditListener.SNAPSHOTS.size();
