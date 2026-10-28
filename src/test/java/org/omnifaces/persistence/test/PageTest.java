@@ -252,16 +252,6 @@ public class PageTest {
         }
 
         @Test
-        void buildsWithOrderByFieldWithoutStandardGetter() {
-            var entity = new TestEntity();
-            entity.setFieldWithoutStandardGetter("foo");
-            var page = Page.with().range(entity, 10, false).orderBy("fieldWithoutStandardGetter", true).build();
-            assertEquals(Map.of("fieldWithoutStandardGetter", "foo"), page.getLastOrderingValues());
-            assertEquals(10, page.getLimit());
-            assertFalse(page.isReversed());
-        }
-
-        @Test
         void buildsWithCursorRange() {
             var entity = new TestEntity();
             entity.setId(42L);
@@ -337,6 +327,24 @@ public class PageTest {
         }
 
         @Test
+        void cursorRangeReadsOrderingValueOfFieldWithoutGetter() {
+            var entity = new TestEntity();
+            entity.setFieldWithoutStandardGetter("foo");
+            var page = Page.with().range(entity, 10, false).orderBy("fieldWithoutStandardGetter", true).build();
+            assertEquals(Map.of("fieldWithoutStandardGetter", "foo"), page.getLastOrderingValues());
+        }
+
+        @Test
+        void cursorRangeReadsOrderingValueOfNestedFieldWithoutGetter() {
+            var parent = new TestEntity();
+            parent.setFieldWithoutStandardGetter("foo");
+            var entity = new TestEntity();
+            entity.setParent(parent);
+            var page = Page.with().range(entity, 10, false).orderBy("parent.fieldWithoutStandardGetter", true).build();
+            assertEquals(Map.of("parent.fieldWithoutStandardGetter", "foo"), page.getLastOrderingValues());
+        }
+
+        @Test
         void cursorRangeExtractsNullValueOfNestedPathWithNullIntermediate() {
             var entity = new TestEntity();
             entity.setId(42L);
@@ -354,7 +362,7 @@ public class PageTest {
         }
 
         @Test
-        void cursorRangeWithNestedPathWithoutGetterThrowsException() {
+        void cursorRangeWithNestedPathWithoutGetterOrFieldThrowsException() {
             var entity = new TestEntity();
             entity.setId(42L);
             entity.setParent(new TestEntity());
@@ -363,10 +371,21 @@ public class PageTest {
         }
 
         @Test
-        void cursorRangeWithOrderingFieldWithoutGetterThrowsException() {
+        void cursorRangeWithOrderingFieldWithoutGetterOrFieldThrowsException() {
             var entity = new TestEntity();
             entity.setId(42L);
             var builder = Page.with().range(entity, 10, false).orderBy("nonExistent", true);
+            assertThrows(IllegalStateException.class, builder::build);
+        }
+
+        /**
+         * An intermediate property of a nested path requires a getter: a lazy association read via its field stays uninitialized on EclipseLink and OpenJPA.
+         */
+        @Test
+        void cursorRangeWithNestedPathThroughFieldWithoutGetterThrowsException() {
+            var entity = new TestEntity();
+            entity.setParentWithoutStandardGetter(new TestEntity());
+            var builder = Page.with().range(entity, 10, false).orderBy("parentWithoutStandardGetter.name", true);
             assertThrows(IllegalStateException.class, builder::build);
         }
 
@@ -703,6 +722,7 @@ public class PageTest {
         private String name;
         private TestEntity parent;
         private String fieldWithoutStandardGetter;
+        private TestEntity parentWithoutStandardGetter;
 
         public String getName() {
             return name;
@@ -726,6 +746,14 @@ public class PageTest {
 
         public void setFieldWithoutStandardGetter(String fieldWithoutStandardGetter) {
             this.fieldWithoutStandardGetter = fieldWithoutStandardGetter;
+        }
+
+        public TestEntity parentWithoutStandardGetter() {
+            return parentWithoutStandardGetter;
+        }
+
+        public void setParentWithoutStandardGetter(TestEntity parentWithoutStandardGetter) {
+            this.parentWithoutStandardGetter = parentWithoutStandardGetter;
         }
 
         public String getUpperCaseName() {

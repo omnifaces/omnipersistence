@@ -21,6 +21,7 @@ import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.findGetter;
+import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
 import java.io.Serializable;
@@ -373,8 +374,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * Set the range for cursor-based (value-based) paging. Instead of SQL {@code OFFSET}, the query uses a keyset predicate derived from the last entity,
          * keeping performance stable regardless of page depth. Mutually exclusive with the other <code>range</code> methods.
          * <p>
-         * The page does not retain the entity: {@link #build()} extracts the values of the ordering fields from it via their getters. A nested property path
-         * whose intermediate value is <code>null</code> gets the value <code>null</code>.
+         * The page does not retain the entity: {@link #build()} extracts the values of the ordering fields from it via their getters. When the last property of
+         * a path has no getter, its field is read instead. Each intermediate property of a nested path must have a getter, because a lazy association is only
+         * initialized via its getter. For the same reason, a lazy basic property without a getter gets its raw field state. A nested property path whose
+         * intermediate value is <code>null</code> gets the value <code>null</code>.
          *
          * @param last Last entity of the previous page. May not be <code>null</code>.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
@@ -479,32 +482,32 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          *
          * @return The built page.
          * @throws IllegalArgumentException When the keys of the last ordering values do not match the keys of the ordering.
-         * @throws IllegalStateException When the last entity has no getter for an ordering field.
+         * @throws IllegalStateException When an intermediate property of an ordering field path has no getter, or its last property has neither a getter nor a
+         * field.
          */
         public Page build() {
             var orderingValues = last != null
-                ? collectOrderingValues(orderingOrDefault(ordering), field -> invokeNestedGetter(last, field))
+                ? collectOrderingValues(orderingOrDefault(ordering), field -> readNestedProperty(last, field))
                 : lastOrderingValues;
             return new Page(offset, limit, orderingValues, reversed, ordering, requiredCriteria, optionalCriteria);
         }
 
-        private static Object invokeNestedGetter(Object instance, String path) {
+        private static Object readNestedProperty(Object instance, String path) {
+            var properties = path.split("\\.");
+            var lastIndex = properties.length - 1;
             var value = instance;
 
-            for (var property : path.split("\\.")) {
-                if (value == null) {
-                    return null;
-                }
-                var currentValue = value;
-                value = findGetter(currentValue.getClass(), property)
-                    .map(getter -> invokeMethod(currentValue, getter))
-                    .orElseGet(() -> {
-                        var val = currentValue instanceof BaseEntity<?> e ? Provider.HIBERNATE.dereferenceProxy(e) : currentValue;
-                        return accessField(val, property);
-                    });
+            for (var i = 0; i < lastIndex && value != null; i++) {
+                value = invokeGetter(value, properties[i]);
             }
 
-            return value;
+            return value == null ? null : readProperty(value, properties[lastIndex]);
+        }
+
+        private static Object readProperty(Object instance, String property) {
+            return findGetter(instance.getClass(), property)
+                .map(getter -> invokeMethod(instance, getter))
+                .orElseGet(() -> accessField(instance instanceof BaseEntity<?> entity ? Provider.HIBERNATE.dereferenceProxy(entity) : instance, property));
         }
 
     }
