@@ -38,20 +38,22 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * implementations of {@link Object#hashCode()}, {@link Object#equals(Object)}, {@link Comparable#compareTo(Object)} and {@link Object#toString()} based on the
  * entity ID.
  * <p>
- * There are five more mapped superclasses which may also be of interest.
+ * There are seven more mapped superclasses which may also be of interest.
  * <ul>
  * <li>{@link TimestampedBaseEntity} - extends {@link BaseEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes care
  * of them.
  * <li>{@link VersionedBaseEntity} - extends {@link TimestampedBaseEntity} with a <code>@Version</code> column and automatically takes care of it.
+ * <li>{@link LockedBaseEntity} - extends {@link BaseEntity} with a <code>@Version</code> column and automatically takes care of it.
  * <li>{@link GeneratedIdEntity} - extends {@link BaseEntity} with <code>id</code> column and automatically takes care of it.
  * <li>{@link TimestampedEntity} - extends {@link GeneratedIdEntity} with <code>created</code> and <code>lastModified</code> columns and automatically takes
  * care of them.
  * <li>{@link VersionedEntity} - extends {@link TimestampedEntity} with a <code>@Version</code> column and automatically takes care of it.
+ * <li>{@link LockedEntity} - extends {@link GeneratedIdEntity} with a <code>@Version</code> column and automatically takes care of it.
  * </ul>
  * <p>
- * The first three ({@link BaseEntity}, {@link TimestampedBaseEntity} and {@link VersionedBaseEntity}) require you to manually define the
- * {@link jakarta.persistence.Id} column. The last three ({@link GeneratedIdEntity}, {@link TimestampedEntity} and {@link VersionedEntity}) already provide an
- * auto-generated <code>id</code> column.
+ * The first four ({@link BaseEntity}, {@link TimestampedBaseEntity}, {@link VersionedBaseEntity} and {@link LockedBaseEntity}) require you to manually define
+ * the {@link jakarta.persistence.Id} column. The last four ({@link GeneratedIdEntity}, {@link TimestampedEntity}, {@link VersionedEntity} and
+ * {@link LockedEntity}) already provide an auto-generated <code>id</code> column.
  * <p>
  * Usage example:
  *

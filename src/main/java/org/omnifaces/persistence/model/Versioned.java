@@ -16,12 +16,14 @@ import jakarta.annotation.Nullable;
 
 /**
  * <p>
- * Base interface for versioned entity. Implemented by {@link VersionedBaseEntity} and {@link VersionedEntity}.
+ * Base interface for versioned entity. Implemented by {@link VersionedBaseEntity}, {@link VersionedEntity}, {@link LockedBaseEntity} and {@link LockedEntity}.
  *
  * @author Bauke Scholtz
  * @since 1.0
  * @see VersionedBaseEntity
  * @see VersionedEntity
+ * @see LockedBaseEntity
+ * @see LockedEntity
  */
 public interface Versioned {
 

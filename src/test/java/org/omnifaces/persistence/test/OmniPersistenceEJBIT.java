@@ -18,11 +18,13 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Comment;
+import org.omnifaces.persistence.test.model.InventoryItem;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.CommentServiceEJB;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.ConfigServiceEJB;
+import org.omnifaces.persistence.test.service.InventoryItemServiceEJB;
 import org.omnifaces.persistence.test.service.LookupServiceEJB;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PersonServiceEJB;
@@ -50,6 +52,8 @@ public class OmniPersistenceEJBIT extends OmniPersistenceIT {
     private LookupServiceEJB lookupService;
     @EJB
     private ConfigServiceEJB configService;
+    @EJB
+    private InventoryItemServiceEJB inventoryItemService;
 
     @Override
     protected PersonService personService() {
@@ -79,6 +83,11 @@ public class OmniPersistenceEJBIT extends OmniPersistenceIT {
     @Override
     protected ConfigService configService() {
         return configService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, InventoryItem> inventoryItemService() {
+        return inventoryItemService;
     }
 
 }

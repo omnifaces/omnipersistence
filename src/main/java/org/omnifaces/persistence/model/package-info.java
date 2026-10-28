@@ -21,6 +21,8 @@
  * <li>{@link TimestampedEntity} — adds auto-generated {@code id}, {@code created} and {@code lastModified}.
  * <li>{@link VersionedBaseEntity} — adds {@code @Version} on top of {@link TimestampedBaseEntity}; {@code @Id} manual.
  * <li>{@link VersionedEntity} — adds {@code @Version} on top of {@link TimestampedEntity}.
+ * <li>{@link LockedBaseEntity} — adds {@code @Version} on top of {@link BaseEntity}; {@code @Id} manual.
+ * <li>{@link LockedEntity} — adds {@code @Version} on top of {@link GeneratedIdEntity}.
  * </ul>
  * <p>
  * All base classes provide correct {@code equals}, {@code hashCode}, {@code compareTo} and {@code toString} based on entity ID by default, overridable via

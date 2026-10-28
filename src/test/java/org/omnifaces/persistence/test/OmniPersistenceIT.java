@@ -34,8 +34,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -66,6 +69,7 @@ import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
+import org.omnifaces.persistence.test.model.InventoryItem;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
@@ -115,6 +119,8 @@ public abstract class OmniPersistenceIT {
     protected abstract BaseEntityService<String, Lookup> lookupService();
 
     protected abstract ConfigService configService();
+
+    protected abstract BaseEntityService<Long, InventoryItem> inventoryItemService();
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
@@ -1029,6 +1035,46 @@ public abstract class OmniPersistenceIT {
 
         var stillExists = configService().getById(config.getId());
         assertNotNull(stillExists, "Entity still exists after failed delete");
+    }
+
+    // LockedBaseEntity -----------------------------------------------------------------------------------------------
+
+    @Test
+    void testLockedBaseEntityVersionIsInitializedOnPersist() {
+        var item = persistNewInventoryItem();
+        assertNotNull(inventoryItemService().getById(item.getId()).getVersion(), "Version after persist");
+    }
+
+    @Test
+    void testLockedBaseEntityVersionIsIncrementedOnUpdate() {
+        var item = inventoryItemService().getById(persistNewInventoryItem().getId());
+        var initialVersion = item.getVersion();
+        item.setQuantity(9);
+        inventoryItemService().update(item);
+        assertEquals(initialVersion + 1, inventoryItemService().getById(item.getId()).getVersion(), "Version after update");
+    }
+
+    @Test
+    void testLockedBaseEntityRejectsStaleUpdate() {
+        var id = persistNewInventoryItem().getId();
+        var current = inventoryItemService().getById(id);
+        var stale = inventoryItemService().getById(id);
+        current.setQuantity(9);
+        inventoryItemService().update(current);
+        stale.setQuantity(8);
+        var exception = assertThrows(Exception.class, () -> inventoryItemService().update(stale));
+        assertTrue(
+            Stream.<Throwable>iterate(exception, Objects::nonNull, Throwable::getCause).anyMatch(OptimisticLockException.class::isInstance),
+            "Stale update is caused by OptimisticLockException"
+        );
+        assertEquals(9, inventoryItemService().getById(id).getQuantity(), "Quantity after stale update");
+    }
+
+    private InventoryItem persistNewInventoryItem() {
+        var item = new InventoryItem();
+        item.setQuantity(10);
+        inventoryItemService().persist(item);
+        return item;
     }
 
     // getDatabase() / getProvider() ----------------------------------------------------------------------------------
