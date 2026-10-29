@@ -45,4 +45,17 @@ public abstract class ConfigService extends BaseEntityService<Long, Config> {
         config.setKey(newKey);
     }
 
+    public void updateValueWhileConcurrentlyUpdated(Long id, String newValue, Runnable concurrentUpdate) {
+        var config = getById(id);
+        concurrentUpdate.run();
+        config.setValue(newValue);
+    }
+
+    public void updateValueTwice(Long id, String firstValue, String secondValue) {
+        var config = getById(id);
+        config.setValue(firstValue);
+        getEntityManager().flush();
+        config.setValue(secondValue);
+    }
+
 }
