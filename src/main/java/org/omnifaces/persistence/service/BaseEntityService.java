@@ -1998,8 +1998,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var hasJoins = hasJoins(root);
         var page = pageBuilder.getPage();
 
-        if ((hasJoins || page.getOffset() > 0) && !pageBuilder.canBuildValueBasedPagingPredicate()) {
-            query.setFirstResult(page.getOffset());
+        var firstResult = pageBuilder.canBuildValueBasedPagingPredicate() ? page.getResidualOffset() : page.getOffset();
+
+        if (hasJoins || firstResult > 0) {
+            query.setFirstResult(firstResult);
         }
 
         if (hasJoins || page.getLimit() != MAX_VALUE) {
@@ -2016,7 +2018,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var page = pageBuilder.getPage();
         var ordering = page.getOrdering();
 
-        if (ordering.isEmpty() || page.getLimit() - page.getOffset() == 1) {
+        if (ordering.isEmpty()) {
             return;
         }
 

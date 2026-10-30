@@ -138,6 +138,16 @@ public class PageTest {
             assertTrue(Page.of(0, 10).getLastOrderingValues().isEmpty());
         }
 
+        @Test
+        void residualOffsetIsZeroWithoutLastOrderingValues() {
+            assertEquals(0, Page.of(5, 10).getResidualOffset());
+        }
+
+        @Test
+        void residualOffsetDefaultsToZeroForOrderingValuesRange() {
+            assertEquals(0, Page.with().range(20, 10, Map.of("id", 42L), false).build().getResidualOffset());
+        }
+
     }
 
     @Nested
@@ -399,6 +409,27 @@ public class PageTest {
         }
 
         @Test
+        void buildsWithOrderingValuesRangeAndResidualOffset() {
+            var page = Page.with().range(40, 10, Map.of("id", 42L), 10, true).orderBy("id", true).build();
+            assertEquals(40, page.getOffset());
+            assertEquals(10, page.getLimit());
+            assertEquals(Map.of("id", 42L), page.getLastOrderingValues());
+            assertEquals(10, page.getResidualOffset());
+            assertTrue(page.isReversed());
+        }
+
+        @Test
+        void negativeResidualOffsetThrowsException() {
+            var builder = Page.with().range(40, 10, Map.of("id", 42L), -1, false);
+            assertThrows(IllegalArgumentException.class, builder::build);
+        }
+
+        @Test
+        void residualOffsetIsNotValidatedAgainstOffset() {
+            assertEquals(20, Page.with().range(10, 10, Map.of("id", 42L), 20, false).build().getResidualOffset());
+        }
+
+        @Test
         void orderingValuesRangeAcceptsNullValue() {
             var page = Page.with().range(0, 10, singletonMap("name", null), false).orderBy("name", true).build();
             assertEquals(singletonMap("name", null), page.getLastOrderingValues());
@@ -542,6 +573,11 @@ public class PageTest {
             assertFalse(all.isReversed());
         }
 
+        @Test
+        void allDropsResidualOffset() {
+            assertEquals(0, Page.with().range(40, 10, Map.of("id", 1L), 10, false).build().all().getResidualOffset());
+        }
+
     }
 
     @Nested
@@ -563,6 +599,11 @@ public class PageTest {
         @Test
         void differentLimitNotEqual() {
             assertNotEquals(Page.of(0, 10), Page.of(0, 20));
+        }
+
+        @Test
+        void differentResidualOffsetNotEqual() {
+            assertNotEquals(Page.with().range(40, 10, Map.of("id", 1L), 0, false).build(), Page.with().range(40, 10, Map.of("id", 1L), 10, false).build());
         }
 
         @Test
@@ -705,6 +746,15 @@ public class PageTest {
             var page = Page.with().range(last, 10, false).orderBy("id", true).build();
 
             assertEquals(page, serializeAndDeserialize(page));
+        }
+
+        @Test
+        void pageWithResidualOffsetSurvivesSerialization() throws Exception {
+            var page = Page.with().range(40, 10, Map.of("id", 42L), 10, false).orderBy("id", true).build();
+            var deserialized = serializeAndDeserialize(page);
+
+            assertEquals(page, deserialized);
+            assertEquals(10, deserialized.getResidualOffset());
         }
 
         @Test

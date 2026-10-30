@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
@@ -80,6 +81,7 @@ import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.PlainConfigUpdater;
 import org.omnifaces.persistence.test.service.TestAuditListener;
+import org.omnifaces.utils.collection.PartialResultList;
 
 @ExtendWith(ArquillianExtension.class)
 public abstract class OmniPersistenceIT {
@@ -834,6 +836,83 @@ public abstract class OmniPersistenceIT {
             page2.stream().map(Person::getId).toList(),
             "Cursor by ordering values of multiple fields returns same persons as offset based second page in same order"
         );
+    }
+
+    @Test
+    void testOffsetPageIsOrderedWhenLimitExceedsOffsetByOne() {
+        var page = personService().getPage(Page.of(9, 10), false);
+        var allIds = personService().getPage(Page.ALL, false).stream().map(Person::getId).toList();
+        assertEquals(allIds.subList(9, 19), page.stream().map(Person::getId).toList(), "Page is ordered by default ordering");
+    }
+
+    @Test
+    void testPageOfOneIsOrderedByGivenOrdering() {
+        var page = personService().getPage(Page.with().range(0, 1).orderBy("id", false).build(), false);
+        var allIds = personService().getPage(Page.with().orderBy("id", false).build(), false).stream().map(Person::getId).toList();
+        assertEquals(allIds.subList(0, 1), page.stream().map(Person::getId).toList(), "Page of one is ordered by given ordering");
+    }
+
+    @Test
+    void testCursorBasedPagingWithOrderingValuesAndResidualOffset() {
+        assertResidualOffsetPageEqualsOffsetPage(personService()::getPage, "Cursor by ordering values with residual offset returns same persons");
+    }
+
+    @Test
+    void testCursorBasedPagingWithOrderingValuesAndResidualOffsetReversed() {
+        var boundaryOffset = 27;
+        var pageOffset = 10;
+        var limit = 10;
+        var residualOffset = boundaryOffset - (pageOffset + limit);
+        var boundaryId = getIdOfPersonAtOffset(boundaryOffset);
+        var page = personService()
+            .getPage(Page.with().range(pageOffset, limit, Map.of("id", boundaryId), residualOffset, true).orderBy("id", true).build(), false);
+        var offsetPage = personService().getPage(Page.with().range(pageOffset, limit).orderBy("id", true).build(), false);
+
+        assertEquals(
+            offsetPage.stream().map(Person::getId).toList(),
+            page.stream().map(Person::getId).toList(),
+            "Reversed cursor by ordering values with residual offset returns same persons as offset based page in same order"
+        );
+    }
+
+    @Test
+    void testCursorBasedPagingWithOrderingValuesAndResidualOffsetWithPhones() {
+        assertResidualOffsetPageEqualsOffsetPage(
+            personService()::getPageWithPhones, "Cursor by ordering values with residual offset returns same persons with phones"
+        );
+    }
+
+    @Test
+    void testOrderingValuesAndResidualOffsetFallBackToOffsetWhenValueBasedPagingIsNotApplicable() {
+        var pageOffset = 20;
+        var boundaryOffset = 12;
+        var boundaryId = getIdOfPersonAtOffset(boundaryOffset);
+        var page = personService().getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, false).orderBy("id", true).build());
+        var offsetPage = personService().getPage(Page.with().range(pageOffset, 10).orderBy("id", true).build(), false);
+
+        assertEquals(
+            offsetPage.stream().map(Person::getId).toList(),
+            page.stream().map(Person::getId).toList(),
+            "Offset of the page is applied when value based paging is not applicable"
+        );
+    }
+
+    private void assertResidualOffsetPageEqualsOffsetPage(BiFunction<Page, Boolean, PartialResultList<Person>> getPage, String message) {
+        var boundaryOffset = 12;
+        var pageOffset = 20;
+        var residualOffset = pageOffset - boundaryOffset - 1;
+        var boundaryId = getIdOfPersonAtOffset(boundaryOffset);
+        var page = getPage.apply(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), residualOffset, false).orderBy("id", true).build(), false);
+        var offsetPage = getPage.apply(Page.with().range(pageOffset, 10).orderBy("id", true).build(), false);
+
+        assertEquals(
+            offsetPage.stream().map(Person::getId).toList(), page.stream().map(Person::getId).toList(), message + " as offset based page in same order"
+        );
+        assertEquals(pageOffset, page.getOffset(), "Result reports the offset of the page, not the residual offset");
+    }
+
+    private Long getIdOfPersonAtOffset(int offset) {
+        return personService().getPage(Page.with().range(offset, 1).orderBy("id", true).build(), false).get(0).getId();
     }
 
     // @SoftDeletable -------------------------------------------------------------------------------------------------
