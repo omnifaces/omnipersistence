@@ -1941,7 +1941,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var root = query.from(entityType);
         return query instanceof Subquery
             ? new SubqueryRoot<>(root)
-            : (getProvider() == ECLIPSELINK || getProvider() == OPENJPA && page != null && page.getLimit() < Integer.MAX_VALUE)
+            : (getProvider() == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
                 ? new PostponedFetchRoot<>(root)
                 : root;
     }
@@ -2024,8 +2024,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
         var root = pathResolver.get(null);
-        var skipOneToManyOrdering = root instanceof PostponedFetchRoot<?>; // PostponedFetchRoot is only created when page.getLimit() < MAX_VALUE (OpenJPA) or
-                                                                           // always for EclipseLink; non-paged queries don't suffer from join row inflation.
+        var skipOneToManyOrdering = root instanceof PostponedFetchRoot<?>; // PostponedFetchRoot is only created when page.getLimit() < MAX_VALUE or always for
+                                                                           // EclipseLink; non-paged queries don't suffer from join row inflation.
         criteriaQuery.orderBy(
             stream(ordering)
                 .filter(order -> !skipOneToManyOrdering || !oneToManys.test(order.getKey())) // @OneToMany ordering is handled in-memory by runPostponedFetches
@@ -2095,10 +2095,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                                                          // OpenJPA to wrap the query losing projected columns.
                 && (!optionalPredicates.isEmpty() // Optional (OR/global) predicates may span @ElementCollection fields; buildPredicate adds a root JOIN per
                                                   // such field, multiplying rows; DISTINCT deduplicates entities before LIMIT is applied.
-                    || hasFetches((From<?, ?>) pathResolver.get(null))); // Real fetch joins (Hibernate JOIN FETCH) or @ElementCollection required-criteria
-                                                                         // JOINs on OpenJPA/EclipseLink (PostponedFetchRoot intercepts fetch() but
-                                                                         // buildPredicate still calls root.join() for element collection filters) multiply
-                                                                         // rows; DISTINCT ensures LIMIT paginates over entity rows, not join rows.
+                    || hasFetches((From<?, ?>) pathResolver.get(null))); // Real fetch joins or @ElementCollection required-criteria JOINs with
+                                                                         // PostponedFetchRoot (it intercepts fetch() but buildPredicate still calls
+                                                                         // root.join() for element collection filters) multiply rows; DISTINCT ensures
+                                                                         // LIMIT paginates over entity rows, not join rows.
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 

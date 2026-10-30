@@ -610,14 +610,11 @@ public abstract class OmniPersistenceIT {
                                                                                                                          // count is inaccurate there.
         }
         result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
-        if (isOpenJPA() || isEclipseLink()) { // Hibernate JOIN FETCH returns all phone types; in-memory filtering of postponed fetches only applies to
-                                              // OpenJPA/EclipseLink.
-            result.forEach(
-                person -> person.getPhones().forEach(
-                    phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")
-                )
-            );
-        }
+        result.forEach(
+            person -> person.getPhones().forEach(
+                phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")
+            )
+        );
     }
 
     @Test

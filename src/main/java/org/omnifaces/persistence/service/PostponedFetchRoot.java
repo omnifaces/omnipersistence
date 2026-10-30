@@ -40,10 +40,15 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
- * Both OpenJPA and EclipseLink stubbornly apply the range (offset/limit) to join rows rather than root entity rows when a fetch join is present, resulting in
- * fewer root entities returned than the requested limit. This root will postpone all issued fetches so BaseEntityService can ultimately execute them as a
- * secondary JPQL query to initialize the fetched collections on the already-returned root entities. After the postponed fetches run, this root performs an
- * in-memory filter and sort of each loaded collection according to the active page criteria and ordering, if applicable.
+ * Root which postpones all issued fetches until after the paged query has run. The Jakarta Persistence specification leaves the effect of
+ * {@code setFirstResult()} and {@code setMaxResults()} on a query with fetch joins over collections undefined (section "Query Execution"). This root keeps the
+ * fetch joins out of the paged query, so that the range always applies to root entities.
+ * <p>
+ * On EclipseLink, BaseEntityService uses this root also when the page has no limit. EclipseLink returns a cartesian product for a fetch join whenever the query
+ * has a range, and BaseEntityService always sets a range when the query has joins.
+ * <p>
+ * BaseEntityService then runs each postponed fetch as a secondary JPQL query on the returned root entities. Finally, this root filters and sorts each fetched
+ * collection in memory according to the criteria and ordering of the page, if applicable.
  *
  * @author Bauke Scholtz
  * @since 1.0
