@@ -17,6 +17,7 @@ import static java.util.Collections.synchronizedMap;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.logging.Level.FINE;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 
 import java.util.HashSet;
@@ -31,17 +32,18 @@ import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.Metamodel;
 
 import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Helper class of {@link BaseEntityService}. Holds the metadata derived from an entity type, which is identical for every service over that type. The generated
  * ID flag and the soft delete data are derived from the entity class itself. The association mappings are derived from the Jakarta Persistence metamodel, and
  * are therefore resolved lazily on first use, separately per {@link EntityManagerFactory}, because two persistence units or providers may map the same entity
- * class differently. The caches do not keep entity classes or entity manager factories reachable.
+ * class differently. The caches do not keep entity manager factories reachable; the entity classes held per factory are released along with it.
  *
  * @author Bauke Scholtz
  * @since 1.2
@@ -64,11 +66,11 @@ final class EntityMetadata {
     };
 
     /**
-     * The attribute mappings per entity type, shared by all entity types within one entity manager factory. An attribute mapping depends only on the metamodel
-     * and the provider, and one entity manager factory has one provider. The values may not reference the entity manager factory, directly or via metamodel
-     * objects, else it would never be released from the weak map.
+     * The mappings per entity manager factory, shared by all entity types within it. These depend only on the metamodel and the provider, and one entity
+     * manager factory has one provider. The values may not reference the entity manager factory, directly or via metamodel objects, else it would never be
+     * released from the weak map.
      */
-    private static final Map<EntityManagerFactory, Map<Class<?>, Map<String, AttributeMapping>>> ATTRIBUTE_MAPPINGS = synchronizedMap(new WeakHashMap<>());
+    private static final Map<EntityManagerFactory, UnitMappings> UNIT_MAPPINGS = synchronizedMap(new WeakHashMap<>());
 
     private final Class<?> entityType;
     private final boolean generatedId;
@@ -102,36 +104,88 @@ final class EntityMetadata {
     }
 
     /**
-     * Returns the association mappings of this entity type as mapped by the persistence unit of the given entity manager factory. The mappings are resolved
-     * lazily per field path, and cached per entity manager factory.
+     * Returns the mappings of this entity type as mapped by the persistence unit of the given entity manager factory. The mappings are resolved lazily, and
+     * cached per entity manager factory.
      *
      * @param entityManagerFactory The entity manager factory providing the metamodel.
-     * @param provider The provider to determine the association type with.
-     * @return The association mappings of this entity type as mapped by the persistence unit of the given entity manager factory.
+     * @param provider The provider to determine the association type and to read proxies with.
+     * @return The mappings of this entity type as mapped by the persistence unit of the given entity manager factory.
      */
-    Associations getAssociations(EntityManagerFactory entityManagerFactory, Provider provider) {
-        return new Associations(
+    Mappings getMappings(EntityManagerFactory entityManagerFactory, Provider provider) {
+        var metamodel = entityManagerFactory.getMetamodel();
+        return new Mappings(
             mappingsPerFactory.computeIfAbsent(entityManagerFactory, k -> new FactoryMappings()),
-            ATTRIBUTE_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new ConcurrentHashMap<>()), entityManagerFactory.getMetamodel(), provider
+            UNIT_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new UnitMappings(metamodel)), metamodel, provider
         );
     }
 
     /**
-     * The association mappings of an entity type within one persistence unit. Field paths are resolved on demand by walking the metamodel along the path, and
-     * the outcome is cached per path. Fields which cannot be resolved are not cached.
+     * The mappings of an entity type within one persistence unit: its ID and its associations. Field paths are resolved on demand by walking the metamodel
+     * along the path, and the outcome is cached per path. Fields which cannot be resolved are not cached.
      */
-    final class Associations {
+    final class Mappings {
 
-        private final FactoryMappings mappings;
-        private final Map<Class<?>, Map<String, AttributeMapping>> attributeMappings;
+        private final FactoryMappings factoryMappings;
+        private final UnitMappings unitMappings;
         private final Metamodel metamodel;
         private final Provider provider;
 
-        private Associations(FactoryMappings mappings, Map<Class<?>, Map<String, AttributeMapping>> attributeMappings, Metamodel metamodel, Provider provider) {
-            this.mappings = mappings;
-            this.attributeMappings = attributeMappings;
+        private Mappings(FactoryMappings factoryMappings, UnitMappings unitMappings, Metamodel metamodel, Provider provider) {
+            this.factoryMappings = factoryMappings;
+            this.unitMappings = unitMappings;
             this.metamodel = metamodel;
             this.provider = provider;
+        }
+
+        /**
+         * Returns whether the given type is an entity type of this persistence unit.
+         *
+         * @param type The type to check.
+         * @return Whether the given type is an entity type of this persistence unit.
+         */
+        boolean isEntity(Class<?> type) {
+            return unitMappings.entityTypes.contains(type);
+        }
+
+        /**
+         * Returns the ID attribute of the given entity type of this persistence unit.
+         *
+         * @param type The entity type.
+         * @return The ID attribute of the given entity type.
+         * @throws IllegalArgumentException When the given type is not an entity type, or has an unsupported ID.
+         */
+        IdAttribute getIdAttribute(Class<?> type) {
+            return unitMappings.idAttributes.computeIfAbsent(type, k -> IdAttribute.of(metamodel.entity(k)));
+        }
+
+        /**
+         * Returns the ID of the given entity of this persistence unit: via the provider when it is a proxy, else via {@link Identifiable#getId()} when it
+         * implements it, else via its ID attribute.
+         *
+         * @param <I> The generic ID type.
+         * @param entity The entity, may be a proxy.
+         * @return The ID of the given entity, or <code>null</code> when it has none.
+         * @throws IllegalArgumentException When the given entity is not an entity of this persistence unit, or has an unsupported ID.
+         */
+        @SuppressWarnings("unchecked")
+        <I> I getId(Object entity) {
+            if (provider.isProxy(entity)) {
+                return provider.getIdentifier(entity);
+            }
+
+            return entity instanceof Identifiable<?> identifiable ? (I) identifiable.getId() : getIdAttribute(provider.getEntityType(entity)).get(entity);
+        }
+
+        /**
+         * Sets the ID of the given entity of this persistence unit to <code>null</code>: via {@link Identifiable#setId(Comparable)} when it implements it, else
+         * via its ID attribute, on the actual implementation when it is a proxy and the ID is accessed via its field.
+         *
+         * @param entity The entity, may be a proxy.
+         * @throws IllegalArgumentException When the given entity is not an entity of this persistence unit, or has an unsupported ID.
+         */
+        void unsetId(Object entity) {
+            var idAttribute = getIdAttribute(provider.getEntityType(entity));
+            idAttribute.set(entity instanceof Identifiable || idAttribute.isPropertyAccess() ? entity : provider.dereferenceProxy(entity), null);
         }
 
         /**
@@ -163,15 +217,15 @@ final class EntityMetadata {
          * @return The paths of <code>@ManyToOne</code> and <code>@OneToOne</code> fields.
          */
         Set<String> getManyOrOneToOnes() {
-            var manyOrOneToOnes = mappings.manyOrOneToOnes;
+            var manyOrOneToOnes = factoryMappings.manyOrOneToOnes;
 
             if (manyOrOneToOnes == null) {
-                synchronized (mappings) {
-                    manyOrOneToOnes = mappings.manyOrOneToOnes;
+                synchronized (factoryMappings) {
+                    manyOrOneToOnes = factoryMappings.manyOrOneToOnes;
 
                     if (manyOrOneToOnes == null) {
                         manyOrOneToOnes = computeManyOrOneToOneMapping();
-                        mappings.manyOrOneToOnes = manyOrOneToOnes;
+                        factoryMappings.manyOrOneToOnes = manyOrOneToOnes;
                     }
                 }
             }
@@ -180,13 +234,13 @@ final class EntityMetadata {
         }
 
         private PathMapping getPathMapping(String field) {
-            var pathMapping = mappings.paths.get(field);
+            var pathMapping = factoryMappings.paths.get(field);
 
             if (pathMapping == null) {
                 pathMapping = resolvePathMapping(field);
 
                 if (pathMapping.resolved()) {
-                    mappings.paths.putIfAbsent(field, pathMapping);
+                    factoryMappings.paths.putIfAbsent(field, pathMapping);
                 }
             }
 
@@ -222,8 +276,8 @@ final class EntityMetadata {
         }
 
         private Map<String, AttributeMapping> getAttributeMappings(Class<?> type) {
-            var typeAttributeMappings = attributeMappings.get(type);
-            return typeAttributeMappings != null ? typeAttributeMappings : attributeMappings.computeIfAbsent(type, this::computeAttributeMappings);
+            var typeAttributeMappings = unitMappings.attributeMappings.get(type);
+            return typeAttributeMappings != null ? typeAttributeMappings : unitMappings.attributeMappings.computeIfAbsent(type, this::computeAttributeMappings);
         }
 
         private Map<String, AttributeMapping> computeAttributeMappings(Class<?> type) {
@@ -243,7 +297,7 @@ final class EntityMetadata {
 
         private Class<?> getNestedType(Attribute<?, ?> attribute) {
             var javaType = provider.getBindableJavaType(attribute);
-            return BaseEntity.class.isAssignableFrom(javaType) ? javaType : null;
+            return isEntity(javaType) ? javaType : null;
         }
 
         private Set<String> computeManyOrOneToOneMapping() {
@@ -272,6 +326,21 @@ final class EntityMetadata {
     }
 
     /**
+     * The mappings of one persistence unit, shared by all entity types within it.
+     */
+    private static final class UnitMappings {
+
+        private final Set<Class<?>> entityTypes;
+        private final Map<Class<?>, Map<String, AttributeMapping>> attributeMappings = new ConcurrentHashMap<>();
+        private final Map<Class<?>, IdAttribute> idAttributes = new ConcurrentHashMap<>();
+
+        private UnitMappings(Metamodel metamodel) {
+            entityTypes = metamodel.getEntities().stream().map(EntityType::getJavaType).collect(toUnmodifiableSet());
+        }
+
+    }
+
+    /**
      * The association mappings of an entity type within one entity manager factory. This may not reference the entity manager factory, directly or via
      * metamodel objects, else it would never be released from the weak map.
      */
@@ -288,7 +357,7 @@ final class EntityMetadata {
      * @param elementCollection Whether the attribute is an <code>@ElementCollection</code>.
      * @param oneToMany Whether the attribute is a <code>@OneToMany</code>.
      * @param manyOrOneToOne Whether the attribute is a <code>@ManyToOne</code> or <code>@OneToOne</code>.
-     * @param nestedType The {@link BaseEntity} type the attribute refers to, or <code>null</code> if it does not refer to one.
+     * @param nestedType The entity type the attribute refers to, or <code>null</code> if it does not refer to one.
      */
     private record AttributeMapping(boolean elementCollection, boolean oneToMany, boolean manyOrOneToOne, Class<?> nestedType) {
     }
@@ -296,8 +365,8 @@ final class EntityMetadata {
     /**
      * The association mapping of a field path.
      *
-     * @param resolved Whether every attribute in the path could be found, and each one but the last refers to a {@link BaseEntity} type. Only resolved paths
-     * are cached, so that unknown field names cannot grow the cache.
+     * @param resolved Whether every attribute in the path could be found, and each one but the last refers to an entity type. Only resolved paths are cached,
+     * so that unknown field names cannot grow the cache.
      * @param elementCollection Whether the path ends in an <code>@ElementCollection</code> field.
      * @param nestedInOneToMany Whether the path is nested in a <code>@OneToMany</code> field.
      */

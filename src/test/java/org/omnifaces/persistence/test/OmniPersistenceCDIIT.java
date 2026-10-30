@@ -32,6 +32,8 @@ import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.PhoneServiceCDI;
 import org.omnifaces.persistence.test.service.StartupServiceEJB;
 import org.omnifaces.persistence.test.service.TextServiceCDI;
+import org.omnifaces.persistence.test.service.TrackingTextService;
+import org.omnifaces.persistence.test.service.TrackingTextServiceCDI;
 
 public class OmniPersistenceCDIIT extends OmniPersistenceIT {
 
@@ -54,6 +56,8 @@ public class OmniPersistenceCDIIT extends OmniPersistenceIT {
     private ConfigServiceCDI configService;
     @Inject
     private InventoryItemServiceCDI inventoryItemService;
+    @Inject
+    private TrackingTextServiceCDI trackingTextService;
 
     @Override
     protected PersonService personService() {
@@ -88,6 +92,11 @@ public class OmniPersistenceCDIIT extends OmniPersistenceIT {
     @Override
     protected BaseEntityService<Long, InventoryItem> inventoryItemService() {
         return inventoryItemService;
+    }
+
+    @Override
+    protected TrackingTextService trackingTextService() {
+        return trackingTextService;
     }
 
 }

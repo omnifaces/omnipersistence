@@ -12,11 +12,11 @@
  */
 package org.omnifaces.persistence.exception;
 
-import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.NonDeletable;
+import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
- * Thrown when trying to {@link org.omnifaces.persistence.service.BaseEntityService#delete(BaseEntity) delete} an entity that has the
- * {@link org.omnifaces.persistence.model.NonDeletable} annotation.
+ * Thrown when trying to {@link BaseEntityService#delete(Object) delete} an entity that has the {@link NonDeletable} annotation.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -32,7 +32,7 @@ public class NonDeletableEntityException extends BaseEntityException {
      *
      * @param entity The entity which is marked as non-deletable.
      */
-    public NonDeletableEntityException(BaseEntity<?> entity) {
+    public NonDeletableEntityException(Object entity) {
         super(entity, null);
     }
 

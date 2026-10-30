@@ -13,14 +13,18 @@
 package org.omnifaces.persistence.test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
 
+import java.lang.reflect.Member;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
@@ -63,8 +67,51 @@ class ProviderTest {
 
     }
 
+    @Nested
+    class IsElementCollectionOnOpenJpa {
+
+        @Test
+        void annotatedFieldIsElementCollection() throws NoSuchFieldException {
+            assertTrue(OPENJPA.isElementCollection(attribute(Members.class.getDeclaredField("tags"))));
+        }
+
+        @Test
+        void annotatedGetterIsElementCollection() throws NoSuchMethodException {
+            assertTrue(OPENJPA.isElementCollection(attribute(Members.class.getDeclaredMethod("getTags"))));
+        }
+
+        @Test
+        void unannotatedGetterIsNoElementCollection() throws NoSuchMethodException {
+            assertFalse(OPENJPA.isElementCollection(attribute(Members.class.getDeclaredMethod("getName"))));
+        }
+
+    }
+
+    static class Members {
+
+        @ElementCollection
+        List<String> tags;
+
+        @ElementCollection
+        List<String> getTags() {
+            return tags;
+        }
+
+        String getName() {
+            return null;
+        }
+
+    }
+
+    private static Attribute<?, ?> attribute(Member javaMember) {
+        return stub(Attribute.class, Map.of("getJavaMember", javaMember));
+    }
+
     private static Attribute<?, ?> attribute(Class<?> type, Class<?> javaType, Class<?> bindableJavaType) {
-        var returnValues = Map.of("getJavaType", javaType, "getBindableJavaType", bindableJavaType);
+        return stub(type, Map.of("getJavaType", javaType, "getBindableJavaType", bindableJavaType));
+    }
+
+    private static Attribute<?, ?> stub(Class<?> type, Map<String, Object> returnValues) {
         return (Attribute<?, ?>) Proxy.newProxyInstance(ProviderTest.class.getClassLoader(), new Class<?>[] { type }, (proxy, method, args) -> {
             if (!returnValues.containsKey(method.getName())) {
                 throw new UnsupportedOperationException(method.getName());

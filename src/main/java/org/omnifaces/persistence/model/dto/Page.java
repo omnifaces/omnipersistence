@@ -35,8 +35,6 @@ import jakarta.annotation.Nullable;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Criteria;
-import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -374,9 +372,11 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         public Builder() {
         }
 
+        private static final String ERROR_NUMBER_AS_LAST = "Last entity may not be a number; for an offset use range(int, int) instead";
+
         private Integer offset;
         private Integer limit;
-        private Identifiable<?> last;
+        private Object last;
         private Map<String, Object> lastOrderingValues;
         private Integer residualOffset;
         private boolean reversed;
@@ -406,19 +406,27 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * The page does not retain the entity: {@link #build()} extracts the values of the ordering fields from it via their getters. When the last property of
          * a path has no getter, its field is read instead. Each intermediate property of a nested path must have a getter, because a lazy association is only
          * initialized via its getter. For the same reason, a lazy basic property without a getter gets its raw field state. A nested property path whose
-         * intermediate value is <code>null</code> gets the value <code>null</code>.
+         * intermediate value is <code>null</code> gets the value <code>null</code>. Without explicit ordering, the page is ordered by <code>id</code>, so the
+         * entity must then have an <code>id</code> property.
          *
          * @param last Last entity of the previous page. May not be <code>null</code>.
          * @param limit Maximum amount of records to be matched. May not be less than 1. Defaults to {@link Integer#MAX_VALUE}.
          * @param reversed Whether to navigate in reverse order (i.e. towards the previous page).
          * @throws NullPointerException When last entity is <code>null</code>.
+         * @throws IllegalArgumentException When last entity is a {@link Number}, which is likely an offset meant for {@link #range(int, int)}.
          * @throws IllegalStateException When a range is already set in this builder.
          * @return This builder.
          * @see Page#getLastOrderingValues()
          */
-        public Builder range(Identifiable<?> last, int limit, boolean reversed) {
+        public Builder range(Object last, int limit, boolean reversed) {
             checkRangeNotSet();
-            this.last = requireNonNull(last, "last");
+
+            if (requireNonNull(last, "last") instanceof Number) {
+                throw new IllegalArgumentException(ERROR_NUMBER_AS_LAST);
+            }
+
+            this.last = last;
+
             this.limit = limit;
             this.reversed = reversed;
             return this;
@@ -563,7 +571,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         private static Object readProperty(Object instance, String property) {
             return findGetter(instance.getClass(), property)
                 .map(getter -> invokeMethod(instance, getter))
-                .orElseGet(() -> accessField(instance instanceof BaseEntity<?> entity ? Provider.HIBERNATE.dereferenceProxy(entity) : instance, property));
+                .orElseGet(() -> accessField(Provider.HIBERNATE.dereferenceProxy(instance), property));
         }
 
     }

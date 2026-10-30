@@ -26,7 +26,7 @@ import jakarta.persistence.EntityListeners;
  * <ol>
  * <li>Declare {@link AuditListener} as {@link EntityListeners} on your entity.
  * <li>Put {@link Audit} annotation on fields of interest. These must be of a basic type, such as a string, number, date or enum, and not an entity or
- * collection.
+ * collection. Each of them must have a getter.
  * <li>Observe the {@link AuditedChange} CDI event.
  * </ol>
  * <p>

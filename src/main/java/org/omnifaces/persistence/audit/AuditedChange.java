@@ -12,8 +12,6 @@
  */
 package org.omnifaces.persistence.audit;
 
-import org.omnifaces.persistence.model.BaseEntity;
-
 /**
  * <p>
  * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a Jakarta Persistence {@code @PreUpdate} lifecycle
@@ -26,7 +24,7 @@ import org.omnifaces.persistence.model.BaseEntity;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(change.getEntity().getId());
+ *     log.setEntityId(((YourEntity) change.getEntity()).getId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));
@@ -41,13 +39,13 @@ import org.omnifaces.persistence.model.BaseEntity;
  */
 public class AuditedChange {
 
-    private final BaseEntity<?> entity;
+    private final Object entity;
     private final String entityName;
     private final String propertyName;
     private final Object oldValue;
     private final Object newValue;
 
-    AuditedChange(BaseEntity<?> entity, String entityName, String propertyName, Object oldValue, Object newValue) {
+    AuditedChange(Object entity, String entityName, String propertyName, Object oldValue, Object newValue) {
         this.entity = entity;
         this.entityName = entityName;
         this.propertyName = propertyName;
@@ -60,7 +58,7 @@ public class AuditedChange {
      *
      * @return The entity that was changed.
      */
-    public BaseEntity<?> getEntity() {
+    public Object getEntity() {
         return entity;
     }
 
@@ -102,7 +100,7 @@ public class AuditedChange {
 
     @Override
     public String toString() {
-        return String.format("AuditedChange[%s#%s.%s: %s -> %s]", entityName, entity.getId(), propertyName, oldValue, newValue);
+        return String.format("AuditedChange[%s.%s: %s -> %s]", entity, propertyName, oldValue, newValue);
     }
 
 }

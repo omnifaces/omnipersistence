@@ -36,7 +36,6 @@ import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.Root;
 
 import org.omnifaces.persistence.criteria.Criteria;
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
@@ -68,13 +67,17 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return !postponedFetches.isEmpty();
     }
 
-    public <E extends BaseEntity<?>, T extends E> List<T> runPostponedFetches(Page page, EntityManager entityManager, Class<E> entityType, List<T> entities) {
+    public <E, T extends E> List<T> runPostponedFetches(
+        Page page, EntityManager entityManager, Class<E> entityType, String idName, List<?> ids, List<T> entities
+    )
+    {
         var fetchPaths = List.copyOf(postponedFetches);
-        var ids = entities.stream().map(BaseEntity::getId).toList();
 
         for (var fetchPath : fetchPaths) {
             entityManager
-                .createQuery("SELECT DISTINCT e FROM " + entityType.getSimpleName() + " e JOIN FETCH e." + fetchPath + " WHERE e.id IN :ids", entityType)
+                .createQuery(
+                    "SELECT DISTINCT e FROM " + entityType.getSimpleName() + " e JOIN FETCH e." + fetchPath + " WHERE e." + idName + " IN :ids", entityType
+                )
                 .setParameter("ids", ids).getResultList();
             // No need to explicitly set in root entities; 1st level cache will sort out this while still inside the same transaction.
         }

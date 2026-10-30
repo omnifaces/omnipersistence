@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
 
 /**
@@ -70,7 +69,7 @@ class SoftDeleteData {
         }
     }
 
-    public boolean isSoftDeleted(BaseEntity<?> entity) {
+    public boolean isSoftDeleted(Object entity) {
         if (!softDeletable) {
             return false;
         }
@@ -79,7 +78,7 @@ class SoftDeleteData {
         return typeActive ^ value;
     }
 
-    public void setSoftDeleted(BaseEntity<?> entity, boolean deleted) {
+    public void setSoftDeleted(Object entity, boolean deleted) {
         invokeMethod(entity, setterName, typeActive ^ deleted);
     }
 

@@ -76,9 +76,12 @@ import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.NonUniqueResultException;
@@ -121,6 +124,7 @@ import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
+import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.LockedBaseEntity;
@@ -141,7 +145,11 @@ import org.omnifaces.utils.reflect.Getter;
  * the need to inject the {@link EntityManager} in your service class and it would suffice to just delegate all persistence actions to methods of this abstract
  * class.
  * <p>
- * You only need to let your entities extend from one of the following mapped super classes:
+ * If you'd rather not extend from it, then inject an {@link EntityRepository} instead, which offers the same persistence actions.
+ * <p>
+ * Your entities can be any {@link Entity} with a single {@link Id} or {@link EmbeddedId} attribute of a non-primitive type, whatever its name. In criteria and
+ * ordering of {@link Page}, the field name <code>id</code> always refers to it. Optionally, let your entities extend from one of the following mapped super
+ * classes, for among others a default {@link Object#equals(Object)}, {@link Object#hashCode()} and {@link Comparable#compareTo(Object)} based on the ID:
  * <ul>
  * <li>{@link BaseEntity}
  * <li>{@link TimestampedBaseEntity}
@@ -152,6 +160,9 @@ import org.omnifaces.utils.reflect.Getter;
  * <li>{@link VersionedEntity}
  * <li>{@link LockedEntity}
  * </ul>
+ * <p>
+ * The {@link BaseEntityListener} events are by default only fired for entities extending from {@link BaseEntity}; any other entity can register it via
+ * {@link EntityListeners}.
  *
  * <h2>Logging</h2>
  * <p>
@@ -162,21 +173,20 @@ import org.omnifaces.utils.reflect.Getter;
  * generated, and whether the entity is {@link SoftDeletable}, and any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and
  * {@link OneToMany} mappings of the entity. This is internally used in order to be able to build proper queries to perform a search inside those fields.
  * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
- * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during {@link #persist(BaseEntity)} and
- * {@link #update(BaseEntity)}. Due to technical limitations, it will during <code>update()</code> only happen when
- * <code>jakarta.persistence.validation.mode</code> property in <code>persistence.xml</code> is explicitly set to <code>CALLBACK</code> (and thus not to its
- * default of <code>AUTO</code>).
+ * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during {@link #persist(Object)} and
+ * {@link #update(Object)}. Due to technical limitations, it will during <code>update()</code> only happen when <code>jakarta.persistence.validation.mode</code>
+ * property in <code>persistence.xml</code> is explicitly set to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
  * </ul>
  *
  * @author Bauke Scholtz
  * @since 1.0
  * @param <I> The generic ID type.
- * @param <E> The generic base entity type.
+ * @param <E> The generic entity type.
  * @see BaseEntity
  * @see Page
  * @see Criteria
  */
-public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E extends BaseEntity<I>> {
+public abstract class BaseEntityService<I extends Comparable<I> & Serializable, E> {
 
     private static final ThreadLocal<BaseEntityService<?, ?>> CURRENT_INSTANCE = new ThreadLocal<>();
 
@@ -213,6 +223,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
     private java.util.function.Predicate<String> oneToManys = field -> false;
     private Validator validator;
+    private java.util.function.Predicate<Class<?>> entityTypes = type -> false;
+    private Function<Object, Object> idGetter;
+    private Consumer<Object> idUnsetter;
+    private IdAttribute idAttribute;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -233,16 +247,32 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
+     * The constructor for a service whose <code>I</code> and <code>E</code> are not resolvable from its own class, such as the one wrapped by
+     * {@link EntityRepository}.
+     */
+    BaseEntityService(Class<I> identifierType, Class<E> entityType) {
+        this.identifierType = identifierType;
+        this.entityType = entityType;
+        metadata = EntityMetadata.of(entityType);
+        generatedId = metadata.isGeneratedId();
+        softDeleteData = metadata.getSoftDeleteData();
+    }
+
+    /**
      * The postconstruct initializes the properties dependent on entity manager.
      */
     @PostConstruct
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        var associations = metadata.getAssociations(getEntityManager().getEntityManagerFactory(), getProvider());
-        elementCollections = associations::isElementCollection;
-        manyOrOneToOnes = associations::getManyOrOneToOnes;
-        oneToManys = associations::isOneToMany;
+        var mappings = metadata.getMappings(getEntityManager().getEntityManagerFactory(), getProvider());
+        elementCollections = mappings::isElementCollection;
+        manyOrOneToOnes = mappings::getManyOrOneToOnes;
+        oneToManys = mappings::isOneToMany;
+        entityTypes = mappings::isEntity;
+        idGetter = mappings::getId;
+        idUnsetter = mappings::unsetId;
+        idAttribute = mappings.getIdAttribute(entityType);
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
@@ -321,10 +351,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the actual type of the generic base entity type <code>E</code>. This is immutable (you can't override the method to change the internally used
-     * value).
+     * Returns the actual type of the generic entity type <code>E</code>. This is immutable (you can't override the method to change the internally used value).
      *
-     * @return The actual type of the generic base entity type <code>E</code>.
+     * @return The actual type of the generic entity type <code>E</code>.
      */
     protected Class<E> getEntityType() {
         return entityType;
@@ -365,25 +394,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the metamodel of current base entity.
+     * Returns the metamodel of current entity.
      *
-     * @return The metamodel of current base entity.
+     * @return The metamodel of current entity.
      */
     protected EntityType<E> getMetamodel() {
         return getEntityManager().getMetamodel().entity(entityType);
     }
 
     /**
-     * Returns the metamodel of given base entity.
+     * Returns the metamodel of given entity.
      *
-     * @param <I> The generic ID type of the given base entity.
-     * @param <E> The generic base entity type of the given base entity.
-     * @param entity Base entity to obtain metamodel for.
-     * @return The metamodel of given base entity.
+     * @param <T> The generic entity type of the given entity.
+     * @param entity Entity to obtain metamodel for.
+     * @return The metamodel of given entity.
      */
-    @SuppressWarnings({ "unchecked", "hiding" })
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> EntityType<E> getMetamodel(E entity) {
-        return getEntityManager().getMetamodel().entity((Class<E>) entity.getClass());
+    @SuppressWarnings("unchecked")
+    public <T> EntityType<T> getMetamodel(T entity) {
+        return getEntityManager().getMetamodel().entity((Class<T>) entity.getClass());
     }
 
     // Preparing actions ----------------------------------------------------------------------------------------------
@@ -483,10 +511,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * }
      * </pre>
      *
-     * @param <E> The generic base entity type.
+     * @param <E> The generic entity type.
      */
     @FunctionalInterface
-    protected interface CriteriaQueryBuilder<E> {
+    public interface CriteriaQueryBuilder<E> {
 
         /**
          * Builds the Jakarta Persistence criteria query.
@@ -732,7 +760,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Nullable
     public E getByIdWithLoadGraph(I id, String entityGraphName) {
         return runWithCurrentInstance(() -> {
-            var entityGraph = entityManager.getEntityGraph(entityGraphName);
+            var entityGraph = getEntityManager().getEntityGraph(entityGraphName);
             var properties = new HashMap<String, Object>();
             properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
             properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
@@ -804,8 +832,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
         return list(
             select("")
-                + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e.id IN (" + paramNames + ")"
-                + " ORDER BY e.id DESC",
+                + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e." + idAttribute.getName() + " IN (" + paramNames + ")"
+                + orderByIdDescending(),
             paramValues
         );
     }
@@ -817,8 +845,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Whether entity with given entity exists.
      */
     protected boolean exists(E entity) {
-        var id = getProvider().getIdentifier(entity);
-        return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e.id = :id")
+        var id = getId(entity);
+        return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e." + idAttribute.getName() + " = :id")
             .setParameter("id", id)
             .getSingleResult().intValue() > 0;
     }
@@ -843,7 +871,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return list(
             select("")
                 + softDeleteData.getWhereClause(includeSoftDeleted)
-                + " ORDER BY e.id DESC"
+                + orderByIdDescending()
         );
     }
 
@@ -859,7 +887,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return list(
                 select("")
                     + softDeleteData.getWhereClause(true)
-                    + " ORDER BY e.id DESC"
+                    + orderByIdDescending()
             );
         });
     }
@@ -945,6 +973,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
+    private String orderByIdDescending() {
+        return " ORDER BY e." + idAttribute.getName() + " DESC";
+    }
+
     private String update(String jpql) {
         if (!jpql.trim().toLowerCase().startsWith("update")) {
             return "UPDATE " + entityType.getSimpleName() + " e " + jpql;
@@ -1001,7 +1033,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public I persist(E entity) {
         return runWithCurrentInstance(() -> {
-            if (entity.getId() != null) {
+            if (getId(entity) != null) {
                 if (generatedId || exists(entity)) {
                     throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
                 }
@@ -1022,7 +1054,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
             getEntityManager().flush();
 
-            return entity.getId();
+            return this.<I>getId(entity);
         });
     }
 
@@ -1041,7 +1073,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E update(E entity) {
         return runWithCurrentInstance(() -> {
-            if (entity.getId() == null) {
+            if (getId(entity) == null) {
                 if (generatedId) {
                     throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
                 }
@@ -1068,8 +1100,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Update given entity via {@link #update(BaseEntity)} and immediately perform a flush so that all changes in managed entities so far in the current
-     * transaction are persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
+     * Update given entity via {@link #update(Object)} and immediately perform a flush so that all changes in managed entities so far in the current transaction
+     * are persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
      *
      * @param entity Entity to update.
      * @return Updated entity.
@@ -1158,7 +1190,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Save given entity. This will automatically determine based on the presence of generated entity ID, or existence of an entity in the data store whether to
-     * {@link #persist(BaseEntity)} or to {@link #update(BaseEntity)}.
+     * {@link #persist(Object)} or to {@link #update(Object)}.
      *
      * @param entity Entity to save.
      * @return Saved entity.
@@ -1166,7 +1198,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E save(E entity) {
         return runWithCurrentInstance(() -> {
-            if (generatedId && entity.getId() == null || !generatedId && !exists(entity)) {
+            if (generatedId && getId(entity) == null || !generatedId && !exists(entity)) {
                 persist(entity);
                 return entity;
             }
@@ -1177,8 +1209,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Save given entity via {@link #save(BaseEntity)} and immediately perform a flush so that all changes in managed entities so far in the current transaction
-     * are persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
+     * Save given entity via {@link #save(Object)} and immediately perform a flush so that all changes in managed entities so far in the current transaction are
+     * persisted. This is particularly useful when you intend to process the given entity further in an asynchronous service method.
      *
      * @param entity Entity to save.
      * @return Saved entity.
@@ -1192,7 +1224,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Delete actions -------------------------------------------------------------------------------------------------
 
     /**
-     * Delete given entity.
+     * Delete given entity. The ID of the given entity is unset afterwards, unless it is managed by a persistence provider other than Hibernate, because
+     * EclipseLink and OpenJPA do not allow modifying the ID of a managed entity.
      *
      * @param entity Entity to delete.
      * @throws NonDeletableEntityException When entity has {@link NonDeletable} annotation set.
@@ -1206,10 +1239,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 throw new NonDeletableEntityException(entity);
             }
 
+            var managed = getEntityManager().contains(entity);
             getEntityManager().remove(manage(entity));
 
-            if (getProvider() != ECLIPSELINK || !getEntityManager().contains(entity)) {
-                entity.setId(null);
+            if (!managed || getProvider() == HIBERNATE) {
+                idUnsetter.accept(entity);
             }
         });
     }
@@ -1302,7 +1336,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             throw new NullPointerException("Entity is null.");
         }
 
-        var id = getProvider().getIdentifier(entity);
+        var id = getId(entity);
 
         if (id == null) {
             throw new IllegalEntityStateException(entity, "Entity has no ID.");
@@ -1330,26 +1364,22 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entity Entity to manage, may be <code>null</code>.
      * @return The managed entity, or <code>null</code> when <code>null</code> was supplied. It leniently returns the very same argument if the entity has no ID
      * or has been deleted in the meanwhile.
-     * @throws IllegalArgumentException When the given entity is actually not an instance of {@link BaseEntity}.
+     * @throws IllegalArgumentException When the given entity is actually not an entity.
      */
-    @SuppressWarnings({ "hiding", "unchecked" })
+    @SuppressWarnings("hiding")
     @Nullable
     protected <E> E manageIfNecessary(@Nullable E entity) {
         if (entity == null) {
             return null;
         }
 
-        if (!(entity instanceof BaseEntity<?> baseEntity)) {
-            throw new IllegalArgumentException();
-        }
-
-        var id = getProvider().getIdentifier(baseEntity);
+        var id = getId(entity);
 
         if (id == null || entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity)) {
             return entity;
         }
 
-        return coalesce((E) getEntityManager().find(getProvider().getEntityType(baseEntity), id), entity);
+        return coalesce(getEntityManager().find(getProvider().getEntityType(entity), id), entity);
     }
 
     /**
@@ -1387,7 +1417,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Count of all foreign key references to given entity.
      */
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, manage(entity).getId());
+        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, this.<I>getId(manage(entity)));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1509,7 +1539,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-        var managed = getById(entity.getId());
+        var managed = getById(this.<I>getId(entity));
 
         for (var a : getMetamodel().getSingularAttributes()) {
             if (ofType.test(a.getJavaType())) {
@@ -1541,10 +1571,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * }
      * </pre>
      *
-     * @param <E> The generic base entity type.
+     * @param <E> The generic entity type.
      */
     @FunctionalInterface
-    protected interface QueryBuilder<E> {
+    public interface QueryBuilder<E> {
 
         /**
          * Builds the Jakarta Persistence criteria query.
@@ -1602,10 +1632,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * }
      * </pre>
      *
-     * @param <T> The generic base entity type or from a DTO subclass thereof.
+     * @param <T> The generic entity type or from a DTO subclass thereof.
      */
     @FunctionalInterface
-    protected interface MappedQueryBuilder<T> {
+    public interface MappedQueryBuilder<T> {
 
         /**
          * Builds the Jakarta Persistence criteria query and returns a mapping of DTO getters to criteria expressions.
@@ -1884,7 +1914,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             criteriaBuilder.exists(
                 countSubquery.where(
                     conjunctRestrictionsIfNecessary(
-                        criteriaBuilder, countSubquery.getRestriction(), criteriaBuilder.equal(countSubqueryRoot.get(ID), countRoot.get(ID))
+                        criteriaBuilder, countSubquery.getRestriction(),
+                        criteriaBuilder.equal(countSubqueryRoot.get(idAttribute.getName()), countRoot.get(idAttribute.getName()))
                     )
                 )
             )
@@ -1922,7 +1953,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             !entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof PostponedFetchRoot<?> postponedFetchRoot
                 && postponedFetchRoot.hasPostponedFetches()
         ) {
-            entities = postponedFetchRoot.runPostponedFetches(page, getEntityManager(), entityType, entities);
+            var ids = entities.stream().map(this::getId).toList();
+            entities = postponedFetchRoot.runPostponedFetches(page, getEntityManager(), entityType, idAttribute.getName(), ids, entities);
         }
 
         if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
@@ -1950,7 +1982,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
         if (query instanceof Subquery<T> subQuery) {
-            subQuery.select(root.get(ID));
+            subQuery.select(root.get(idAttribute.getName()));
         }
 
         if (!isEmpty(mapping)) { // mapping is not empty when getPage(..., MappedQueryBuilder) is used.
@@ -1977,13 +2009,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                                                                                                                             // Hibernate may return a cartesian
                                                                                                                             // product and apply
                                                                                                                             // firstResult/maxResults in memory.
-            return new MappedPathResolver(root, paths, elementCollections, manyOrOneToOnes);
+            return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains
                                                                             // aggregated fields, so value based paging cannot be reliably used.
-            return new RootPathResolver(root, elementCollections, manyOrOneToOnes);
+            return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
         }
         else {
             throw new IllegalArgumentException(EXCEPTION_ILLEGAL_MAPPING);
@@ -2165,7 +2197,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         else {
             path = pathResolver.get(elementCollections.test(field) ? pathResolver.join(field) : field);
-            type = ID.equals(field) ? identifierType : path.getJavaType();
+            type = ID.equals(field) || idAttribute.getName().equals(field) ? identifierType : path.getJavaType();
         }
 
         return buildTypedPredicate(
@@ -2202,7 +2234,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             else if (value instanceof Iterable || value.getClass().isArray()) {
                 predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
             }
-            else if (value instanceof BaseEntity) {
+            else if (isEntity(value)) {
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
             }
             else if (type.isEnum()) {
@@ -2304,8 +2336,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
             subquery = query.subquery(Long.class);
             Root<E> subqueryRoot = subquery.from(entityType);
-            fieldPath = new RootPathResolver(subqueryRoot, elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
-            subquery.select(criteriaBuilder.countDistinct(fieldPath)).where(criteriaBuilder.equal(subqueryRoot.get(ID), pathResolver.get(ID)));
+            fieldPath = new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
+            subquery.select(criteriaBuilder.countDistinct(fieldPath))
+                .where(criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
         }
         else {
             fieldPath = path;
@@ -2394,6 +2427,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static boolean hasFetches(From<?, ?> from) {
         return from.getFetches().stream().anyMatch(Path.class::isInstance)
             || from instanceof PostponedFetchRoot<?> postponedFetchRoot && postponedFetchRoot.hasPostponedFetches();
+    }
+
+    private boolean isEntity(Object value) {
+        return entityTypes.test(getProvider().getEntityType(value));
+    }
+
+    @SuppressWarnings("unchecked")
+    private <J> J getId(Object entity) {
+        return (J) idGetter.apply(entity);
     }
 
     private static <T> T noop() {

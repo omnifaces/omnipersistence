@@ -37,7 +37,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -48,14 +47,14 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * Usage:
  * <ol>
  * <li>Declare this listener as {@link EntityListeners} on your entity.
- * <li>Put {@link Audit} annotation on fields of interest.
+ * <li>Put {@link Audit} annotation on fields of interest. Each of them must have a getter.
  * <li>Observe the {@link AuditedChange} CDI event.
  * </ol>
  * <p>
- * Only instances which went through {@link PostLoad} in the current persistence context are audited, so an entity which is persisted and then modified in the
- * same persistence context is not audited. Each flush of a change is audited against the values of the previous flush. The {@link Audit} fields must be of a
- * basic type, such as a string, number, date or enum, and not an entity or collection, because the values are kept until the entity instance itself is
- * released.
+ * Any entity can be audited, it does not need to extend {@code BaseEntity}. Only instances which went through {@link PostLoad} in the current persistence
+ * context are audited, so an entity which is persisted and then modified in the same persistence context is not audited. Each flush of a change is audited
+ * against the values of the previous flush. The {@link Audit} fields must be of a basic type, such as a string, number, date or enum, and not an entity or
+ * collection, because the values are kept until the entity instance itself is released.
  * <p>
  * Entity example:
  *
@@ -79,7 +78,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(change.getEntity().getId());
+ *     log.setEntityId(((YourEntity) change.getEntity()).getId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));
@@ -107,7 +106,7 @@ public class AuditListener {
      * The values of the auditable properties per entity instance, as loaded or last updated. Each persistence context has its own instance of the same entity,
      * so the key must be the instance itself, and its entry is released along with it.
      */
-    static final WeakIdentityMap<BaseEntity<?>, Map<String, Object>> SNAPSHOTS = new WeakIdentityMap<>();
+    static final WeakIdentityMap<Object, Map<String, Object>> SNAPSHOTS = new WeakIdentityMap<>();
 
     @Inject
     private BeanManager beanManager;
@@ -126,7 +125,7 @@ public class AuditListener {
      * @param entity The entity that was loaded.
      */
     @PostLoad
-    public void beforeUpdate(BaseEntity<?> entity) {
+    public void beforeUpdate(Object entity) {
         var auditableProperties = AUDITABLE_PROPERTIES.get(entity.getClass());
 
         if (!auditableProperties.isEmpty()) {
@@ -141,20 +140,20 @@ public class AuditListener {
      * @param entity The entity being updated.
      */
     @PreUpdate
-    public void afterUpdate(BaseEntity<?> entity) {
+    public void afterUpdate(Object entity) {
         detectChanges(entity).forEach(this::fireAuditedChangeEvent);
     }
 
     /**
      * Lets the given managed entity be audited against the snapshot of the given detached entity it was merged from, if it has no snapshot of its own. Some
      * persistence providers, such as OpenJPA, do not invoke {@link PostLoad} on the managed entity returned by {@link EntityManager#merge(Object)}.
-     * {@link BaseEntityService#update(BaseEntity)} invokes this after merging.
+     * {@link BaseEntityService#update(Object)} invokes this after merging.
      *
      * @param detached The detached entity which was merged.
      * @param managed The managed entity returned by the merge.
      * @since 1.2
      */
-    public static void copySnapshot(BaseEntity<?> detached, BaseEntity<?> managed) {
+    public static void copySnapshot(Object detached, Object managed) {
         if (detached != managed && SNAPSHOTS.get(managed) == null) {
             var snapshot = SNAPSHOTS.get(detached);
 
@@ -170,7 +169,7 @@ public class AuditListener {
      * @param entity The entity being updated.
      * @return The changes of the auditable properties of the given entity since its snapshot, or an empty list if it has no snapshot.
      */
-    static List<AuditedChange> detectChanges(BaseEntity<?> entity) {
+    static List<AuditedChange> detectChanges(Object entity) {
         var oldValues = SNAPSHOTS.get(entity);
 
         if (oldValues == null) {
@@ -203,7 +202,7 @@ public class AuditListener {
         }
     }
 
-    private static Map<String, Object> readValues(BaseEntity<?> entity, List<PropertyDescriptor> properties) {
+    private static Map<String, Object> readValues(Object entity, List<PropertyDescriptor> properties) {
         var values = new LinkedHashMap<String, Object>(properties.size());
 
         for (var property : properties) {
