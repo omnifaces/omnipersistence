@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import java.util.List;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
@@ -68,6 +69,15 @@ class AuditListenerTest {
     @Test
     void changeOfAuditedFieldInSuperclassIsDetected() {
         var entity = loaded(new AuditedSubclassEntity(), "old");
+        entity.setValue("new");
+        assertEquals(List.of("value: old -> new"), changes(entity));
+    }
+
+    @Test
+    void changeOfAuditedFieldOfEntityWithoutBaseEntityIsDetected() {
+        var entity = new PlainAuditedEntity();
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
         entity.setValue("new");
         assertEquals(List.of("value: old -> new"), changes(entity));
     }
@@ -142,7 +152,7 @@ class AuditListenerTest {
         return entity;
     }
 
-    private static List<String> changes(AuditedEntity entity) {
+    private static List<String> changes(Object entity) {
         return AuditListener.detectChanges(entity).stream()
             .map(change -> change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue())
             .toList();
@@ -180,6 +190,25 @@ class AuditListenerTest {
     public static class AuditedSubclassEntity extends AuditedEntity {
 
         private static final long serialVersionUID = 1L;
+
+    }
+
+    @Entity
+    public static class PlainAuditedEntity {
+
+        @Id
+        private Long code;
+
+        @Audit
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
 
     }
 

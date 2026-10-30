@@ -23,8 +23,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * When put on a {@link BaseEntity}, then any attempt to {@link BaseEntityService#delete(BaseEntity)} will throw {@link NonDeletableEntityException}. This is
- * useful for entities that should never be hard-deleted, e.g. because they are referenced by other entities or represent immutable records.
+ * When put on an entity, then any attempt to {@link BaseEntityService#delete(Object)} will throw {@link NonDeletableEntityException}. This is useful for
+ * entities that should never be hard-deleted, e.g. because they are referenced by other entities or represent immutable records.
  * <p>
  * Usage example:
  *
@@ -38,7 +38,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *
  * @author Bauke Scholtz
  * @since 1.0
- * @see BaseEntityService#delete(BaseEntity)
+ * @see BaseEntityService#delete(Object)
  * @see NonDeletableEntityException
  */
 @Target(TYPE)

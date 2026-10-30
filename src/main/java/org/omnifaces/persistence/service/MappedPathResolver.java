@@ -30,8 +30,11 @@ class MappedPathResolver extends RootPathResolver {
 
     private final Map<String, Expression<?>> paths;
 
-    public MappedPathResolver(Root<?> root, Map<String, Expression<?>> paths, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes) {
-        super(root, elementCollections, manyOrOneToOnes);
+    public MappedPathResolver(
+        Root<?> root, String idName, Map<String, Expression<?>> paths, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes
+    )
+    {
+        super(root, idName, elementCollections, manyOrOneToOnes);
         this.paths = paths;
     }
 

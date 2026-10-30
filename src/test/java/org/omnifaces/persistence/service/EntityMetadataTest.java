@@ -14,10 +14,12 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.BASIC;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.EMBEDDED;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
+import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
+import static org.omnifaces.persistence.service.Stubs.stub;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
@@ -54,7 +57,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 import org.omnifaces.persistence.model.SoftDeletable;
-import org.omnifaces.persistence.service.EntityMetadata.Associations;
+import org.omnifaces.persistence.service.EntityMetadata.Mappings;
 
 /**
  * Unit tests for {@link EntityMetadata}. The association mappings are resolved against a stub metamodel built from {@link Proxy} instances, see
@@ -105,67 +108,75 @@ class EntityMetadataTest {
         private final StubMetamodel metamodel = new StubMetamodel()
             .entity(
                 Root.class, attribute("children", ONE_TO_MANY, Child.class), attribute("tags", ELEMENT_COLLECTION, String.class),
-                attribute("parent", ONE_TO_ONE, Parent.class), attribute("detail", ONE_TO_ONE, NonBaseEntity.class)
+                attribute("parent", ONE_TO_ONE, Parent.class), attribute("detail", ONE_TO_ONE, PlainEntity.class),
+                attribute("location", EMBEDDED, Location.class)
             )
             .entity(Child.class, attribute("root", MANY_TO_ONE, Root.class), attribute("labels", ELEMENT_COLLECTION, String.class))
             .entity(Parent.class, attribute("name", BASIC, String.class))
-            .entity(NonBaseEntity.class, attribute("other", MANY_TO_ONE, Root.class));
+            .entity(PlainEntity.class, attribute("other", MANY_TO_ONE, Root.class));
 
-        private Associations associations(EntityMetadata metadata) {
-            return metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE);
+        private Mappings mappings(EntityMetadata metadata) {
+            return metadata.getMappings(metamodel.entityManagerFactory(), HIBERNATE);
         }
 
         @Test
         void fieldEndingInElementCollectionIsElementCollection() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertTrue(associations.isElementCollection("tags"));
-            assertTrue(associations.isElementCollection("children.labels"));
-            assertFalse(associations.isElementCollection("children"));
-            assertFalse(associations.isElementCollection("parent.name"));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertTrue(mappings.isElementCollection("tags"));
+            assertTrue(mappings.isElementCollection("children.labels"));
+            assertFalse(mappings.isElementCollection("children"));
+            assertFalse(mappings.isElementCollection("parent.name"));
         }
 
         @Test
         void fieldNestedInOneToManyIsOneToMany() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertTrue(associations.isOneToMany("children.labels"));
-            assertFalse(associations.isOneToMany("children"));
-            assertFalse(associations.isOneToMany("parent.name"));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertTrue(mappings.isOneToMany("children.labels"));
+            assertFalse(mappings.isOneToMany("children"));
+            assertFalse(mappings.isOneToMany("parent.name"));
         }
 
         @Test
         void unknownFieldNestedInOneToManyIsOneToMany() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertTrue(associations.isOneToMany("children.unknown"));
-            assertTrue(associations.isOneToMany("children.labels.junk"));
-            assertTrue(associations.isOneToMany("children."));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertTrue(mappings.isOneToMany("children.unknown"));
+            assertTrue(mappings.isOneToMany("children.labels.junk"));
+            assertTrue(mappings.isOneToMany("children."));
         }
 
         @Test
         void unknownFieldIsNeitherElementCollectionNorOneToMany() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertFalse(associations.isElementCollection("unknown"));
-            assertFalse(associations.isOneToMany("unknown.name"));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertFalse(mappings.isElementCollection("unknown"));
+            assertFalse(mappings.isOneToMany("unknown.name"));
         }
 
         @Test
         void explicitJoinFieldIsNeitherElementCollectionNorOneToMany() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertFalse(associations.isElementCollection("@tags"));
-            assertFalse(associations.isOneToMany("@children.labels"));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertFalse(mappings.isElementCollection("@tags"));
+            assertFalse(mappings.isOneToMany("@children.labels"));
         }
 
         @Test
         void fieldPathBackThroughRootTypeIsResolved() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertTrue(associations.isElementCollection("children.root.tags"));
-            assertTrue(associations.isOneToMany("children.root.tags"));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertTrue(mappings.isElementCollection("children.root.tags"));
+            assertTrue(mappings.isOneToMany("children.root.tags"));
         }
 
         @Test
-        void fieldPathThroughNonBaseEntityTypeIsNotFollowed() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertFalse(associations.isElementCollection("detail.other"));
-            assertFalse(metamodel.lookedUpTypes.contains(NonBaseEntity.class));
+        void fieldPathThroughEntityNotExtendingBaseEntityIsFollowed() {
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertFalse(mappings.isElementCollection("detail.other"));
+            assertTrue(metamodel.lookedUpTypes.contains(PlainEntity.class));
+        }
+
+        @Test
+        void fieldPathThroughNonEntityTypeIsNotFollowed() {
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertFalse(mappings.isElementCollection("location.lines"));
+            assertFalse(metamodel.lookedUpTypes.contains(Location.class));
         }
 
         @Test
@@ -174,95 +185,95 @@ class EntityMetadataTest {
                 .entity(Order.class, attribute("billingAddress", MANY_TO_ONE, Address.class), attribute("shippingAddress", MANY_TO_ONE, Address.class))
                 .entity(Address.class, attribute("lines", ELEMENT_COLLECTION, String.class), attribute("countries", ONE_TO_MANY, Country.class))
                 .entity(Country.class, attribute("name", BASIC, String.class));
-            var associations = new EntityMetadata(Order.class).getAssociations(twoPathsMetamodel.entityManagerFactory(), HIBERNATE);
-            assertTrue(associations.isElementCollection("billingAddress.lines"));
-            assertTrue(associations.isElementCollection("shippingAddress.lines"));
-            assertTrue(associations.isOneToMany("billingAddress.countries.name"));
-            assertTrue(associations.isOneToMany("shippingAddress.countries.name"));
+            var mappings = new EntityMetadata(Order.class).getMappings(twoPathsMetamodel.entityManagerFactory(), HIBERNATE);
+            assertTrue(mappings.isElementCollection("billingAddress.lines"));
+            assertTrue(mappings.isElementCollection("shippingAddress.lines"));
+            assertTrue(mappings.isOneToMany("billingAddress.countries.name"));
+            assertTrue(mappings.isOneToMany("shippingAddress.countries.name"));
         }
 
         @Test
         void resolvedFieldPathIsCached() {
-            var associations = associations(new EntityMetadata(Root.class));
-            associations.isElementCollection("children.labels");
+            var mappings = mappings(new EntityMetadata(Root.class));
+            mappings.isElementCollection("children.labels");
             var lookupsAfterFirst = metamodel.lookedUpTypes.size();
-            associations.isElementCollection("children.labels");
-            associations.isOneToMany("children.labels");
+            mappings.isElementCollection("children.labels");
+            mappings.isOneToMany("children.labels");
             assertEquals(lookupsAfterFirst, metamodel.lookedUpTypes.size());
         }
 
         @Test
         void unknownFieldPathReusesCachedAttributeMappings() {
-            var associations = associations(new EntityMetadata(Root.class));
-            associations.isElementCollection("children.unknown");
+            var mappings = mappings(new EntityMetadata(Root.class));
+            mappings.isElementCollection("children.unknown");
             var lookupsAfterFirst = metamodel.lookedUpTypes.size();
-            associations.isElementCollection("children.unknown");
-            associations.isElementCollection("unknown");
+            mappings.isElementCollection("children.unknown");
+            mappings.isElementCollection("unknown");
             assertEquals(lookupsAfterFirst, metamodel.lookedUpTypes.size());
         }
 
         @Test
         void unresolvableFieldPathIsNotCached() throws ReflectiveOperationException {
-            var associations = associations(new EntityMetadata(Root.class));
-            associations.isElementCollection("tags");
-            associations.isElementCollection("unknown");
-            associations.isElementCollection("parent.name.junk");
-            associations.isOneToMany("children.labels.junk");
-            associations.isElementCollection("tags.");
-            associations.isElementCollection("children.labels..");
-            assertEquals(Set.of("tags"), cachedPaths(associations));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            mappings.isElementCollection("tags");
+            mappings.isElementCollection("unknown");
+            mappings.isElementCollection("parent.name.junk");
+            mappings.isOneToMany("children.labels.junk");
+            mappings.isElementCollection("tags.");
+            mappings.isElementCollection("children.labels..");
+            assertEquals(Set.of("tags"), cachedPaths(mappings));
         }
 
         @Test
         void fieldPathWithoutAttributeNamesIsNeitherElementCollectionNorOneToMany() {
-            var associations = associations(new EntityMetadata(Root.class));
-            assertFalse(associations.isElementCollection("."));
-            assertFalse(associations.isOneToMany(".."));
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertFalse(mappings.isElementCollection("."));
+            assertFalse(mappings.isOneToMany(".."));
         }
 
         @Test
         void collectsManyOrOneToOnesIncludingNestedOnes() {
-            assertEquals(Set.of("parent", "detail", "children.root"), associations(new EntityMetadata(Root.class)).getManyOrOneToOnes());
+            assertEquals(Set.of("parent", "detail", "detail.other", "children.root"), mappings(new EntityMetadata(Root.class)).getManyOrOneToOnes());
         }
 
         @Test
         void manyOrOneToOneCrawlDoesNotGoBackIntoRootType() {
-            associations(new EntityMetadata(Root.class)).getManyOrOneToOnes();
-            assertEquals(List.of(Root.class, Child.class, Parent.class), metamodel.lookedUpTypes);
+            mappings(new EntityMetadata(Root.class)).getManyOrOneToOnes();
+            assertEquals(List.of(Root.class, Child.class, Parent.class, PlainEntity.class), metamodel.lookedUpTypes);
         }
 
         @Test
-        void manyOrOneToOneCrawlDoesNotGoIntoNonBaseEntityType() {
-            associations(new EntityMetadata(Root.class)).getManyOrOneToOnes();
-            assertFalse(metamodel.lookedUpTypes.contains(NonBaseEntity.class));
+        void manyOrOneToOneCrawlDoesNotGoIntoNonEntityType() {
+            mappings(new EntityMetadata(Root.class)).getManyOrOneToOnes();
+            assertFalse(metamodel.lookedUpTypes.contains(Location.class));
         }
 
         @Test
         void manyOrOneToOnesAreComputedOnlyOnce() {
             var metadata = new EntityMetadata(Root.class);
-            var first = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
+            var first = metadata.getMappings(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
             var lookedUpTypesAfterFirst = metamodel.lookedUpTypes.size();
-            var second = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
+            var second = metadata.getMappings(metamodel.entityManagerFactory(), HIBERNATE).getManyOrOneToOnes();
             assertSame(first, second);
             assertEquals(lookedUpTypesAfterFirst, metamodel.lookedUpTypes.size());
         }
 
         @Test
         void attributeMappingsAreSharedByEntityTypesOfSameEntityManagerFactory() {
-            associations(new EntityMetadata(Root.class)).isElementCollection("children.labels");
+            mappings(new EntityMetadata(Root.class)).isElementCollection("children.labels");
             var lookupsAfterRoot = metamodel.lookedUpTypes.size();
-            assertTrue(associations(new EntityMetadata(Child.class)).isElementCollection("labels"));
+            assertTrue(mappings(new EntityMetadata(Child.class)).isElementCollection("labels"));
             assertEquals(lookupsAfterRoot, metamodel.lookedUpTypes.size());
         }
 
         @Test
         void elementCollectionReportedAsOneToManyIsCorrectedByProvider() throws NoSuchFieldException {
-            var openJpa = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManagerFactory(), OPENJPA);
+            var openJpa = new EntityMetadata(OneToManyReportedEntity.class).getMappings(oneToManyReportedMetamodel().entityManagerFactory(), OPENJPA);
             assertTrue(openJpa.isElementCollection("tags"));
             assertFalse(openJpa.isOneToMany("tags.x"));
             assertTrue(openJpa.isOneToMany("children.labels"));
 
-            var hibernate = new EntityMetadata(OneToManyReportedEntity.class).getAssociations(oneToManyReportedMetamodel().entityManagerFactory(), HIBERNATE);
+            var hibernate = new EntityMetadata(OneToManyReportedEntity.class).getMappings(oneToManyReportedMetamodel().entityManagerFactory(), HIBERNATE);
             assertFalse(hibernate.isElementCollection("tags"));
             assertTrue(hibernate.isOneToMany("tags.x"));
         }
@@ -282,10 +293,10 @@ class EntityMetadataTest {
 
         @Test
         void singularAttributeWithElementTypeAsBindableJavaTypeIsCorrectedByProvider() throws NoSuchFieldException {
-            var openJpa = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), OPENJPA);
+            var openJpa = new EntityMetadata(Child.class).getMappings(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), OPENJPA);
             assertTrue(openJpa.isElementCollection("root.tags"));
 
-            var hibernate = new EntityMetadata(Child.class).getAssociations(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), HIBERNATE);
+            var hibernate = new EntityMetadata(Child.class).getMappings(elementTypeAsBindableJavaTypeMetamodel().entityManagerFactory(), HIBERNATE);
             assertFalse(hibernate.isElementCollection("root.tags"));
         }
 
@@ -304,12 +315,12 @@ class EntityMetadataTest {
             var metadata = new EntityMetadata(Root.class);
             var otherMetamodel = new StubMetamodel().entity(Root.class, attribute("tags", BASIC, String.class), attribute("other", ONE_TO_ONE, Parent.class))
                 .entity(Parent.class);
-            var associations = metadata.getAssociations(metamodel.entityManagerFactory(), HIBERNATE);
-            var otherAssociations = metadata.getAssociations(otherMetamodel.entityManagerFactory(), HIBERNATE);
-            assertTrue(associations.isElementCollection("tags"));
-            assertFalse(otherAssociations.isElementCollection("tags"));
-            assertEquals(Set.of("parent", "detail", "children.root"), associations.getManyOrOneToOnes());
-            assertEquals(Set.of("other"), otherAssociations.getManyOrOneToOnes());
+            var mappings = metadata.getMappings(metamodel.entityManagerFactory(), HIBERNATE);
+            var otherMappings = metadata.getMappings(otherMetamodel.entityManagerFactory(), HIBERNATE);
+            assertTrue(mappings.isElementCollection("tags"));
+            assertFalse(otherMappings.isElementCollection("tags"));
+            assertEquals(Set.of("parent", "detail", "detail.other", "children.root"), mappings.getManyOrOneToOnes());
+            assertEquals(Set.of("other"), otherMappings.getManyOrOneToOnes());
         }
 
     }
@@ -319,13 +330,13 @@ class EntityMetadataTest {
         assertSame(EntityMetadata.of(SoftDeletableEntity.class), EntityMetadata.of(SoftDeletableEntity.class));
     }
 
-    private static Set<?> cachedPaths(Associations associations) throws ReflectiveOperationException {
-        var mappingsField = Associations.class.getDeclaredField("mappings");
-        mappingsField.setAccessible(true);
-        var mappings = mappingsField.get(associations);
-        var pathsField = mappings.getClass().getDeclaredField("paths");
+    private static Set<?> cachedPaths(Mappings mappings) throws ReflectiveOperationException {
+        var factoryMappingsField = Mappings.class.getDeclaredField("factoryMappings");
+        factoryMappingsField.setAccessible(true);
+        var factoryMappings = factoryMappingsField.get(mappings);
+        var pathsField = factoryMappings.getClass().getDeclaredField("paths");
         pathsField.setAccessible(true);
-        return ((Map<?, ?>) pathsField.get(mappings)).keySet();
+        return ((Map<?, ?>) pathsField.get(factoryMappings)).keySet();
     }
 
     // Stub metamodel -------------------------------------------------------------------------------------------------
@@ -351,28 +362,6 @@ class EntityMetadataTest {
         return (Attribute<?, ?>) stub(attributeType, returnValues);
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> T stub(Class<T> type, Map<String, Object> returnValues, Class<?>... additionalTypes) {
-        var types = new ArrayList<Class<?>>(List.of(type));
-        types.addAll(List.of(additionalTypes));
-        return (T) Proxy.newProxyInstance(EntityMetadataTest.class.getClassLoader(), types.toArray(Class<?>[]::new), (proxy, method, args) -> {
-            switch (method.getName()) {
-                case "hashCode" :
-                    return System.identityHashCode(proxy);
-                case "equals" :
-                    return proxy == args[0];
-                case "toString" :
-                    return type.getSimpleName() + returnValues;
-                default :
-                    if (!returnValues.containsKey(method.getName())) {
-                        throw new UnsupportedOperationException(method.getName());
-                    }
-
-                    return returnValues.get(method.getName());
-            }
-        });
-    }
-
     private static final class StubMetamodel {
 
         private final Map<Class<?>, Set<Attribute<?, ?>>> attributes = new HashMap<>();
@@ -392,6 +381,10 @@ class EntityMetadataTest {
             return (Metamodel) Proxy.newProxyInstance(
                 EntityMetadataTest.class.getClassLoader(), new Class<?>[] { Metamodel.class },
                 (proxy, method, args) -> {
+                    if ("getEntities".equals(method.getName())) {
+                        return attributes.keySet().stream().map(type -> stub(EntityType.class, Map.of("getJavaType", type))).collect(toSet());
+                    }
+
                     if (!"entity".equals(method.getName())) {
                         throw new UnsupportedOperationException(method.getName());
                     }
@@ -458,7 +451,10 @@ class EntityMetadataTest {
 
     }
 
-    static class NonBaseEntity {
+    static class PlainEntity {
+    }
+
+    static class Location {
     }
 
     static class GeneratedValueEntity extends BaseEntity<Long> {

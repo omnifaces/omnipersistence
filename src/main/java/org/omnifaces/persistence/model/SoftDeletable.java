@@ -64,8 +64,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  *
  * @author Sergey Kuntsel
  * @since 1.0
- * @see BaseEntityService#softDelete(BaseEntity)
- * @see BaseEntityService#softUndelete(BaseEntity)
+ * @see BaseEntityService#softDelete(Object)
+ * @see BaseEntityService#softUndelete(Object)
  * @see BaseEntityService#listSoftDeleted()
  * @see NonSoftDeletableEntityException
  */

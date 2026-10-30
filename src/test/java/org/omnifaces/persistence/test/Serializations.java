@@ -21,7 +21,7 @@ import java.io.ObjectOutputStream;
 /**
  * Test helper for asserting that objects which end up in a passivated or replicated HTTP session can be serialized.
  */
-final class Serializations {
+public final class Serializations {
 
     private Serializations() {
         throw new AssertionError();
@@ -37,7 +37,7 @@ final class Serializations {
      * @throws ClassNotFoundException When the deserialized class cannot be found.
      */
     @SuppressWarnings("unchecked")
-    static <T> T serializeAndDeserialize(T object) throws IOException, ClassNotFoundException {
+    public static <T> T serializeAndDeserialize(T object) throws IOException, ClassNotFoundException {
         var bytes = new ByteArrayOutputStream();
 
         try (var output = new ObjectOutputStream(bytes)) {

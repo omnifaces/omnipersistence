@@ -29,6 +29,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_REC
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -81,6 +82,7 @@ import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.PlainConfigUpdater;
 import org.omnifaces.persistence.test.service.TestAuditListener;
+import org.omnifaces.persistence.test.service.TrackingTextService;
 import org.omnifaces.utils.collection.PartialResultList;
 
 @ExtendWith(ArquillianExtension.class)
@@ -128,6 +130,8 @@ public abstract class OmniPersistenceIT {
     private PlainConfigUpdater plainConfigUpdater;
 
     protected abstract BaseEntityService<Long, InventoryItem> inventoryItemService();
+
+    protected abstract TrackingTextService trackingTextService();
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
@@ -1076,6 +1080,158 @@ public abstract class OmniPersistenceIT {
     void testUpdateNewLookup() {
         var lookup = new Lookup("ee");
         assertThrows(IllegalEntityStateException.class, () -> lookupService().update(lookup));
+    }
+
+    // Overridden service methods -------------------------------------------------------------------------------------
+
+    private List<Text> persistTrackedTexts(int amount) {
+        var texts = new ArrayList<Text>(amount);
+
+        for (var i = 0; i < amount; i++) {
+            var text = new Text();
+            trackingTextService().persist(text);
+            texts.add(text);
+        }
+
+        trackingTextService().clearInvocations();
+        return texts;
+    }
+
+    private void deleteTrackedTexts(List<Text> texts) {
+        trackingTextService().delete(texts.stream().filter(text -> text.getId() != null && trackingTextService().exists(text)).toList());
+    }
+
+    private void assertTrackedInvocations(List<String> expected) {
+        var actual = trackingTextService().getInvocations().stream().filter(name -> !TrackingTextService.ENTITY_MANAGER.equals(name)).toList();
+        assertEquals(expected, actual, "Invoked overridden methods");
+    }
+
+    @Test
+    void testSaveNewEntityInvokesOverriddenPersist() {
+        trackingTextService().clearInvocations();
+        var text = new Text();
+
+        try {
+            trackingTextService().save(text);
+            assertTrackedInvocations(List.of("save", "persist"));
+        }
+        finally {
+            deleteTrackedTexts(List.of(text));
+        }
+    }
+
+    @Test
+    void testSaveExistingEntityInvokesOverriddenUpdate() {
+        var texts = persistTrackedTexts(1);
+
+        try {
+            trackingTextService().save(texts.get(0));
+            assertTrackedInvocations(List.of("save", "update"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testSaveAndFlushInvokesOverriddenSave() {
+        trackingTextService().clearInvocations();
+        var text = new Text();
+
+        try {
+            trackingTextService().saveAndFlush(text);
+            assertTrackedInvocations(List.of("save", "persist"));
+        }
+        finally {
+            deleteTrackedTexts(List.of(text));
+        }
+    }
+
+    @Test
+    void testUpdateAndFlushInvokesOverriddenUpdate() {
+        var texts = persistTrackedTexts(1);
+
+        try {
+            trackingTextService().updateAndFlush(texts.get(0));
+            assertTrackedInvocations(List.of("update"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testUpdateEntitiesInvokesOverriddenUpdatePerEntity() {
+        var texts = persistTrackedTexts(2);
+
+        try {
+            trackingTextService().update(texts);
+            assertTrackedInvocations(List.of("update", "update"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testDeleteEntitiesInvokesOverriddenDeletePerEntity() {
+        var texts = persistTrackedTexts(2);
+
+        try {
+            trackingTextService().delete(texts);
+            assertTrackedInvocations(List.of("delete", "delete"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testSoftDeleteAndUndeleteEntitiesInvokeOverriddenMethodsPerEntity() {
+        var texts = persistTrackedTexts(2);
+
+        try {
+            trackingTextService().softDelete(texts);
+            trackingTextService().softUndelete(texts);
+            assertTrackedInvocations(List.of("softDelete", "softDelete", "softUndelete", "softUndelete"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testFindByIdInvokesOverriddenGetById() {
+        var texts = persistTrackedTexts(1);
+
+        try {
+            assertTrue(trackingTextService().findById(texts.get(0).getId()).isPresent(), "Text found");
+            assertTrackedInvocations(List.of("getById"));
+        }
+        finally {
+            deleteTrackedTexts(texts);
+        }
+    }
+
+    @Test
+    void testListInvokesOverriddenList() {
+        trackingTextService().clearInvocations();
+        trackingTextService().list();
+        assertTrackedInvocations(List.of("list"));
+    }
+
+    @Test
+    void testGetPageInvokesOverriddenPageCallbacks() {
+        trackingTextService().clearInvocations();
+        trackingTextService().getPage(Page.of(0, 10), true);
+        assertTrackedInvocations(List.of("beforePage", "onPage", "onPage", "afterPage"));
+    }
+
+    @Test
+    void testActionsUseOverriddenEntityManager() {
+        trackingTextService().clearInvocations();
+        trackingTextService().getById(1L);
+        assertTrue(trackingTextService().getInvocations().contains(TrackingTextService.ENTITY_MANAGER), "Overridden getEntityManager() invoked");
     }
 
     // @NonDeletable --------------------------------------------------------------------------------------------------
