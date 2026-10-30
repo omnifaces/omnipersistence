@@ -129,6 +129,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             fetchedEntities.put(fetchPath, fetched.stream().collect(toMap(BaseEntity::getId, Object.class::cast, (l, r) -> l)));
         }
 
+        initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
         distinctEntities = buildAndSortPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
@@ -152,6 +153,30 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         }
 
         return query.select(root).distinct(true).where(root.get(ID).in(ids));
+    }
+
+    /**
+     * Loads each nested fetch path via its getters while the entities are still managed. OpenJPA does not load a nested fetch of a criteria query, and a
+     * detached entity has no access to unloaded properties. On other providers the nested fetch paths are already loaded.
+     */
+    private void initializeNestedFetches(List<? extends BaseEntity<?>> entities, Map<String, Map<Object, Object>> fetchedEntities) {
+        for (var path : postponedFetches) {
+            var properties = path.split("\\.");
+
+            if (properties.length > 1) {
+                var fetched = fetchedEntities.get(properties[0]);
+                entities.forEach(entity -> initializeFetchPath(fetched.get(entity.getId()), properties, 0));
+            }
+        }
+    }
+
+    private static void initializeFetchPath(Object object, String[] properties, int index) {
+        if (object instanceof Collection<?> collection) {
+            collection.forEach(item -> initializeFetchPath(item, properties, index));
+        }
+        else if (object != null && index < properties.length) {
+            initializeFetchPath(invokeGetter(object, properties[index]), properties, index + 1);
+        }
     }
 
     /**
