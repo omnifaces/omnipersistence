@@ -48,9 +48,13 @@ class EntityRepositoryProducer {
 
     @Produces
     @Dependent
-    @SuppressWarnings("unchecked")
     static <I extends Comparable<I> & Serializable, E> EntityRepository<I, E> produce(InjectionPoint injectionPoint) {
-        var typeArguments = resolveTypeArguments(injectionPoint.getType());
+        return create(injectionPoint.getType());
+    }
+
+    @SuppressWarnings("unchecked")
+    static <I extends Comparable<I> & Serializable, E> EntityRepository<I, E> create(Type repositoryType) {
+        var typeArguments = resolveTypeArguments(repositoryType);
         return new EntityRepository<>(new DefaultEntityManagerSupplier(), (Class<I>) typeArguments[0], (Class<E>) typeArguments[1]);
     }
 

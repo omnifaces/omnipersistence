@@ -1224,7 +1224,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Delete actions -------------------------------------------------------------------------------------------------
 
     /**
-     * Delete given entity.
+     * Delete given entity. The ID of the given entity is unset afterwards, unless it is managed by a persistence provider other than Hibernate, because
+     * EclipseLink and OpenJPA do not allow modifying the ID of a managed entity.
      *
      * @param entity Entity to delete.
      * @throws NonDeletableEntityException When entity has {@link NonDeletable} annotation set.
@@ -1238,9 +1239,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 throw new NonDeletableEntityException(entity);
             }
 
+            var managed = getEntityManager().contains(entity);
             getEntityManager().remove(manage(entity));
 
-            if (getProvider() != ECLIPSELINK || !getEntityManager().contains(entity)) {
+            if (!managed || getProvider() == HIBERNATE) {
                 idUnsetter.accept(entity);
             }
         });
