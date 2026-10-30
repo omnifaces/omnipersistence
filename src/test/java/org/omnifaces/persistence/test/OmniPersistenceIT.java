@@ -618,6 +618,48 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPageWithPhonesFetchedWithoutTransaction() {
+        var result = personService()
+            .getPageWithPhonesWithoutTransaction(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), false);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Phones are fetched without transaction"));
+        result.forEach(
+            person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain"))
+        );
+    }
+
+    @Test
+    void testPageWithPhonesFetchedViaFetchAttribute() {
+        var result = personService()
+            .getPageWithPhonesViaFetchAttribute(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), false);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Phones are fetched via fetch attribute"));
+        result.forEach(
+            person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain"))
+        );
+    }
+
+    @Test
+    void testPageWithPhonesDetachesManagedEntities() {
+        assertFalse(personService().isManagedAfterPageWithPhones(1L, Page.of(0, 10)), "Managed entity is detached after paged fetch");
+    }
+
+    @Test
+    void testPageWithNestedFetch() {
+        var result = personService().getPageWithPhoneOwners(Page.of(0, 10), false);
+        assertEquals(10, result.size(), "Page has 10 records");
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Phones are fetched"));
+        result.forEach(person -> person.getPhones().forEach(phone -> assertNotNull(phone.getOwner().getEmail(), "Phone owners are fetched")));
+    }
+
+    @Test
+    void testAllWithNestedFetch() {
+        var result = personService().getPageWithPhoneOwners(Page.ALL, false);
+        assertEquals(TOTAL_RECORDS, result.size(), "All records are returned");
+        result.forEach(person -> person.getPhones().forEach(phone -> assertNotNull(phone.getOwner().getEmail(), "Phone owners are fetched")));
+    }
+
+    @Test
     void testPageWithPhonesFilteredByNumberLike() {
         var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), true);
         assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");

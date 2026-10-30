@@ -1540,6 +1540,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * }
      * </pre>
+     * <p>
+     * A fetch on the root is subject to the same postponing as the fetch fields of {@link #getPage(Page, boolean, String...)}.
      *
      * @param <E> The generic base entity type.
      */
@@ -1709,6 +1711,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
      * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10RecordsMatchingCriteriaOrderedByBar, true, "bar");
      * </pre>
+     * <p>
+     * When the page has a limit, or when the provider is EclipseLink, the fetch fields are fetched by a second query on the returned entities, if any. The
+     * persistence context is cleared afterwards. All entities which were managed by the {@link EntityManager}, including the returned ones, are then detached.
+     * Changes which are not flushed yet are lost, so call {@link EntityManager#flush()} before when there are any.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1727,6 +1733,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link #getPage(Page, boolean)} and {@link #getPage(Page, boolean, String...)}.
+     * <p>
+     * When the page has a limit, or when the provider is EclipseLink, the fetch fields are fetched by a second query on the returned entities, if any. The
+     * persistence context is cleared afterwards. All entities which were managed by the {@link EntityManager}, including the returned ones, are then detached.
+     * Changes which are not flushed yet are lost, so call {@link EntityManager#flush()} before when there are any.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by

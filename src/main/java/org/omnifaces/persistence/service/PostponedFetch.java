@@ -16,9 +16,11 @@ import java.util.Set;
 
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.metamodel.PluralAttribute;
+import jakarta.persistence.metamodel.SingularAttribute;
 
 /**
- * This class postpones all {@link Fetch#fetch(String)} and {@link Fetch#fetch(String, JoinType)} calls. As there is no actual fetch to delegate to, all other
+ * This class postpones all {@link Fetch#fetch(String)} calls and its overloads. The join type is ignored. As there is no actual fetch to delegate to, all other
  * {@link Fetch} methods throw {@link UnsupportedOperationException}.
  *
  * @author Bauke Scholtz
@@ -50,8 +52,28 @@ class PostponedFetch<Z, X> extends FetchWrapper<Z, X> {
     }
 
     @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
+        return fetch(attribute.getName());
+    }
+
+    @Override
+    public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType joinType) {
+        return fetch(attribute.getName());
+    }
+
+    @Override
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute) {
+        return fetch(attribute.getName());
+    }
+
+    @Override
+    public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType joinType) {
+        return fetch(attribute.getName());
+    }
+
+    @Override
     public Fetch<Z, X> getWrapped() {
-        throw new UnsupportedOperationException("Postponed fetch only supports fetch(String) and fetch(String, JoinType).");
+        throw new UnsupportedOperationException("Postponed fetch only supports fetch().");
     }
 
 }
