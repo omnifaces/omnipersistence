@@ -21,6 +21,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.PostRemove;
 import jakarta.persistence.PostUpdate;
@@ -32,8 +33,8 @@ import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
- * This is by default already registered on {@link BaseEntity}. It will fire CDI events {@link Created}, {@link Updated} and {@link Deleted} which you can
- * {@link Observes} on your entity.
+ * This is by default already registered on {@link BaseEntity}. On any other entity, register it via {@link EntityListeners}. It will fire CDI events
+ * {@link Created}, {@link Updated} and {@link Deleted} which you can {@link Observes} on your entity.
  * <p>
  * Usage example:
  *
@@ -77,7 +78,7 @@ public class BaseEntityListener {
      * @param entity The entity that was persisted.
      */
     @PostPersist
-    public void onPostPersist(BaseEntity<?> entity) {
+    public void onPostPersist(Object entity) {
         fireOptionalEvent(entity, Created.class);
     }
 
@@ -87,7 +88,7 @@ public class BaseEntityListener {
      * @param entity The entity that was updated.
      */
     @PostUpdate
-    public void onPostUpdate(BaseEntity<?> entity) {
+    public void onPostUpdate(Object entity) {
         fireOptionalEvent(entity, Updated.class);
     }
 
@@ -97,11 +98,11 @@ public class BaseEntityListener {
      * @param entity The entity that was removed.
      */
     @PostRemove
-    public void onPostRemove(BaseEntity<?> entity) {
+    public void onPostRemove(Object entity) {
         fireOptionalEvent(entity, Deleted.class);
     }
 
-    private void fireOptionalEvent(BaseEntity<?> entity, Class<? extends Annotation> eventType) {
+    private void fireOptionalEvent(Object entity, Class<? extends Annotation> eventType) {
         findBeanManager().ifPresent(
             beanManager -> beanManager.getEvent()
                 .select(createAnnotationInstance(eventType))
