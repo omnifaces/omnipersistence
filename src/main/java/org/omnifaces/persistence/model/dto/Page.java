@@ -229,7 +229,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * residual offset towards the previous page; when the residual offset is 0, this is then the first record of the next page. This is empty when there is no
      * such record. Otherwise it has exactly the keys of {@link #getOrdering()}, in the same order, and map value represents the value of that property in the
      * record, which may be <code>null</code>. If not empty, then value based paging will be performed instead of offset based paging when applicable. Value
-     * based paging is not applicable when the result type is a DTO, or when the ordering contains an aggregated field.
+     * based paging is not applicable when the query is fine-grained with a <code>QueryBuilder</code> of {@link BaseEntityService}, or on Hibernate when the
+     * query is fine-grained with a <code>MappedQueryBuilder</code> and the ordering contains an aggregated field.
      *
      * @return The ordering values of the record bounding the page, or an empty map if there is none.
      * @since 1.2
