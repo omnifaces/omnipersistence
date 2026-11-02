@@ -16,10 +16,10 @@ import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsLast;
+import static java.util.Objects.requireNonNullElse;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
 
@@ -28,12 +28,14 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -46,7 +48,6 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Criteria;
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
@@ -118,15 +119,21 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return Set.copyOf(postponedFetches);
     }
 
-    public <E extends BaseEntity<?>, T extends E> List<T> runPostponedFetches(Page page, EntityManager entityManager, Class<E> entityType, List<T> entities) {
+    public <E, T extends E> List<T> runPostponedFetches(
+        Page page, EntityManager entityManager, Class<E> entityType, String idName, Function<Object, ?> idOf, List<T> entities
+    )
+    {
         var fetchPaths = postponedFetches.stream().filter(path -> !path.contains(".")).sorted().toList();
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
-        var ids = distinctEntities.stream().map(BaseEntity::getId).toList();
+        var ids = distinctEntities.stream().map(idOf).toList();
         var fetchedEntities = new HashMap<String, Map<Object, Object>>(fetchPaths.size());
 
         for (var fetchPath : fetchPaths) {
-            var fetched = entityManager.createQuery(buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, fetchPath, ids)).getResultList();
-            fetchedEntities.put(fetchPath, fetched.stream().collect(toMap(BaseEntity::getId, Object.class::cast, (l, r) -> l)));
+            var query = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idName, fetchPath, ids);
+            var fetchedById = entityManager.createQuery(query).getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
+            var fetchedByEntity = new IdentityHashMap<Object, Object>(distinctEntities.size());
+            distinctEntities.forEach(entity -> fetchedByEntity.put(entity, fetchedById.get(idOf.apply(entity))));
+            fetchedEntities.put(fetchPath, fetchedByEntity);
         }
 
         initializeNestedFetches(distinctEntities, fetchedEntities);
@@ -141,7 +148,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * Builds a query which selects the entities with given IDs, with a left fetch join for given top level fetch path and for each postponed fetch nested in
      * it.
      */
-    private <E> CriteriaQuery<E> buildFetchQuery(CriteriaBuilder criteriaBuilder, Class<E> entityType, String fetchPath, List<?> ids) {
+    private <E> CriteriaQuery<E> buildFetchQuery(CriteriaBuilder criteriaBuilder, Class<E> entityType, String idName, String fetchPath, List<?> ids) {
         var query = criteriaBuilder.createQuery(entityType);
         var root = query.from(entityType);
         var fetches = new HashMap<String, FetchParent<?, ?>>();
@@ -152,20 +159,20 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             fetches.put(path, fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot)).fetch(path.substring(lastDot + 1), LEFT));
         }
 
-        return query.select(root).distinct(true).where(root.get(ID).in(ids));
+        return query.select(root).distinct(true).where(root.get(idName).in(ids));
     }
 
     /**
      * Loads each nested fetch path via its getters while the entities are still managed. OpenJPA does not load a nested fetch of a criteria query, and a
      * detached entity has no access to unloaded properties. On other providers the nested fetch paths are already loaded.
      */
-    private void initializeNestedFetches(List<? extends BaseEntity<?>> entities, Map<String, Map<Object, Object>> fetchedEntities) {
+    private void initializeNestedFetches(List<?> entities, Map<String, Map<Object, Object>> fetchedEntities) {
         for (var path : postponedFetches) {
             var properties = path.split("\\.");
 
             if (properties.length > 1) {
                 var fetched = fetchedEntities.get(properties[0]);
-                entities.forEach(entity -> initializeFetchPath(fetched.get(entity.getId()), properties, 0));
+                entities.forEach(entity -> initializeFetchPath(fetched.get(entity), properties, 0));
             }
         }
     }
@@ -183,7 +190,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. Finally, re-sorts the parent entities based on the first
      * element of their sorted child lists.
      */
-    private static <T extends BaseEntity<?>> List<T> buildAndSortPostponedFetches(
+    private static <T> List<T> buildAndSortPostponedFetches(
         Page page, List<T> entities, List<String> fetchPaths, Map<String, Map<Object, Object>> fetchedEntities, List<List<Object>> fetchedEntityProperties
     )
     {
@@ -207,12 +214,12 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     private record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
     }
 
-    private static <T extends BaseEntity<?>> EntityRow<T> processEntityFetches(
+    private static <T> EntityRow<T> processEntityFetches(
         T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page
     )
     {
         var copies = paths.stream().map(path -> {
-            var raw = invokeGetter(fetchedEntities.get(path).getOrDefault(entity.getId(), entity), path);
+            var raw = invokeGetter(requireNonNullElse(fetchedEntities.get(path).get(entity), entity), path);
 
             if (!(raw instanceof Collection<?> col)) {
                 return raw; // @OneToOne / @ManyToOne

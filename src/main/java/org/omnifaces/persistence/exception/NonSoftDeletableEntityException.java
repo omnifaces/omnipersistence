@@ -14,11 +14,10 @@ package org.omnifaces.persistence.exception;
 
 import jakarta.annotation.Nullable;
 
-import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.SoftDeletable;
 
 /**
- * Thrown when trying to use soft delete operations on an entity that doesn't have the {@link org.omnifaces.persistence.model.SoftDeletable} annotation on any
- * of its fields.
+ * Thrown when trying to use soft delete operations on an entity that doesn't have the {@link SoftDeletable} annotation on any of its fields.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -35,7 +34,7 @@ public class NonSoftDeletableEntityException extends BaseEntityException {
      * @param entity The entity which is not marked as soft-deletable, may be <code>null</code> when the entity type as a whole is not soft-deletable.
      * @param message The detail message.
      */
-    public NonSoftDeletableEntityException(@Nullable BaseEntity<?> entity, String message) {
+    public NonSoftDeletableEntityException(@Nullable Object entity, String message) {
         super(entity, message);
     }
 

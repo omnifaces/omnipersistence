@@ -26,14 +26,19 @@ import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.validation.constraints.NotNull;
 
 @Entity
+@NamedEntityGraph(name = Person.WITH_PHONES, attributeNodes = @NamedAttributeNode("phones"))
 public class Person extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
+
+    public static final String WITH_PHONES = "Person.withPhones";
 
     private @NotNull String email;
     private @NotNull @Enumerated Gender gender;

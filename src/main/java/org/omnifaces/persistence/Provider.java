@@ -16,6 +16,7 @@ import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.EL
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
+import static java.lang.String.format;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
@@ -24,8 +25,7 @@ import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
-import java.io.Serializable;
-import java.lang.reflect.Field;
+import java.lang.reflect.AnnotatedElement;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -45,7 +45,7 @@ import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.SingularAttribute;
 
-import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -86,28 +86,28 @@ public enum Provider {
         }
 
         @Override
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxy(E entity) {
+        public boolean isProxy(Object entity) {
             return HIBERNATE_PROXY.map(clazz -> clazz.isInstance(entity)).orElse(false);
         }
 
         @Override
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyUninitialized(E entity) {
+        public boolean isProxyUninitialized(Object entity) {
             return invokeOnProxy(entity, "isUninitialized", super::isProxyUninitialized);
         }
 
         @Override
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E dereferenceProxy(E entity) {
+        public <E> E dereferenceProxy(E entity) {
             return invokeOnProxy(entity, "getImplementation", super::dereferenceProxy);
         }
 
         @Override
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
+        public <E> Class<E> getEntityType(E entity) {
             return invokeOnProxy(entity, "getPersistentClass", super::getEntityType);
         }
 
         @Override
         @Nullable
-        public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(@Nullable E entity) {
+        public <I> I getIdentifier(@Nullable Object entity) {
             return invokeOnProxy(entity, "getIdentifier", super::getIdentifier);
         }
 
@@ -118,7 +118,7 @@ public enum Provider {
         }
 
         @SuppressWarnings("unchecked")
-        private <T, I extends Comparable<I> & Serializable, E extends BaseEntity<I>> T invokeOnProxy(E entity, String methodName, Function<E, T> fallback) {
+        private <T, E> T invokeOnProxy(E entity, String methodName, Function<E, T> fallback) {
             return isProxy(entity) ? (T) invokeMethod(invokeMethod(entity, "getHibernateLazyInitializer"), methodName) : fallback.apply(entity);
         }
 
@@ -171,7 +171,7 @@ public enum Provider {
         @Override
         public boolean isElementCollection(Attribute<?, ?> attribute) {
             // For some reason OpenJPA returns PersistentAttributeType.ONE_TO_MANY on an @ElementCollection.
-            return ((Field) attribute.getJavaMember()).getAnnotation(ElementCollection.class) != null;
+            return attribute.getJavaMember() instanceof AnnotatedElement member && member.isAnnotationPresent(ElementCollection.class);
         }
 
         @Override
@@ -215,6 +215,7 @@ public enum Provider {
     );
     private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
+    private static final String ERROR_NOT_IDENTIFIABLE = "%s is not a proxy and does not implement Identifiable";
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
         var packageName = entityManagerFactory.getClass().getPackage().getName();
@@ -319,24 +320,20 @@ public enum Provider {
     /**
      * Returns whether the given entity is a proxy. The default implementation returns {@code false}.
      *
-     * @param <I> The generic ID type.
-     * @param <E> The generic entity type.
      * @param entity The entity to check.
      * @return Whether the given entity is a proxy.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxy(E entity) {
+    public boolean isProxy(Object entity) {
         return false;
     }
 
     /**
      * Returns whether the given entity is an uninitialized proxy. The default implementation returns {@code false}.
      *
-     * @param <I> The generic ID type.
-     * @param <E> The generic entity type.
      * @param entity The entity to check.
      * @return Whether the given entity is an uninitialized proxy.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> boolean isProxyUninitialized(E entity) {
+    public boolean isProxyUninitialized(Object entity) {
         return false;
     }
 
@@ -344,62 +341,67 @@ public enum Provider {
      * Returns the dereferenced entity of the given entity. If it is a proxy, then the actual implementation will be returned. The default implementation
      * directly returns the given entity.
      *
-     * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to dereference.
      * @return The dereferenced entity of the given entity.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> E dereferenceProxy(E entity) {
+    public <E> E dereferenceProxy(E entity) {
         return entity;
     }
 
     /**
      * Returns the actual entity type of the given entity. If it is a proxy, then the type of the actual implementation will be returned. The default
-     * implementation returns the first class in the hierarchy having the {@link Entity} annotation.
+     * implementation returns the first class in the hierarchy having the {@link Entity} annotation, or else the class of the given entity itself.
      *
-     * @param <I> The generic ID type.
      * @param <E> The generic entity type.
      * @param entity The entity to get the type for, may not be <code>null</code>.
      * @return The actual entity type of the given entity.
      * @throws NullPointerException When given entity is <code>null</code>.
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> Class<E> getEntityType(E entity) {
-        Class<? extends BaseEntity> entityType = entity.getClass();
+    @SuppressWarnings("unchecked")
+    public <E> Class<E> getEntityType(E entity) {
+        Class<?> entityType = entity.getClass();
 
-        while (BaseEntity.class.isAssignableFrom(entityType) && entityType.getAnnotation(Entity.class) == null) {
-            entityType = (Class<? extends BaseEntity>) entityType.getSuperclass();
+        while (entityType.getSuperclass() != null && entityType.getAnnotation(Entity.class) == null) {
+            entityType = entityType.getSuperclass();
         }
 
-        return (Class<E>) entityType;
+        return (Class<E>) (entityType.getAnnotation(Entity.class) != null ? entityType : entity.getClass());
     }
 
     /**
      * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy. The default implementation returns
-     * {@link BaseEntity#getId()}.
+     * {@link Identifiable#getId()}.
      *
      * @param <I> The generic ID type.
-     * @param <E> The generic entity type.
      * @param entity The entity to get the identifier for, may be <code>null</code>.
      * @return The identifier of the given entity, or <code>null</code> when <code>null</code> was supplied or when the entity has no ID.
+     * @throws IllegalArgumentException When the given entity is not a proxy and does not implement {@link Identifiable}.
      */
     @Nullable
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> I getIdentifier(@Nullable E entity) {
-        return entity == null ? null : entity.getId();
+    @SuppressWarnings("unchecked")
+    public <I> I getIdentifier(@Nullable Object entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        if (!(entity instanceof Identifiable<?> identifiable)) {
+            throw new IllegalArgumentException(format(ERROR_NOT_IDENTIFIABLE, entity.getClass()));
+        }
+
+        return (I) identifiable.getId();
     }
 
     /**
-     * Returns the table name of the given entity. The default implementation returns the name of the {@link Table} annotation of
-     * {@link #getEntityType(BaseEntity)} or else defaults to entity class' simple name in upper cased form when there is no such annotation or it has no name.
+     * Returns the table name of the given entity. The default implementation returns the name of the {@link Table} annotation of {@link #getEntityType(Object)}
+     * or else defaults to entity class' simple name in upper cased form when there is no such annotation or it has no name.
      *
-     * @param <I> The generic ID type.
-     * @param <E> The generic entity type.
      * @param entity The entity to get the table name for, may not be <code>null</code>.
      * @return The table name of the given entity.
      * @throws NullPointerException When given entity is <code>null</code>.
      */
-    public <I extends Comparable<I> & Serializable, E extends BaseEntity<I>> String getTableName(E entity) {
-        Class<E> entityType = getEntityType(entity);
+    public String getTableName(Object entity) {
+        var entityType = getEntityType(entity);
         var table = entityType.getAnnotation(Table.class);
         return table != null && !table.name().isEmpty() ? table.name() : entityType.getSimpleName().toUpperCase();
     }

@@ -45,13 +45,15 @@ class RootPathResolver implements PathResolver {
     private static final String ERROR_UNKNOWN_FIELD = "Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
 
     private final Root<?> root;
+    private final String idName;
     private final Map<String, Path<?>> joins;
     private final Map<String, Path<?>> paths;
     private final Predicate<String> elementCollections;
     private final Supplier<Set<String>> manyOrOneToOnes;
 
-    public RootPathResolver(Root<?> root, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes) {
+    public RootPathResolver(Root<?> root, String idName, Predicate<String> elementCollections, Supplier<Set<String>> manyOrOneToOnes) {
         this.root = root;
+        this.idName = idName;
         this.joins = getJoins(root);
         this.paths = new HashMap<>();
         this.elementCollections = elementCollections;
@@ -72,7 +74,7 @@ class RootPathResolver implements PathResolver {
 
         path = root;
         boolean explicitJoin = field.charAt(0) == '@';
-        String originalField = explicitJoin ? field.substring(1) : field;
+        String originalField = explicitJoin ? field.substring(1) : Identifiable.ID.equals(field) ? idName : field;
         String[] attributes = originalField.split("\\.");
         int depth = attributes.length;
 
@@ -87,7 +89,7 @@ class RootPathResolver implements PathResolver {
                     path = path.get(attribute);
                 }
                 catch (IllegalArgumentException e) {
-                    if (Identifiable.ID.equals(attribute)) {
+                    if (idName.equals(attribute)) {
                         path = getSupertypePath(path, attribute); // OpenJPA work around.
                     }
                     else if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {

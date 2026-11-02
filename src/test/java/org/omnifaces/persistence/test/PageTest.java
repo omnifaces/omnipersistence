@@ -280,6 +280,12 @@ public class PageTest {
         }
 
         @Test
+        void cursorRangeRejectsNumberAsLastEntity() {
+            var builder = Page.with();
+            assertThrows(IllegalArgumentException.class, () -> builder.range(0, 10, false));
+        }
+
+        @Test
         void cursorRangeExtractsValuesOfAllOrderingFieldsInOrder() {
             var entity = new TestEntity();
             entity.setId(42L);
