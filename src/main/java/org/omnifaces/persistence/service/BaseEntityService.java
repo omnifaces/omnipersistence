@@ -2188,8 +2188,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * of the field must then not be resolved on the main query root, because that adds a JOIN which multiplies the rows.
      */
     private boolean isBuiltAsArrayPredicate(String field, Object value, AbstractQuery<?> query) {
-        var multipleValues = value instanceof Iterable || value != null && value.getClass().isArray();
-        return oneToManys.test(field) && multipleValues || elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
+        return oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())
+        	|| elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
     }
 
     @SuppressWarnings("unchecked")
