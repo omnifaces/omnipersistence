@@ -83,6 +83,27 @@ class AuditListenerTest {
     }
 
     @Test
+    void entityNameIsTheJakartaPersistenceEntityName() {
+        var named = new NamedAuditedEntity();
+        named.setValue("old");
+        listener.beforeUpdate(named);
+        named.setValue("new");
+        assertEquals(List.of("Memo"), entityNames(named), "Name of @Entity");
+
+        var plain = new PlainAuditedEntity();
+        plain.setValue("old");
+        listener.beforeUpdate(plain);
+        plain.setValue("new");
+        assertEquals(List.of("PlainAuditedEntity"), entityNames(plain), "Simple class name when @Entity has no name");
+
+        var subclass = new NamedAuditedSubclass();
+        subclass.setValue("old");
+        listener.beforeUpdate(subclass);
+        subclass.setValue("new");
+        assertEquals(List.of("Memo"), entityNames(subclass), "Name of @Entity of superclass when subclass has no @Entity");
+    }
+
+    @Test
     void entityWithoutSnapshotHasNoChanges() {
         var entity = new AuditedEntity();
         entity.setValue("new");
@@ -152,6 +173,10 @@ class AuditListenerTest {
         return entity;
     }
 
+    private static List<String> entityNames(Object entity) {
+        return AuditListener.detectChanges(entity).stream().map(AuditedChange::getEntityName).toList();
+    }
+
     private static List<String> changes(Object entity) {
         return AuditListener.detectChanges(entity).stream()
             .map(change -> change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue())
@@ -210,6 +235,28 @@ class AuditListenerTest {
             this.value = value;
         }
 
+    }
+
+    @Entity(name = "Memo")
+    public static class NamedAuditedEntity {
+
+        @Id
+        private Long code;
+
+        @Audit
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+    }
+
+    public static class NamedAuditedSubclass extends NamedAuditedEntity {
     }
 
 }

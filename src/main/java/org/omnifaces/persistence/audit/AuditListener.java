@@ -32,6 +32,7 @@ import java.util.Optional;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
+import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PostLoad;
@@ -185,11 +186,27 @@ public class AuditListener {
             var oldValue = oldValues.get(newValue.getKey());
 
             if (!Objects.equals(oldValue, newValue.getValue())) {
-                changes.add(new AuditedChange(entity, entity.getClass().getSimpleName(), newValue.getKey(), oldValue, newValue.getValue()));
+                changes.add(new AuditedChange(entity, getEntityName(entity.getClass()), newValue.getKey(), oldValue, newValue.getValue()));
             }
         }
 
         return changes;
+    }
+
+    /**
+     * Returns the Jakarta Persistence entity name of given entity class: the name of the first {@link Entity} in its class hierarchy, or else the simple name
+     * of the class having it, or else the simple name of the given class.
+     */
+    private static String getEntityName(Class<?> entityType) {
+        for (var type = entityType; type != null; type = type.getSuperclass()) {
+            var entity = type.getAnnotation(Entity.class);
+
+            if (entity != null) {
+                return entity.name().isEmpty() ? type.getSimpleName() : entity.name();
+            }
+        }
+
+        return entityType.getSimpleName();
     }
 
     private static List<PropertyDescriptor> computeAuditableProperties(Class<?> type) {
