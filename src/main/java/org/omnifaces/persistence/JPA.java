@@ -378,6 +378,19 @@ public final class JPA {
     }
 
     /**
+     * Returns a new expression which applies the SQL <code>LOWER</code> function on given expression. This also works on an element of an
+     * <code>@ElementCollection</code> in a correlated subquery on OpenJPA, which {@link CriteriaBuilder#lower(Expression)} does not.
+     *
+     * @param builder The involved criteria builder.
+     * @param expression Expression to be lowercased.
+     * @return A new expression wherein given expression is lowercased.
+     * @since 1.3
+     */
+    public static Expression<String> lower(CriteriaBuilder builder, Expression<String> expression) {
+        return builder.function("LOWER", String.class, expression);
+    }
+
+    /**
      * Returns a new expression wherein given expression is cast as String. This covers known problems with certain providers and/or databases.
      *
      * @param builder The involved criteria builder.

@@ -15,6 +15,7 @@ package org.omnifaces.persistence.criteria;
 import static java.util.stream.Collectors.toSet;
 import static org.omnifaces.persistence.JPA.castAsString;
 import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
+import static org.omnifaces.persistence.JPA.lower;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.Objects;
@@ -146,7 +147,7 @@ public final class Like extends Criteria<String> {
             boolean lowercaseable = !Numeric.is(type);
             String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
             Expression<String> pathAsString = castAsString(criteriaBuilder, path);
-            return criteriaBuilder.like(lowercaseable ? criteriaBuilder.lower(pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+            return criteriaBuilder.like(lowercaseable ? lower(criteriaBuilder, pathAsString) : pathAsString, parameterBuilder.create(searchValue));
         }
     }
 
