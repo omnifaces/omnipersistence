@@ -24,7 +24,8 @@ package org.omnifaces.persistence.audit;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(((YourEntity) change.getEntity()).getId());
+ *     YourEntity entity = change.getEntity();
+ *     log.setEntityId(entity.getId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));
@@ -56,10 +57,13 @@ public class AuditedChange {
     /**
      * Returns the entity that was changed.
      *
+     * @param <E> The generic entity type.
      * @return The entity that was changed.
+     * @throws ClassCastException When <code>E</code> is of wrong type.
      */
-    public Object getEntity() {
-        return entity;
+    @SuppressWarnings("unchecked")
+    public <E> E getEntity() {
+        return (E) entity;
     }
 
     /**
