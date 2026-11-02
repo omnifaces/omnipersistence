@@ -44,6 +44,7 @@ import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
@@ -51,17 +52,21 @@ import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
- * Root which postpones all issued fetches until after the paged query has run. The Jakarta Persistence specification leaves the effect of
- * {@code setFirstResult()} and {@code setMaxResults()} on a query with fetch joins over collections undefined (section "Query Execution"). This root keeps the
- * fetch joins out of the paged query, so that the range always applies to root entities.
+ * Root which postpones all issued fetches, except for singular associations, until after the paged query has run. The Jakarta Persistence specification leaves
+ * the effect of {@code setFirstResult()} and {@code setMaxResults()} on a query with fetch joins over collections undefined (section "Query Execution"). This
+ * root keeps the fetch joins over collections out of the paged query, so that the range always applies to root entities.
+ * <p>
+ * Fetches of singular associations are actual fetches in the paged query, via {@link SingularFetch}, because they do not multiply the rows. Their fetched
+ * columns are then also available to the ordering of a distinct query. A postponed fetch nested in a singular association postpones all its ancestor paths as
+ * well, so these are then fetched once more by the secondary query.
  * <p>
  * BaseEntityService then runs one secondary query per top level fetch path on the returned root entities. The nested fetch paths of a top level fetch path are
  * fetched by the same query, so two nested collections of one top level fetch path form a cartesian product. Finally, this root filters and sorts each fetched
  * collection in memory according to the criteria and ordering of the page, if applicable. This applies to the direct properties of the items of a top level
  * fetch path only. It clears the persistence context before it sets the filtered and sorted collections, so that the provider does not flush them. All entities
- * which were managed by the {@link EntityManager} are then detached.
+ * which were managed by the {@link EntityManager} are then detached. Without postponed fetches there is no secondary query, and the entities stay managed.
  * <p>
- * The join type of a fetch is ignored. The secondary query always uses a left fetch join.
+ * The join type of a fetch is ignored. An actual fetch and the secondary query always use a left fetch join.
  * <p>
  * On EclipseLink, BaseEntityService uses this root also when the page has no limit. EclipseLink returns a cartesian product for a fetch join whenever the query
  * has a range, and BaseEntityService always sets a range when the query has joins.
@@ -82,7 +87,38 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     @Override
     @SuppressWarnings("hiding")
     public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-        return new PostponedFetch<>(postponedFetches, attributeName);
+        return fetchOrPostpone(getWrapped(), getModel(), postponedFetches, null, attributeName);
+    }
+
+    /**
+     * Fetches given attribute of given fetch parent with a left fetch join when it is a singular association. Else postpones it along with all paths of the
+     * fetch parent, so that the secondary query of the top level fetch path can build the fetch joins down to it.
+     *
+     * @param <X> The source type of the returned fetch.
+     * @param <Y> The target type of the returned fetch.
+     * @param parent The fetch parent to fetch given attribute on.
+     * @param parentType The managed type of the fetch parent.
+     * @param postponedFetches The postponed fetch paths of the root.
+     * @param parentPath The fetch path of the fetch parent, or <code>null</code> when it is the root.
+     * @param attributeName The name of the attribute to fetch.
+     * @return The {@link SingularFetch} or the {@link PostponedFetch} of given attribute.
+     */
+    static <X, Y> Fetch<X, Y> fetchOrPostpone(
+        FetchParent<?, ?> parent, ManagedType<?> parentType, Set<String> postponedFetches, String parentPath, String attributeName
+    )
+    {
+        var path = parentPath == null ? attributeName : parentPath + "." + attributeName;
+        var attribute = parentType.getAttribute(attributeName);
+
+        if (attribute.isAssociation() && !attribute.isCollection()) {
+            return new SingularFetch<>(parent.<X, Y>fetch(attributeName, LEFT), postponedFetches, path);
+        }
+
+        for (var dot = path.indexOf('.'); dot > 0; dot = path.indexOf('.', dot + 1)) {
+            postponedFetches.add(path.substring(0, dot));
+        }
+
+        return new PostponedFetch<>(postponedFetches, path);
     }
 
     @Override

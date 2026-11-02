@@ -34,6 +34,12 @@ public class PhoneServiceCDI extends PhoneService {
 
     @Override
     @Transactional(REQUIRED)
+    public PartialResultList<Phone> getPageWithOwnerPhones(Page page, boolean count) {
+        return super.getPageWithOwnerPhones(page, count);
+    }
+
+    @Override
+    @Transactional(REQUIRED)
     public Map<String, Object> getLastOrderingValuesOfCursorRangeFrom(Long phoneId, String orderingField) {
         return super.getLastOrderingValuesOfCursorRangeFrom(phoneId, orderingField);
     }

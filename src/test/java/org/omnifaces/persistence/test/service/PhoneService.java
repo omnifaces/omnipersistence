@@ -25,6 +25,10 @@ public abstract class PhoneService extends BaseEntityService<Long, Phone> {
         return getPage(page, count, "owner");
     }
 
+    public PartialResultList<Phone> getPageWithOwnerPhones(Page page, boolean count) {
+        return getPage(page, count, "owner.phones");
+    }
+
     public PartialResultList<Phone> getAllWithOwners() {
         return getPageWithOwners(Page.ALL, false);
     }
