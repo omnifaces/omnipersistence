@@ -216,6 +216,15 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
     }
 
     /**
+     * See {@link BaseEntityService#getEntityName()}.
+     *
+     * @return The entity name of current entity.
+     */
+    public String getEntityName() {
+        return service().getEntityName();
+    }
+
+    /**
      * See {@link BaseEntityService#getMetamodel(Object)}.
      *
      * @param <T> The generic entity type of the given entity.

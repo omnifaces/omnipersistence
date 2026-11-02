@@ -47,6 +47,7 @@ import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Note;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.EntityEvents;
@@ -78,6 +79,8 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Article> articleRepository;
     @Inject
     private EntityRepository<String, Category> categoryRepository;
+    @Inject
+    private EntityRepository<String, Note> noteRepository;
     @Inject
     private TransactionServiceCDI transactionServiceCDI;
     @EJB
@@ -183,6 +186,26 @@ public class EntityRepositoryIT {
         }
         finally {
             deleteArticles(List.of(article));
+        }
+    }
+
+    @Test
+    void testEntityWithCustomEntityName() {
+        var note = new Note();
+        note.setSlug("memo");
+        note.setText("before");
+
+        try {
+            assertEquals("Memo", noteRepository.getEntityName(), "Entity name");
+            transactionServiceCDI.run(() -> noteRepository.persist(note));
+            assertTrue(noteRepository.exists(note), "Exists");
+            assertThrows(IllegalEntityStateException.class, () -> transactionServiceCDI.call(() -> noteRepository.persist(note)), "Persist existing");
+            assertEquals(1, noteRepository.list("WHERE e.text = ?1", "before").size(), "JPQL select");
+            assertEquals(1, (int) transactionServiceCDI.call(() -> noteRepository.update("SET e.text = ?1 WHERE e.slug = ?2", "after", "memo")), "JPQL update");
+            assertEquals("after", noteRepository.getById("memo").getText(), "Updated text");
+        }
+        finally {
+            transactionServiceCDI.run(() -> noteRepository.findById("memo").ifPresent(noteRepository::delete));
         }
     }
 
