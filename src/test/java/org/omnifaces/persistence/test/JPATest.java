@@ -32,7 +32,6 @@ import org.omnifaces.persistence.JPA;
 class JPATest {
 
     @Test
-    @SuppressWarnings("unchecked")
     void lowerAppliesSqlLowerFunction() {
         var invocation = new AtomicReference<Object[]>();
         var result = proxy(Expression.class);

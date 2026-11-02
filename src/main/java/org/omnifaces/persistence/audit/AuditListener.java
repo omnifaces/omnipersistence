@@ -78,7 +78,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(((YourEntity) change.getEntity()).getId());
+ *     YourEntity entity = change.getEntity();
+ *     log.setEntityId(entity.getId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));

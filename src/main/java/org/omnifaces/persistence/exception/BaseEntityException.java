@@ -53,6 +53,7 @@ public abstract class BaseEntityException extends PersistenceException {
      *
      * @param <E> The generic entity type.
      * @return The entity associated with this exception, or <code>null</code> when the exception is not about a specific entity instance.
+     * @throws ClassCastException When <code>E</code> is of wrong type.
      */
     @SuppressWarnings("unchecked")
     @Nullable

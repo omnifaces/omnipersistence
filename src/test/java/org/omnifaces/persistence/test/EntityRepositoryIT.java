@@ -399,7 +399,7 @@ public class EntityRepositoryIT {
     private static List<String> auditedArticleChanges() {
         return TestAuditListener.getChanges().stream()
             .map(change -> {
-                var article = (Article) change.getEntity();
+                Article article = change.getEntity();
                 return article.getCode() + "." + change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue();
             })
             .toList();
