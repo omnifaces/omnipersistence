@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.persistence.JPA.concat;
 
 import java.util.LinkedHashMap;
@@ -39,6 +40,28 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public PartialResultList<Person> getPageWithPhones(Page page, boolean count) {
         return getPage(page, count, "phones");
+    }
+
+    public PartialResultList<Person> getPageWithPhonesWithoutTransaction(Page page, boolean count) {
+        if (getEntityManager().isJoinedToTransaction()) {
+            throw new IllegalStateException("Transaction is active");
+        }
+
+        return getPage(page, count, "phones");
+    }
+
+    public PartialResultList<Person> getPageWithPhonesViaFetchAttribute(Page page, boolean count) {
+        return getPage(page, count, (builder, query, person) -> person.fetch(getMetamodel().getList("phones", Phone.class), LEFT));
+    }
+
+    public boolean isManagedAfterPageWithPhones(Long id, Page page) {
+        var person = getById(id);
+        getPageWithPhones(page, false);
+        return getEntityManager().contains(person);
+    }
+
+    public PartialResultList<Person> getPageWithPhoneOwners(Page page, boolean count) {
+        return getPage(page, count, "phones.owner");
     }
 
     public PartialResultList<Person> getPageWithGroups(Page page, boolean count) {
