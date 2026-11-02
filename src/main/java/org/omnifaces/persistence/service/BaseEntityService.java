@@ -2224,7 +2224,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             || elementCollections.test(field) && value != null && !isElementCollectionInPredicate(query, unwrapNot(criteria), isNegated(criteria));
     }
 
-    @SuppressWarnings("unchecked")
     private <T extends E> Predicate buildTypedPredicate(
         Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
         ParameterBuilder parameterBuilder
