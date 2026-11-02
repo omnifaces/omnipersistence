@@ -580,6 +580,14 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testOneToManyCriteriaMatchingMultipleElements() {
+        var all = personService().getPage(Page.ALL, true);
+        var result = personService()
+            .getPage(Page.with().allMatch(Map.of("phones.number", List.of(Like.startsWith("0"), Like.contains("0")))).build(), true);
+        assertEquals(all.size(), result.size(), "Every phone number starts with 0, so every person matches, also with multiple phones");
+    }
+
+    @Test
     void testElementCollectionFilterOnPathBackThroughRootEntity() {
         var direct = personService().getPage(Page.with().allMatch(Map.of("groups", Group.USER)).build(), true);
         var viaPhoneOwner = personService().getPage(Page.with().allMatch(Map.of("phones.owner.groups", Group.USER)).build(), true);

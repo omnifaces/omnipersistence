@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import jakarta.ejb.EJB;
 import jakarta.inject.Inject;
@@ -39,6 +40,7 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.criteria.Like;
+import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
@@ -291,8 +293,8 @@ public class EntityRepositoryIT {
 
         try {
             transactionServiceCDI.run(() -> List.of(first, second).forEach(categoryRepository::persist));
-            articles.add(persistArticle("a", first, "x", "y"));
-            articles.add(persistArticle("b", first, "x"));
+            articles.add(persistArticle("a", first, Set.of(5, 10), Set.of(true), "x", "y"));
+            articles.add(persistArticle("b", first, Set.of(5), Set.of(false), "x", "xy"));
             articles.add(persistArticle("c", second));
             var codes = articles.stream().map(Article::getCode).sorted().toList();
             var descendingCodes = new ArrayList<>(codes);
@@ -312,13 +314,66 @@ public class EntityRepositoryIT {
             );
             assertEquals(1, articleRepository.getPage(Page.with().allMatch(Map.of("category", second)).build(), true).size(), "Criteria on entity");
 
-            if (!OmniPersistenceIT.isOpenJPA()) { // OpenJPA cannot apply LOWER() to a String @ElementCollection in a subquery.
-                assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", "x")).build(), true).size(), "Criteria on element collection");
-                assertEquals(
-                    List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of("x", "y"))).build(), true)),
-                    "Criteria on all of element collection"
-                );
+            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", "x")).build(), true).size(), "Criteria on element collection");
+            var ignoreCase = articleRepository.getPage(Page.with().allMatch(Map.of("tags", "X")).build(), true);
+            assertEquals(2, ignoreCase.size(), "Criteria on element collection ignore case");
+            assertEquals(2, ignoreCase.getEstimatedTotalNumberOfResults(), "Count of criteria on element collection ignore case");
+            assertEquals(
+                List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of("x", "y"))).build(), true)),
+                "Criteria on all of element collection"
+            );
+            assertEquals(
+                2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", Like.contains("X"))).build(), true).size(), "Like on element collection"
+            );
+            assertEquals(
+                List.of(articles.get(2).getCode()),
+                codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(Like.contains("x")))).build(), true)),
+                "Not like on element collection"
+            );
+            assertEquals(
+                List.of(articles.get(0).getCode()),
+                codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of(Like.contains("x"), "y"))).build(), true)),
+                "Like and value on all of element collection"
+            );
+            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("ratings", "05")).build(), true).size(), "Numeric element collection");
+            assertEquals(
+                List.of(articles.get(0).getCode()),
+                codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("ratings", List.of(5, 10))).build(), true)),
+                "Numeric values on all of element collection"
+            );
+            assertEquals(
+                List.of(articles.get(2).getCode()),
+                codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("ratings", Not.value(5))).build(), true)),
+                "Not numeric value on element collection"
+            );
+            assertEquals(
+                List.of(articles.get(0).getCode()), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("flags", "1")).build(), true)),
+                "Boolean element collection"
+            );
+            assertEquals(
+                List.of(articles.get(1).getCode()), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("flags", "0")).build(), true)),
+                "False boolean element collection"
+            );
+            var notAllOf = articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(List.of("x", "y")))).build(), true);
+            assertEquals(List.of(articles.get(2).getCode(), articles.get(1).getCode()), codesOf(notAllOf), "Not all of element collection");
+
+            if (!OmniPersistenceIT.isOpenJPA()) { // OpenJPA skips a negated element collection criteria in the count query.
+                assertEquals(2, notAllOf.getEstimatedTotalNumberOfResults(), "Count of not all of element collection");
             }
+            assertEquals(
+                List.of(articles.get(2).getCode(), articles.get(1).getCode()),
+                codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(List.of(Like.contains("x"), "y")))).build(), true)),
+                "Not like and value on all of element collection"
+            );
+            assertEquals(
+                List.of(articles.get(2).getCode()),
+                codesOf(
+                    articleRepository.getPage(
+                        Page.with().allMatch(Map.of("code", Not.value(List.of(articles.get(0).getCode(), articles.get(1).getCode())))).build(), true
+                    )
+                ),
+                "Not any of plain field"
+            );
 
             var withQueryBuilder = articleRepository.getPage(Page.with().allMatch(titled).build(), true, (criteriaBuilder, query, root) -> {
             });
@@ -358,8 +413,14 @@ public class EntityRepositoryIT {
     }
 
     private Article persistArticle(String title, Category category, String... tags) {
+        return persistArticle(title, category, Set.of(), Set.of(), tags);
+    }
+
+    private Article persistArticle(String title, Category category, Set<Integer> ratings, Set<Boolean> flags, String... tags) {
         var article = newArticle(title, null);
         article.getTags().addAll(List.of(tags));
+        article.getRatings().addAll(ratings);
+        article.getFlags().addAll(flags);
         transactionServiceCDI.run(() -> {
             article.setCategory(category == null ? null : categoryRepository.getById(category.getSlug()));
             articleRepository.persist(article);

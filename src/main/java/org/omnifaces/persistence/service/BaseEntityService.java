@@ -34,6 +34,7 @@ import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.JPA.findFirstResult;
 import static org.omnifaces.persistence.JPA.getValidationMode;
+import static org.omnifaces.persistence.JPA.lower;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
@@ -2197,11 +2198,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var field = parameter.getKey();
         var criteria = parameter.getValue();
-        var value = Criteria.unwrap(criteria);
         Expression<?> path;
         Class<?> type = null;
 
-        if (isBuiltAsArrayPredicate(field, value, query)) {
+        if (isBuiltAsArrayPredicate(field, criteria, query)) {
             path = pathResolver.get(null);
         }
         else {
@@ -2215,12 +2215,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether the predicate for given field and value is built by {@link #buildArrayPredicate}, which compares in its own correlated subquery. The path
-     * of the field must then not be resolved on the main query root, because that adds a JOIN which multiplies the rows.
+     * Returns whether the predicate for given field and value is built by {@link #buildArrayPredicate}, which compares in its own correlated subquery, or is
+     * not built at all. The path of the field must then not be resolved on the main query root, because that adds a JOIN which multiplies or drops rows.
      */
-    private boolean isBuiltAsArrayPredicate(String field, Object value, AbstractQuery<?> query) {
+    private boolean isBuiltAsArrayPredicate(String field, Object criteria, AbstractQuery<?> query) {
+        var value = Criteria.unwrap(criteria);
         return oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())
-            || elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
+            || elementCollections.test(field) && value != null && !isElementCollectionInPredicate(query, unwrapNot(criteria), isNegated(criteria));
     }
 
     @SuppressWarnings("unchecked")
@@ -2230,45 +2231,37 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     )
     {
         var alias = Alias.create(getProvider(), path, field);
-        var value = criteria;
-        var negated = false;
+        var value = unwrapNot(criteria);
+        var negated = isNegated(criteria);
+        var negationApplied = false;
         Predicate predicate;
-
-        if (value instanceof Not not) {
-            negated = true;
-            value = not.getValue();
-        }
 
         try {
             if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
                 predicate = criteriaBuilder.isNull(path);
             }
             else if (elementCollections.test(field)) {
-                predicate = buildElementCollectionPredicate(alias, path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+                predicate = buildElementCollectionPredicate(alias, path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
+                negationApplied = true;
             }
             else if (value instanceof Criteria<?> criteriaObject) {
                 predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
             }
             else if (value instanceof Iterable || value.getClass().isArray()) {
-                predicate = buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+                predicate = buildArrayPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
+                negationApplied = true;
             }
             else if (isEntity(value)) {
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
             }
-            else if (type.isEnum()) {
-                predicate = Enumerated.parse(value, (Class<Enum<?>>) type).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (Numeric.is(type)) {
-                predicate = Numeric.parse(value, (Class<Number>) type).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (Bool.is(type)) {
-                predicate = Bool.parse(value).build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (String.class.isAssignableFrom(type) || value instanceof String) {
-                predicate = IgnoreCase.value(value.toString()).build(path, criteriaBuilder, parameterBuilder);
-            }
             else {
-                throw new UnsupportedOperationException(format(EXCEPTION_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
+                var typedCriteria = createTypedCriteria(type, value);
+
+                if (typedCriteria == null) {
+                    throw new UnsupportedOperationException(format(EXCEPTION_UNSUPPORTED_CRITERIA, field, type, value, value.getClass()));
+                }
+
+                predicate = typedCriteria.build(path, criteriaBuilder, parameterBuilder);
             }
         }
         catch (IllegalArgumentException e) {
@@ -2277,7 +2270,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (predicate != null) {
-            if (negated) {
+            if (negated && !negationApplied) {
                 predicate = criteriaBuilder.not(predicate);
             }
 
@@ -2288,44 +2281,81 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private <T extends E> Predicate buildElementCollectionPredicate(
-        Alias alias, Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+        Alias alias, Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
-        if (isElementCollectionSubqueried(query)) {
-            // EclipseLink: plain IN on @ElementCollection causes a cartesian product; buildArrayPredicate handles it correctly.
-            // OpenJPA and Hibernate+PostgreSQL/SQLServer (data query only): Criteria (e.g. Like) values cannot be expressed as plain IN;
-            // PostgreSQL/SQLServer also enforce strict GROUP BY that Hibernate doesn't add for plain IN on @ElementCollection.
-            // In the count subquery context, buildArrayPredicate generates broken nested correlated subqueries for these providers, so it's excluded there.
-            return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
+        if (isElementCollectionSubqueried(query, value, negated)) {
+            return buildArrayPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
         }
-        else if (value instanceof Criteria && isBrokenSubqueryProvider()) {
-            // Count subquery context (implied by falling through previous branch): Criteria (e.g. Like) cannot be expressed as plain IN,
-            // and buildArrayPredicate generates broken nested correlated subqueries that OpenJPA and Hibernate+PostgreSQL/SQL Server cannot resolve correctly.
-            // Skip with a warning; the count may be slightly inaccurate, which is an accepted known limitation.
+        else if (isElementCollectionInPredicate(query, value, negated)) {
+            return buildInPredicate(alias, path, type, value, criteriaBuilder, parameterBuilder);
+        }
+        else {
+            // Count query on OpenJPA or Hibernate with PostgreSQL or SQL Server, see isElementCollectionSubqueried; the count may be too high.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
+    }
+
+    /**
+     * Returns whether the predicate for an <code>@ElementCollection</code> is built as correlated subquery by {@link #buildArrayPredicate}, else as plain
+     * <code>IN</code> by {@link #buildInPredicate}.
+     * <ul>
+     * <li>EclipseLink: always, because a plain <code>IN</code> causes a cartesian product.
+     * <li>OpenJPA and Hibernate with PostgreSQL or SQL Server: in the data query only, because these cannot resolve the nested correlated subquery in the count
+     * query. Hibernate with PostgreSQL or SQL Server also cannot use a plain <code>IN</code> in the data query, because these databases enforce a strict
+     * <code>GROUP BY</code> which Hibernate does not add.
+     * <li>Hibernate with other databases: only when the value contains a {@link Criteria} or is negated, because a plain <code>IN</code> cannot express a
+     * {@link Criteria}, and a negated plain <code>IN</code> on the joined elements matches any other element instead of no element.
+     * </ul>
+     */
+    private boolean isElementCollectionSubqueried(AbstractQuery<?> query, Object value, boolean negated) {
+        if (getProvider() == ECLIPSELINK) {
+            return true;
+        }
+        else if (isBrokenSubqueryProvider()) {
+            return !(query instanceof Subquery);
+        }
         else {
-            // Hibernate with other databases handles plain IN on @ElementCollection correctly.
-            // OpenJPA and Hibernate+PostgreSQL/SQLServer in count subquery context with non-Criteria values also use plain IN safely.
-            return buildInPredicate(alias, path, type, value, parameterBuilder);
+            return negated || containsCriteria(value);
         }
     }
 
-    private boolean isElementCollectionSubqueried(AbstractQuery<?> query) {
-        return getProvider() == ECLIPSELINK || isBrokenSubqueryProvider() && !(query instanceof Subquery);
+    /**
+     * Returns whether the predicate for an <code>@ElementCollection</code> is built as plain <code>IN</code> by {@link #buildInPredicate}. When it is neither
+     * this nor {@link #isElementCollectionSubqueried}, it is skipped.
+     */
+    private boolean isElementCollectionInPredicate(AbstractQuery<?> query, Object value, boolean negated) {
+        return !isElementCollectionSubqueried(query, value, negated) && !negated && !containsCriteria(value);
+    }
+
+    private static boolean containsCriteria(Object value) {
+        return stream(value).anyMatch(Criteria.class::isInstance);
+    }
+
+    private static boolean isNegated(Object criteria) {
+        return criteria instanceof Not;
+    }
+
+    private static Object unwrapNot(Object criteria) {
+        return criteria instanceof Not not ? not.getValue() : criteria;
     }
 
     private boolean isBrokenSubqueryProvider() {
         return getProvider() == OPENJPA || getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER);
     }
 
-    private static Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+    @SuppressWarnings("unchecked")
+    private static Predicate buildInPredicate(
+        Alias alias, Expression<?> path, Class<?> type, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
+    )
+    {
+        var ignoreCase = String.class.equals(type);
         var in = stream(value)
             .map(item -> createElementCollectionCriteria(type, item).getValue())
             .filter(Objects::nonNull)
-            .map(parameterBuilder::create)
+            .map(item -> ignoreCase ? criteriaBuilder.lower(parameterBuilder.create(item)) : parameterBuilder.create(item))
             .toList();
 
         if (in.isEmpty()) {
@@ -2333,12 +2363,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         alias.in(in.size());
-        return path.in(in.toArray(Expression<?>[]::new));
+        return (ignoreCase ? lower(criteriaBuilder, (Expression<String>) path) : path).in(in.toArray(Expression<?>[]::new));
     }
 
+    /**
+     * Builds a predicate on multiple values. A negation is applied on the comparisons and not around the predicate, because OpenJPA cannot render a
+     * <code>NOT</code> around a comparison with a correlated subquery.
+     */
     private <T extends E> Predicate buildArrayPredicate(
-        Expression<?> path, Class<?> type, String field, Object value, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
-        ParameterBuilder parameterBuilder
+        Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
         var oneToManyField = oneToManys.test(field);
@@ -2350,25 +2384,73 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
+        if (!oneToManyField && !elementCollections.test(field)) {
+            var predicates = stream(value).map(item -> buildTypedPredicate(path, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
+                .filter(Objects::nonNull)
+                .toList();
+
+            if (predicates.isEmpty()) {
+                throw new IllegalArgumentException(value.toString());
+            }
+
+            return negateIfNecessary(criteriaBuilder.or(toArray(predicates)), negated, criteriaBuilder);
+        }
+
+        var plainItems = new ArrayList<>();
+        var criteriaItems = new ArrayList<Criteria<?>>();
+
+        for (var item : (Iterable<?>) stream(value)::iterator) {
+            if (!(item instanceof Criteria<?> criteria)) {
+                plainItems.add(item);
+            }
+            else if (criteria.getValue() != null) {
+                criteriaItems.add(criteria);
+            }
+        }
+
+        var predicates = new ArrayList<Predicate>();
+
+        if (!plainItems.isEmpty()) {
+            predicates.add(buildCollectionSubqueryPredicate(type, field, plainItems, false, negated, query, criteriaBuilder, pathResolver, parameterBuilder));
+        }
+
+        for (var criteria : criteriaItems) {
+            predicates.add(
+                buildCollectionSubqueryPredicate(type, field, List.of(criteria), true, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
+            );
+        }
+
+        predicates.removeIf(Objects::isNull);
+
+        if (predicates.isEmpty()) {
+            if (oneToManyField) {
+                throw new IllegalArgumentException(value.toString());
+            }
+
+            return null;
+        }
+
+        return negated ? criteriaBuilder.or(toArray(predicates)) : criteriaBuilder.and(toArray(predicates));
+    }
+
+    /**
+     * Builds a correlated subquery which counts the distinct elements of given <code>@OneToMany</code> or <code>@ElementCollection</code> field matching any of
+     * given items. This simulates an IN clause without a JOIN on the main query, so that the main query still returns all elements of the field. Plain items
+     * are assumed to each match at most one distinct element, so all of them must match: <code>COUNT = items</code>. A {@link Criteria} item such as
+     * <code>Like</code> may match more than one element, so it gets its own subquery wherein at least one element must match: <code>COUNT &gt; 0</code>. When
+     * negated, the comparison is inverted.
+     */
+    private <T extends E> Predicate buildCollectionSubqueryPredicate(
+        Class<?> type, String field, List<?> items, boolean anyMatch, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver, ParameterBuilder parameterBuilder
+    )
+    {
+        var subquery = query.subquery(Long.class);
+        Root<E> subqueryRoot = subquery.from(entityType);
+        var fieldPath = new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
+        var resolvedType = (type == null) ? fieldPath.getJavaType() : type; // type is null when isBuiltAsArrayPredicate.
         var elementCollectionField = elementCollections.test(field);
-        Subquery<Long> subquery = null;
-        Expression<?> fieldPath;
-
-        if (oneToManyField || elementCollectionField) {
-            // This subquery must simulate an IN clause on a field of a @OneToMany or @ElementCollection relationship.
-            // Otherwise the main query will return ONLY the matching values while the natural expectation in UI is that they are just all returned.
-            subquery = query.subquery(Long.class);
-            Root<E> subqueryRoot = subquery.from(entityType);
-            fieldPath = new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
-            subquery.select(criteriaBuilder.countDistinct(fieldPath))
-                .where(criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
-        }
-        else {
-            fieldPath = path;
-        }
-
-        final var resolvedType = (type == null) ? fieldPath.getJavaType() : type; // type is null when isBuiltAsArrayPredicate.
-        var predicates = stream(value)
+        var predicates = items.stream()
             .map(
                 item -> elementCollectionField
                     ? createElementCollectionCriteria(resolvedType, item).build(fieldPath, criteriaBuilder, parameterBuilder)
@@ -2378,27 +2460,56 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .toList();
 
         if (predicates.isEmpty()) {
-            if (elementCollectionField) {
-                return null;
-            }
-
-            throw new IllegalArgumentException(value.toString());
+            return null;
         }
 
-        var predicate = criteriaBuilder.or(toArray(predicates));
+        var count = subquery.select(criteriaBuilder.countDistinct(fieldPath))
+            .where(
+                criteriaBuilder.or(toArray(predicates)),
+                criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()))
+            );
 
-        if (subquery != null) {
-            // SELECT e FROM E e WHERE (SELECT COUNT(DISTINCT field) FROM T t WHERE [restrictions] AND t.id = e.id) = ACTUALCOUNT
-            Long actualCount = (long) predicates.size();
-            predicate = criteriaBuilder.equal(subquery.where(criteriaBuilder.and(predicate, subquery.getRestriction())), actualCount);
+        if (anyMatch) {
+            return negated ? criteriaBuilder.equal(count, 0L) : criteriaBuilder.greaterThan(count, 0L);
         }
 
-        return predicate;
+        var allMatchCount = (long) predicates.size();
+        return negated ? criteriaBuilder.notEqual(count, allMatchCount) : criteriaBuilder.equal(count, allMatchCount);
     }
 
-    @SuppressWarnings("unchecked")
     private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
-        return type.isEnum() ? Enumerated.parse(value, (Class<Enum<?>>) type) : IgnoreCase.value(value.toString());
+        if (value instanceof Criteria<?> criteria) {
+            return criteria;
+        }
+
+        var typedCriteria = createTypedCriteria(type, value);
+        return typedCriteria != null ? typedCriteria : IgnoreCase.value(value.toString());
+    }
+
+    /**
+     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported.
+     */
+    @SuppressWarnings("unchecked")
+    private static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
+        if (type.isEnum()) {
+            return Enumerated.parse(value, (Class<Enum<?>>) type);
+        }
+        else if (Numeric.is(type)) {
+            return Numeric.parse(value, (Class<Number>) type);
+        }
+        else if (Bool.is(type)) {
+            return Bool.parse(value);
+        }
+        else if (String.class.isAssignableFrom(type) || value instanceof String) {
+            return IgnoreCase.value(value.toString());
+        }
+        else {
+            return null;
+        }
+    }
+
+    private static Predicate negateIfNecessary(Predicate predicate, boolean negated, CriteriaBuilder criteriaBuilder) {
+        return predicate != null && negated ? criteriaBuilder.not(predicate) : predicate;
     }
 
     // Helpers --------------------------------------------------------------------------------------------------------

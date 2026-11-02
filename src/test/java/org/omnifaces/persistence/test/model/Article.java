@@ -51,6 +51,12 @@ public class Article {
     @ElementCollection
     private Set<String> tags = new HashSet<>();
 
+    @ElementCollection
+    private Set<Integer> ratings = new HashSet<>();
+
+    @ElementCollection
+    private Set<Boolean> flags = new HashSet<>();
+
     @SoftDeletable
     private boolean deleted;
 
@@ -84,6 +90,22 @@ public class Article {
 
     public void setTags(Set<String> tags) {
         this.tags = tags;
+    }
+
+    public Set<Integer> getRatings() {
+        return ratings;
+    }
+
+    public void setRatings(Set<Integer> ratings) {
+        this.ratings = ratings;
+    }
+
+    public Set<Boolean> getFlags() {
+        return flags;
+    }
+
+    public void setFlags(Set<Boolean> flags) {
+        this.flags = flags;
     }
 
     public boolean isDeleted() {

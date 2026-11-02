@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.criteria;
 
 import static org.omnifaces.persistence.JPA.castAsString;
+import static org.omnifaces.persistence.JPA.lower;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -56,7 +57,11 @@ public final class IgnoreCase extends Criteria<String> {
 
     @Override
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        return criteriaBuilder.equal(criteriaBuilder.lower(castAsString(criteriaBuilder, path)), criteriaBuilder.lower(parameterBuilder.create(getValue())));
+        return criteriaBuilder
+            .equal(
+                lower(criteriaBuilder, castAsString(criteriaBuilder, path)),
+                criteriaBuilder.lower(parameterBuilder.create(getValue()))
+            );
     }
 
     @Override
