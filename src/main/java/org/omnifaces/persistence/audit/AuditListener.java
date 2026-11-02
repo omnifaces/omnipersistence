@@ -37,6 +37,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -185,7 +186,7 @@ public class AuditListener {
             var oldValue = oldValues.get(newValue.getKey());
 
             if (!Objects.equals(oldValue, newValue.getValue())) {
-                changes.add(new AuditedChange(entity, entity.getClass().getSimpleName(), newValue.getKey(), oldValue, newValue.getValue()));
+                changes.add(new AuditedChange(entity, Provider.getEntityName(entity.getClass()), newValue.getKey(), oldValue, newValue.getValue()));
             }
         }
 

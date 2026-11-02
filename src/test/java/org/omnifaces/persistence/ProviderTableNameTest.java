@@ -19,12 +19,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 import org.junit.jupiter.api.Test;
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 /**
- * Unit tests for {@link Provider#getTableName(BaseEntity)}. This class lives outside the integration test package so that its stub entities do not end up in
- * the persistence unit of the integration tests.
+ * Unit tests for {@link Provider#getTableName(Object)} and {@link Provider#getEntityName(Class)}. This class lives outside the integration test package so that
+ * its stub entities do not end up in the persistence unit of the integration tests.
  */
 class ProviderTableNameTest {
 
@@ -34,18 +33,57 @@ class ProviderTableNameTest {
     }
 
     @Test
-    void tableNameDefaultsToUpperCasedClassNameWithoutTableAnnotation() {
+    void tableNameDefaultsToUpperCasedSimpleNameWithoutEntityNameAndTableAnnotation() {
         assertEquals("UNANNOTATEDENTITY", HIBERNATE.getTableName(new UnannotatedEntity()));
     }
 
     @Test
-    void tableNameDefaultsToUpperCasedClassNameWhenTableAnnotationHasNoName() {
+    void tableNameDefaultsToUpperCasedEntityNameWithoutTableAnnotation() {
+        assertEquals("MEMO", HIBERNATE.getTableName(new NamedEntity()));
+    }
+
+    @Test
+    void tableNameDefaultsToUpperCasedEntityNameOfSuperclassWithoutOwnEntityAnnotation() {
+        assertEquals("MEMO", HIBERNATE.getTableName(new NamedEntitySubclass()));
+    }
+
+    @Test
+    void tableNameDefaultsToUpperCasedEntityNameWhenTableAnnotationHasNoName() {
         assertEquals("SCHEMAONLYENTITY", HIBERNATE.getTableName(new SchemaOnlyEntity()));
+    }
+
+    @Test
+    void entityNameIsThatOfEntityAnnotation() {
+        assertEquals("Memo", Provider.getEntityName(NamedEntity.class));
+        assertEquals("Memo", Provider.getEntityName(NamedEntitySubclass.class));
+    }
+
+    @Test
+    void entityNameDefaultsToSimpleNameOfEntityClass() {
+        assertEquals("UnannotatedEntity", Provider.getEntityName(UnannotatedEntity.class));
+    }
+
+    @Test
+    void entityNameDefaultsToSimpleNameOfNonEntityClass() {
+        assertEquals("String", Provider.getEntityName(String.class));
     }
 
     @Entity
     @Table(name = "named_table")
     static class NamedTableEntity extends GeneratedIdEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+
+    }
+
+    @Entity(name = "Memo")
+    static class NamedEntity extends GeneratedIdEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+
+    }
+
+    static class NamedEntitySubclass extends NamedEntity {
 
         private static final long serialVersionUID = 1L;
 

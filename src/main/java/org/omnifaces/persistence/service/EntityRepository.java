@@ -90,7 +90,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * A {@link Supplier} which is also {@link Serializable}, so that it survives serialization of the {@link EntityRepository} holding it.
      *
      * @param <T> The generic type of the supplied result.
-     * @since 1.3
      */
     @FunctionalInterface
     public interface SerializableSupplier<T> extends Supplier<T>, Serializable {
@@ -103,7 +102,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param identifierType The actual type of the generic ID type <code>I</code>.
      * @param entityType The actual type of the generic entity type <code>E</code>.
      * @throws NullPointerException When any argument is <code>null</code>.
-     * @since 1.3
      */
     public EntityRepository(SerializableSupplier<EntityManager> entityManager, Class<I> identifierType, Class<E> entityType) {
         this.entityManager = requireNonNull(entityManager, "entityManager");
@@ -149,7 +147,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getProvider()}.
      *
      * @return The Jakarta Persistence provider being used.
-     * @since 1.3
      */
     public Provider getProvider() {
         return service().getProvider();
@@ -159,7 +156,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getDatabase()}.
      *
      * @return The SQL database being used.
-     * @since 1.3
      */
     public Database getDatabase() {
         return service().getDatabase();
@@ -169,7 +165,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * Returns the actual type of the generic ID type <code>I</code>.
      *
      * @return The actual type of the generic ID type <code>I</code>.
-     * @since 1.3
      */
     public Class<I> getIdentifierType() {
         return identifierType;
@@ -179,7 +174,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * Returns the actual type of the generic entity type <code>E</code>.
      *
      * @return The actual type of the generic entity type <code>E</code>.
-     * @since 1.3
      */
     public Class<E> getEntityType() {
         return entityType;
@@ -189,7 +183,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#isGeneratedId()}.
      *
      * @return Whether the ID is generated.
-     * @since 1.3
      */
     public boolean isGeneratedId() {
         return service().isGeneratedId();
@@ -199,7 +192,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * Returns the entity manager being used, as obtained from the supplier given in the constructor.
      *
      * @return The entity manager being used.
-     * @since 1.3
      */
     public EntityManager getEntityManager() {
         return entityManager.get();
@@ -209,10 +201,18 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getMetamodel()}.
      *
      * @return The metamodel of current entity.
-     * @since 1.3
      */
     public EntityType<E> getMetamodel() {
         return service().getMetamodel();
+    }
+
+    /**
+     * See {@link BaseEntityService#getEntityName()}.
+     *
+     * @return The entity name of current entity.
+     */
+    public String getEntityName() {
+        return service().getEntityName();
     }
 
     /**
@@ -221,7 +221,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param <T> The generic entity type of the given entity.
      * @param entity Entity to obtain metamodel for.
      * @return The metamodel of given entity.
-     * @since 1.3
      */
     public <T> EntityType<T> getMetamodel(T entity) {
         return service().getMetamodel(entity);
@@ -234,7 +233,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param name The name of the Java Persistence Query Language statement defined in metadata.
      * @return An instance of {@link TypedQuery} for executing the named Java Persistence Query Language statement.
-     * @since 1.3
      */
     public TypedQuery<E> createNamedTypedQuery(String name) {
         return service().createNamedTypedQuery(name);
@@ -245,7 +243,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param name The name of the Java Persistence Query Language statement defined in metadata.
      * @return An instance of {@link Query} for executing the named Java Persistence Query Language statement.
-     * @since 1.3
      */
     public Query createNamedQuery(String name) {
         return service().createNamedQuery(name);
@@ -258,7 +255,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param resultType The result type.
      * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns the specified <code>T</code>.
-     * @since 1.3
      */
     public <T> TypedQuery<T> createTypedQuery(String jpql, Class<T> resultType) {
         return service().createTypedQuery(jpql, resultType);
@@ -269,7 +265,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>E</code>.
-     * @since 1.3
      */
     public TypedQuery<E> createTypedQuery(String jpql) {
         return service().createTypedQuery(jpql);
@@ -280,7 +275,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link TypedQuery} for executing the given Java Persistence Query Language statement which returns a <code>Long</code>.
-     * @since 1.3
      */
     public TypedQuery<Long> createLongQuery(String jpql) {
         return service().createLongQuery(jpql);
@@ -291,7 +285,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param jpql The Java Persistence Query Language statement.
      * @return An instance of {@link Query} for executing the given Java Persistence Query Language statement.
-     * @since 1.3
      */
     public Query createQuery(String jpql) {
         return service().createQuery(jpql);
@@ -305,7 +298,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return Found entity matching the given query and positional parameters, if any.
-     * @since 1.3
      */
     public Optional<E> find(String jpql, Object... parameters) {
         return service().find(jpql, parameters);
@@ -317,7 +309,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
-     * @since 1.3
      */
     public Optional<E> find(String jpql, Map<String, Object> parameters) {
         return service().find(jpql, parameters);
@@ -329,7 +320,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
-     * @since 1.3
      */
     public Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return service().find(queryBuilder, parameters);
@@ -341,7 +331,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return Found entity matching the given query and positional parameters, if any.
-     * @since 1.3
      */
     public Optional<E> findFirst(String jpql, Object... parameters) {
         return service().findFirst(jpql, parameters);
@@ -353,7 +342,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return Found entity matching the given query and mapped parameters, if any.
-     * @since 1.3
      */
     public Optional<E> findFirst(String jpql, Map<String, Object> parameters) {
         return service().findFirst(jpql, parameters);
@@ -365,7 +353,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
-     * @since 1.3
      */
     public Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return service().findFirst(queryBuilder, parameters);
@@ -376,7 +363,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param id Entity ID to find entity for.
      * @return Found entity, if any.
-     * @since 1.3
      */
     public Optional<E> findById(I id) {
         return service().findById(id);
@@ -388,7 +374,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param id Entity ID to find entity for.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, if any.
-     * @since 1.3
      */
     public Optional<E> findById(I id, boolean includeSoftDeleted) {
         return service().findById(id, includeSoftDeleted);
@@ -399,7 +384,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param id Entity ID to find soft deleted entity for.
      * @return Found soft deleted entity, if any.
-     * @since 1.3
      */
     public Optional<E> findSoftDeletedById(I id) {
         return service().findSoftDeletedById(id);
@@ -410,7 +394,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param id Entity ID to get entity by.
      * @return Found entity, or <code>null</code> if there is none.
-     * @since 1.3
      */
     @Nullable
     public E getById(I id) {
@@ -423,7 +406,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param id Entity ID to get entity by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entity, or <code>null</code> if there is none.
-     * @since 1.3
      */
     @Nullable
     public E getById(I id, boolean includeSoftDeleted) {
@@ -436,7 +418,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param id Entity ID to get entity by.
      * @param entityGraphName Entity graph name.
      * @return Found entity, or <code>null</code> if there is none.
-     * @since 1.3
      */
     @Nullable
     public E getByIdWithLoadGraph(I id, String entityGraphName) {
@@ -448,7 +429,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param id Entity ID to get soft deleted entity by.
      * @return Found soft deleted entity, or <code>null</code> if there is none.
-     * @since 1.3
      */
     @Nullable
     public E getSoftDeletedById(I id) {
@@ -460,7 +440,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param ids Entity IDs to get entities by.
      * @return Found entities, or an empty set if there is none.
-     * @since 1.3
      */
     public List<E> getByIds(Iterable<I> ids) {
         return service().getByIds(ids);
@@ -472,7 +451,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
-     * @since 1.3
      */
     public List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
         return service().getByIds(ids, includeSoftDeleted);
@@ -483,7 +461,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to check.
      * @return Whether entity with given entity exists.
-     * @since 1.3
      */
     public boolean exists(E entity) {
         return service().exists(entity);
@@ -493,7 +470,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#list()}.
      *
      * @return List of all entities.
-     * @since 1.3
      */
     public List<E> list() {
         return service().list();
@@ -504,7 +480,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return List of all entities, optionally including soft deleted ones.
-     * @since 1.3
      */
     public List<E> list(boolean includeSoftDeleted) {
         return service().list(includeSoftDeleted);
@@ -514,7 +489,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#listSoftDeleted()}.
      *
      * @return List of all soft deleted entities.
-     * @since 1.3
      */
     public List<E> listSoftDeleted() {
         return service().listSoftDeleted();
@@ -526,7 +500,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return List of entities matching the given query and positional parameters, if any.
-     * @since 1.3
      */
     public List<E> list(String jpql, Object... parameters) {
         return service().list(jpql, parameters);
@@ -538,7 +511,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return List of entities matching the given query and mapped parameters, if any.
-     * @since 1.3
      */
     public List<E> list(String jpql, Map<String, Object> parameters) {
         return service().list(jpql, parameters);
@@ -550,7 +522,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
      * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
-     * @since 1.3
      */
     public List<E> list(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return service().list(queryBuilder, parameters);
@@ -563,7 +534,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to persist.
      * @return Entity ID.
-     * @since 1.3
      */
     public I persist(E entity) {
         return service().persist(entity);
@@ -576,7 +546,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to update.
      * @return Updated entity.
-     * @since 1.3
      */
     public E update(E entity) {
         return service().update(entity);
@@ -587,7 +556,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to update.
      * @return Updated entity.
-     * @since 1.3
      */
     public E updateAndFlush(E entity) {
         return service().updateAndFlush(entity);
@@ -598,7 +566,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entities Entities to update.
      * @return Updated entities.
-     * @since 1.3
      */
     public List<E> update(Iterable<E> entities) {
         return service().update(entities);
@@ -610,7 +577,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
      * @return The number of entities updated or deleted.
-     * @since 1.3
      */
     public int update(String jpql, Object... parameters) {
         return service().update(jpql, parameters);
@@ -622,7 +588,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
      * @return The number of entities updated or deleted.
-     * @since 1.3
      */
     public int update(String jpql, Map<String, Object> parameters) {
         return service().update(jpql, parameters);
@@ -633,7 +598,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to save.
      * @return Saved entity.
-     * @since 1.3
      */
     public E save(E entity) {
         return service().save(entity);
@@ -644,7 +608,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to save.
      * @return Saved entity.
-     * @since 1.3
      */
     public E saveAndFlush(E entity) {
         return service().saveAndFlush(entity);
@@ -656,7 +619,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#delete(Object)}.
      *
      * @param entity Entity to delete.
-     * @since 1.3
      */
     public void delete(E entity) {
         service().delete(entity);
@@ -666,7 +628,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#softDelete(Object)}.
      *
      * @param entity Entity to soft delete.
-     * @since 1.3
      */
     public void softDelete(E entity) {
         service().softDelete(entity);
@@ -676,7 +637,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#softUndelete(Object)}.
      *
      * @param entity Entity to soft undelete.
-     * @since 1.3
      */
     public void softUndelete(E entity) {
         service().softUndelete(entity);
@@ -686,7 +646,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#delete(Iterable)}.
      *
      * @param entities Entities to delete.
-     * @since 1.3
      */
     public void delete(Iterable<E> entities) {
         service().delete(entities);
@@ -696,7 +655,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#softDelete(Iterable)}.
      *
      * @param entities Entities to soft delete.
-     * @since 1.3
      */
     public void softDelete(Iterable<E> entities) {
         service().softDelete(entities);
@@ -706,7 +664,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#softUndelete(Iterable)}.
      *
      * @param entities Entities to soft undelete.
-     * @since 1.3
      */
     public void softUndelete(Iterable<E> entities) {
         service().softUndelete(entities);
@@ -719,7 +676,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to manage.
      * @return The managed entity.
-     * @since 1.3
      */
     public E manage(E entity) {
         return service().manage(entity);
@@ -731,7 +687,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param <T> The generic entity type.
      * @param entity Entity to manage, may be <code>null</code>.
      * @return The managed entity, or <code>null</code> when <code>null</code> was supplied.
-     * @since 1.3
      */
     @Nullable
     public <T> T manageIfNecessary(@Nullable T entity) {
@@ -742,7 +697,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#reset(Object)}.
      *
      * @param entity Entity to reset.
-     * @since 1.3
      */
     public void reset(E entity) {
         service().reset(entity);
@@ -755,7 +709,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity to count all foreign key references for.
      * @return Count of all foreign key references to given entity.
-     * @since 1.3
      */
     public long countForeignKeyReferencesTo(E entity) {
         return service().countForeignKeyReferencesTo(entity);
@@ -769,7 +722,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param entity Entity instance to fetch lazy collections on.
      * @param getters Getters of those lazy collections.
      * @return The same entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     @SafeVarargs
     public final E fetchLazyCollections(E entity, Function<E, Collection<?>>... getters) {
@@ -782,7 +734,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param entity Optional entity instance to fetch lazy collections on.
      * @param getters Getters of those lazy collections.
      * @return The same optional entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     @SafeVarargs
     public final Optional<E> fetchLazyCollections(Optional<E> entity, Function<E, Collection<?>>... getters) {
@@ -795,7 +746,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param entity Entity instance to fetch lazy maps on.
      * @param getters Getters of those lazy maps.
      * @return The same entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     @SafeVarargs
     public final E fetchLazyMaps(E entity, Function<E, Map<?, ?>>... getters) {
@@ -808,7 +758,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param entity Optional entity instance to fetch lazy maps on.
      * @param getters Getters of those lazy maps.
      * @return The same optional entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     @SafeVarargs
     public final Optional<E> fetchLazyMaps(Optional<E> entity, Function<E, Map<?, ?>>... getters) {
@@ -820,7 +769,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Entity instance to fetch all blobs on.
      * @return The same entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     public E fetchLazyBlobs(E entity) {
         return service().fetchLazyBlobs(entity);
@@ -831,7 +779,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param entity Optional entity instance to fetch all blobs on.
      * @return The same optional entity, useful if you want to continue using it immediately.
-     * @since 1.3
      */
     public Optional<E> fetchLazyBlobs(Optional<E> entity) {
         return service().fetchLazyBlobs(entity);
@@ -845,7 +792,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
      * @return A partial result list based on given {@link Page}.
-     * @since 1.3
      */
     public PartialResultList<E> getPage(Page page, boolean count) {
         return service().getPage(page, count);
@@ -858,7 +804,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query.
      * @return A partial result list based on given {@link Page}.
-     * @since 1.3
      */
     public PartialResultList<E> getPage(Page page, boolean count, String... fetchFields) {
         return service().getPage(page, count, fetchFields);
@@ -872,7 +817,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param cacheable Whether the results should be cacheable.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query.
      * @return A partial result list based on given {@link Page}.
-     * @since 1.3
      */
     public PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, String... fetchFields) {
         return service().getPage(page, count, cacheable, fetchFields);
@@ -885,7 +829,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
-     * @since 1.3
      */
     public PartialResultList<E> getPage(Page page, boolean count, QueryBuilder<E> queryBuilder) {
         return service().getPage(page, count, queryBuilder);
@@ -899,7 +842,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param cacheable Whether the results should be cacheable.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
-     * @since 1.3
      */
     public PartialResultList<E> getPage(Page page, boolean count, boolean cacheable, QueryBuilder<E> queryBuilder) {
         return service().getPage(page, count, cacheable, queryBuilder);
@@ -914,7 +856,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @since 1.3
      */
     public <T extends E> PartialResultList<T> getPage(Page page, boolean count, Class<T> resultType, MappedQueryBuilder<T> mappedQueryBuilder) {
         return service().getPage(page, count, resultType, mappedQueryBuilder);
@@ -931,7 +872,6 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths when result type does not
      * equal entity type.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @since 1.3
      */
     public <T extends E> PartialResultList<T> getPage(Page page, boolean count, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
         return service().getPage(page, count, cacheable, resultType, queryBuilder);

@@ -404,6 +404,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
+     * Returns the entity name of current entity, to be used in JPQL. This is the name of {@link Entity}, or else the simple name of the entity class.
+     *
+     * @return The entity name of current entity.
+     * @since 1.3
+     */
+    protected String getEntityName() {
+        return getMetamodel().getName();
+    }
+
+    /**
      * Returns the metamodel of given entity.
      *
      * @param <T> The generic entity type of the given entity.
@@ -847,7 +857,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     protected boolean exists(E entity) {
         var id = getId(entity);
-        return id != null && createLongQuery("SELECT COUNT(e) FROM " + entityType.getSimpleName() + " e WHERE e." + idAttribute.getName() + " = :id")
+        return id != null && createLongQuery("SELECT COUNT(e) FROM " + getEntityName() + " e WHERE e." + idAttribute.getName() + " = :id")
             .setParameter("id", id)
             .getSingleResult().intValue() > 0;
     }
@@ -967,7 +977,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private String select(String jpql) {
         if (!startsWithOneOf(jpql.trim().toLowerCase(), "select", "from")) {
-            return "SELECT e FROM " + entityType.getSimpleName() + " e " + jpql;
+            return "SELECT e FROM " + getEntityName() + " e " + jpql;
         }
         else {
             return jpql;
@@ -980,7 +990,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private String update(String jpql) {
         if (!jpql.trim().toLowerCase().startsWith("update")) {
-            return "UPDATE " + entityType.getSimpleName() + " e " + jpql;
+            return "UPDATE " + getEntityName() + " e " + jpql;
         }
         else {
             return jpql;
