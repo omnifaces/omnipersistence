@@ -26,6 +26,7 @@ import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
 import java.lang.reflect.AnnotatedElement;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -360,13 +361,7 @@ public enum Provider {
      */
     @SuppressWarnings("unchecked")
     public <E> Class<E> getEntityType(E entity) {
-        Class<?> entityType = entity.getClass();
-
-        while (entityType.getSuperclass() != null && entityType.getAnnotation(Entity.class) == null) {
-            entityType = entityType.getSuperclass();
-        }
-
-        return (Class<E>) (entityType.getAnnotation(Entity.class) != null ? entityType : entity.getClass());
+        return (Class<E>) findEntityClass(entity.getClass()).orElse(entity.getClass());
     }
 
     /**
@@ -394,7 +389,7 @@ public enum Provider {
 
     /**
      * Returns the table name of the given entity. The default implementation returns the name of the {@link Table} annotation of {@link #getEntityType(Object)}
-     * or else defaults to entity class' simple name in upper cased form when there is no such annotation or it has no name.
+     * or else defaults to its {@link #getEntityName(Class) entity name} in upper cased form when there is no such annotation or it has no name.
      *
      * @param entity The entity to get the table name for, may not be <code>null</code>.
      * @return The table name of the given entity.
@@ -403,7 +398,37 @@ public enum Provider {
     public String getTableName(Object entity) {
         var entityType = getEntityType(entity);
         var table = entityType.getAnnotation(Table.class);
-        return table != null && !table.name().isEmpty() ? table.name() : entityType.getSimpleName().toUpperCase();
+        return table != null && !table.name().isEmpty() ? table.name() : getEntityName(entityType).toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Returns the Jakarta Persistence entity name of the given entity type. This is the name of the first {@link Entity} annotation in its class hierarchy, or
+     * else the simple name of the class having it, or else the simple name of the given entity type. This is derived from annotations only, so an entity name
+     * from a mapping file is not reflected. {@link BaseEntityService#getEntityName()} returns the entity name known to the persistence provider.
+     *
+     * @param entityType The entity type to get the entity name for, may not be <code>null</code>.
+     * @return The Jakarta Persistence entity name of the given entity type.
+     * @throws NullPointerException When given entity type is <code>null</code>.
+     * @see BaseEntityService#getEntityName()
+     * @since 1.3
+     */
+    public static String getEntityName(Class<?> entityType) {
+        return findEntityClass(entityType)
+            .map(entityClass -> {
+                var name = entityClass.getAnnotation(Entity.class).name();
+                return name.isEmpty() ? entityClass.getSimpleName() : name;
+            })
+            .orElse(entityType.getSimpleName());
+    }
+
+    private static Optional<Class<?>> findEntityClass(Class<?> type) {
+        for (var candidate = type; candidate != null; candidate = candidate.getSuperclass()) {
+            if (candidate.getAnnotation(Entity.class) != null) {
+                return Optional.of(candidate);
+            }
+        }
+
+        return Optional.empty();
     }
 
     /**
