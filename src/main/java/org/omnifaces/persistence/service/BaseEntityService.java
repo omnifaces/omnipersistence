@@ -2189,7 +2189,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     private boolean isBuiltAsArrayPredicate(String field, Object value, AbstractQuery<?> query) {
         return oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())
-        	|| elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
+            || elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
     }
 
     @SuppressWarnings("unchecked")
