@@ -2104,11 +2104,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var distinct = !(pathResolver instanceof MappedPathResolver) // DTO queries have GROUP BY from aggregations; DISTINCT is redundant and causes
                                                                          // OpenJPA to wrap the query losing projected columns.
                 && (!optionalPredicates.isEmpty() // Optional (OR/global) predicates may span @ElementCollection fields; buildPredicate adds a root JOIN per
-                                                  // such field, multiplying rows; DISTINCT deduplicates entities before LIMIT is applied.
+                                                  // such field unless isBuiltAsArrayPredicate, multiplying rows; DISTINCT deduplicates entities before LIMIT
+                                                  // is applied.
                     || hasFetches((From<?, ?>) pathResolver.get(null))); // Real fetch joins or @ElementCollection required-criteria JOINs with
                                                                          // PostponedFetchRoot (it intercepts fetch() but buildPredicate still calls
-                                                                         // root.join() for element collection filters) multiply rows; DISTINCT ensures
-                                                                         // LIMIT paginates over entity rows, not join rows.
+                                                                         // root.join() for element collection filters unless isBuiltAsArrayPredicate)
+                                                                         // multiply rows; DISTINCT ensures LIMIT paginates over entity rows, not join rows.
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 
@@ -2169,8 +2170,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         Expression<?> path;
         Class<?> type = null;
 
-        if (oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())) {
-            // For @OneToMany fields with collection values, avoid pathResolver.get(field) which adds an unwanted JOIN to the main query root.
+        if (isBuiltAsArrayPredicate(field, value, query)) {
             path = pathResolver.get(null);
         }
         else {
@@ -2181,6 +2181,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return buildTypedPredicate(
             path, type, field, criteria, query, criteriaBuilder, pathResolver, new UncheckedParameterBuilder(field, criteriaBuilder, parameters)
         );
+    }
+
+    /**
+     * Returns whether the predicate for given field and value is built by {@link #buildArrayPredicate}, which compares in its own correlated subquery. The path
+     * of the field must then not be resolved on the main query root, because that adds a JOIN which multiplies the rows.
+     */
+    private boolean isBuiltAsArrayPredicate(String field, Object value, AbstractQuery<?> query) {
+        if (oneToManys.test(field)) {
+            return value instanceof Iterable || value != null && value.getClass().isArray();
+        }
+
+        return elementCollections.test(field) && value != null && isElementCollectionSubqueried(query);
     }
 
     @SuppressWarnings("unchecked")
@@ -2252,17 +2264,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
-        boolean isBrokenSubqueryProvider = getProvider() == OPENJPA
-            || (getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER));
-
-        if (getProvider() == ECLIPSELINK || isBrokenSubqueryProvider && !(query instanceof Subquery)) {
+        if (isElementCollectionSubqueried(query)) {
             // EclipseLink: plain IN on @ElementCollection causes a cartesian product; buildArrayPredicate handles it correctly.
             // OpenJPA and Hibernate+PostgreSQL/SQLServer (data query only): Criteria (e.g. Like) values cannot be expressed as plain IN;
             // PostgreSQL/SQLServer also enforce strict GROUP BY that Hibernate doesn't add for plain IN on @ElementCollection.
             // In the count subquery context, buildArrayPredicate generates broken nested correlated subqueries for these providers, so it's excluded there.
             return buildArrayPredicate(path, type, field, value, query, criteriaBuilder, pathResolver, parameterBuilder);
         }
-        else if (isBrokenSubqueryProvider && value instanceof Criteria) {
+        else if (value instanceof Criteria && isBrokenSubqueryProvider()) {
             // Count subquery context (implied by falling through previous branch): Criteria (e.g. Like) cannot be expressed as plain IN,
             // and buildArrayPredicate generates broken nested correlated subqueries that OpenJPA and Hibernate+PostgreSQL/SQL Server cannot resolve correctly.
             // Skip with a warning; the count may be slightly inaccurate, which is an accepted known limitation.
@@ -2274,6 +2283,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // OpenJPA and Hibernate+PostgreSQL/SQLServer in count subquery context with non-Criteria values also use plain IN safely.
             return buildInPredicate(alias, path, type, value, parameterBuilder);
         }
+    }
+
+    private boolean isElementCollectionSubqueried(AbstractQuery<?> query) {
+        return getProvider() == ECLIPSELINK || isBrokenSubqueryProvider() && !(query instanceof Subquery);
+    }
+
+    private boolean isBrokenSubqueryProvider() {
+        return getProvider() == OPENJPA || getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER);
     }
 
     private static Predicate buildInPredicate(Alias alias, Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
@@ -2321,8 +2338,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             fieldPath = path;
         }
 
-        final var resolvedType = (oneToManyField && type == null) ? fieldPath.getJavaType() : type; // type is null for @OneToMany when buildPredicate bypasses
-                                                                                                    // pathResolver.get(field) to avoid adding a join.
+        final var resolvedType = (type == null) ? fieldPath.getJavaType() : type; // type is null when isBuiltAsArrayPredicate.
         var predicates = stream(value)
             .map(
                 item -> elementCollectionField

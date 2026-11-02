@@ -15,7 +15,6 @@ package org.omnifaces.persistence.test;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -581,9 +580,11 @@ public abstract class OmniPersistenceIT {
         var direct = personService().getPage(Page.with().allMatch(Map.of("groups", Group.USER)).build(), true);
         var viaPhoneOwner = personService().getPage(Page.with().allMatch(Map.of("phones.owner.groups", Group.USER)).build(), true);
         assertFalse(direct.isEmpty(), "Some persons have group USER");
+        assertEquals(direct.stream().map(Person::getId).distinct().count(), direct.size(), "Each person is returned once");
+        assertEquals(direct.getEstimatedTotalNumberOfResults(), direct.size(), "Count matches result size");
         assertEquals(
-            direct.stream().map(Person::getId).collect(toSet()),
-            viaPhoneOwner.stream().map(Person::getId).collect(toSet()),
+            direct.stream().map(Person::getId).toList(),
+            viaPhoneOwner.stream().map(Person::getId).toList(),
             "Every person owns a phone, so filtering on phones.owner.groups matches the same persons as filtering on groups"
         );
         assertEquals(direct.getEstimatedTotalNumberOfResults(), viaPhoneOwner.getEstimatedTotalNumberOfResults(), "Counts match");
