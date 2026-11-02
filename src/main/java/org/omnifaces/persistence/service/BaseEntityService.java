@@ -2148,10 +2148,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 && (!optionalPredicates.isEmpty() // Optional (OR/global) predicates may span @ElementCollection fields; buildPredicate adds a root JOIN per
                                                   // such field unless isBuiltAsArrayPredicate, multiplying rows; DISTINCT deduplicates entities before LIMIT
                                                   // is applied.
-                    || hasFetches((From<?, ?>) pathResolver.get(null))); // Real fetch joins or @ElementCollection required-criteria JOINs with
-                                                                         // PostponedFetchRoot (it intercepts fetch() but buildPredicate still calls
+                    || hasFetches((From<?, ?>) pathResolver.get(null))); // Real plural fetch joins or @ElementCollection required-criteria JOINs with
+                                                                         // PostponedFetchRoot (it postpones plural fetches but buildPredicate still calls
                                                                          // root.join() for element collection filters unless isBuiltAsArrayPredicate)
                                                                          // multiply rows; DISTINCT ensures LIMIT paginates over entity rows, not join rows.
+                                                                         // Real singular fetch joins do not multiply rows, DISTINCT is then harmless.
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 

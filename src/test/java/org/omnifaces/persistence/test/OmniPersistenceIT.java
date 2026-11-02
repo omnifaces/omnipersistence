@@ -740,6 +740,22 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPhonePageWithOwnersSortedByOwnerEmailAndOptionalCriteria() {
+        var page = Page.with().range(0, 10).orderBy("owner.email", true).anyMatch(Map.of("owner.email", Like.contains("@"))).build();
+        var result = phoneService().getPageWithOwners(page, false);
+        assertEquals(10, result.size(), "Page has 10 phones");
+        var emails = result.stream().map(p -> p.getOwner().getEmail()).toList();
+        assertEquals(emails.stream().sorted().toList(), emails, "Phones are sorted ascending by owner email and owners are fetched");
+    }
+
+    @Test
+    void testPhonePageWithOwnerPhonesAndPagination() {
+        var result = phoneService().getPageWithOwnerPhones(Page.of(0, 10), true);
+        assertEquals(10, result.size(), "Page has 10 phones, not fewer due to join row inflation");
+        result.forEach(p -> assertTrue(p.getOwner().getPhones().contains(p), "Owner phones are populated after detachment"));
+    }
+
+    @Test
     void testPhonePageFilteredByTransientEmail() {
         var expectedEmail = "name0@example.com";
         var result = phoneService().getPageWithOwners(Page.with().allMatch(Map.of("email", expectedEmail)).build(), false);
