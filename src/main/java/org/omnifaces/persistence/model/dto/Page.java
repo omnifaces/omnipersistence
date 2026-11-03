@@ -17,7 +17,6 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
-import static org.omnifaces.persistence.model.Identifiable.ID;
 import static org.omnifaces.utils.Lang.isEmpty;
 import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.findGetter;
@@ -117,6 +116,16 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
     // Constants ------------------------------------------------------------------------------------------------------
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * The field name <code>"id"</code>. In criteria and ordering it refers to the ID attribute of the entity, whatever the actual name of the ID attribute is.
+     * Code which does not know the entity can therefore always use it. For example, <code>Page.with().orderBy(Page.ID, true)</code> orders an entity whose ID
+     * attribute is named <code>code</code> by its code. The actual name of the ID attribute works as well. A page without ordering is ordered by the ID
+     * descending.
+     *
+     * @since 1.3
+     */
+    public static final String ID = "id";
 
     /** All pages. */
     public final static Page ALL = Page.of(0, MAX_VALUE);

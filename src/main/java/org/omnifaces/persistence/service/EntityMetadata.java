@@ -36,8 +36,8 @@ import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.Metamodel;
 
 import org.omnifaces.persistence.Provider;
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
-import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Helper class of {@link BaseEntityService}. Holds the metadata derived from an entity type, which is identical for every service over that type. The generated
@@ -159,8 +159,8 @@ final class EntityMetadata {
         }
 
         /**
-         * Returns the ID of the given entity of this persistence unit: via the provider when it is a proxy, else via {@link Identifiable#getId()} when it
-         * implements it, else via its ID attribute.
+         * Returns the ID of the given entity of this persistence unit: via the provider when it is a proxy, else via {@link BaseEntity#getId()} when it extends
+         * it, else via its ID attribute.
          *
          * @param <I> The generic ID type.
          * @param entity The entity, may be a proxy.
@@ -173,19 +173,19 @@ final class EntityMetadata {
                 return provider.getIdentifier(entity);
             }
 
-            return entity instanceof Identifiable<?> identifiable ? (I) identifiable.getId() : getIdAttribute(provider.getEntityType(entity)).get(entity);
+            return entity instanceof BaseEntity<?> baseEntity ? (I) baseEntity.getId() : getIdAttribute(provider.getEntityType(entity)).get(entity);
         }
 
         /**
-         * Sets the ID of the given entity of this persistence unit to <code>null</code>: via {@link Identifiable#setId(Comparable)} when it implements it, else
-         * via its ID attribute, on the actual implementation when it is a proxy and the ID is accessed via its field.
+         * Sets the ID of the given entity of this persistence unit to <code>null</code>: via {@link BaseEntity#setId(Comparable)} when it extends it, else via
+         * its ID attribute, on the actual implementation when it is a proxy and the ID is accessed via its field.
          *
          * @param entity The entity, may be a proxy.
          * @throws IllegalArgumentException When the given entity is not an entity of this persistence unit, or has an unsupported ID.
          */
         void unsetId(Object entity) {
             var idAttribute = getIdAttribute(provider.getEntityType(entity));
-            idAttribute.set(entity instanceof Identifiable || idAttribute.isPropertyAccess() ? entity : provider.dereferenceProxy(entity), null);
+            idAttribute.set(entity instanceof BaseEntity || idAttribute.isPropertyAccess() ? entity : provider.dereferenceProxy(entity), null);
         }
 
         /**

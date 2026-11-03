@@ -16,11 +16,13 @@ import java.io.Serializable;
 
 import jakarta.annotation.Nullable;
 
+import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.service.EntityRepository;
 
 /**
  * <p>
- * Base interface for something identifiable. All entities managed by {@link BaseEntityService} must implement this.
+ * Base interface for something identifiable.
  * <p>
  * Usage example:
  *
@@ -49,13 +51,19 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @since 1.0
  * @see BaseEntity
  * @see BaseEntityService
+ * @deprecated Entities need not implement this. Extend {@link BaseEntity} for an entity whose identity is based on its ID, and use
+ * {@link EntityRepository#getId(Object)} to get the ID of any entity.
  */
+@Deprecated(since = "1.3", forRemoval = true)
 public interface Identifiable<I extends Comparable<I> & Serializable> {
 
     /**
      * The string representing the field name <code>"id"</code>.
+     *
+     * @deprecated Use {@link Page#ID} instead.
      */
-    String ID = "id";
+    @Deprecated(since = "1.3", forRemoval = true)
+    String ID = Page.ID;
 
     /**
      * Returns the ID.

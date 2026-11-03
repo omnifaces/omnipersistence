@@ -29,6 +29,7 @@ import jakarta.persistence.metamodel.Type;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.EntityMetadata.Mappings;
 
 /**
@@ -47,10 +48,25 @@ class EntityMetadataIdTest {
     }
 
     @Test
-    void idOfIdentifiableEntityIsReadViaGetId() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
+    void idOfBaseEntityIsReadViaGetId() throws ReflectiveOperationException {
+        var entity = new BaseEntitySubclass();
         entity.setId(ID);
-        assertEquals(ID, mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("unrelated")).getId(entity));
+        assertEquals(ID, mappings(BaseEntitySubclass.class, BaseEntitySubclass.class.getDeclaredField("unrelated")).getId(entity));
+    }
+
+    @Test
+    void idOfIdentifiableEntityNotExtendingBaseEntityIsReadViaIdAttribute() throws ReflectiveOperationException {
+        var entity = new IdentifiableEntity();
+        entity.code = ID;
+        assertEquals(ID, mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("code")).getId(entity));
+    }
+
+    @Test
+    void idOfIdentifiableEntityNotExtendingBaseEntityIsUnsetViaIdAttribute() throws ReflectiveOperationException {
+        var entity = new IdentifiableEntity();
+        entity.code = ID;
+        mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("code")).unsetId(entity);
+        assertNull(entity.code);
     }
 
     @Test
@@ -62,10 +78,10 @@ class EntityMetadataIdTest {
     }
 
     @Test
-    void idOfIdentifiableEntityIsUnsetViaSetId() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
+    void idOfBaseEntityIsUnsetViaSetId() throws ReflectiveOperationException {
+        var entity = new BaseEntitySubclass();
         entity.setId(ID);
-        mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("unrelated")).unsetId(entity);
+        mappings(BaseEntitySubclass.class, BaseEntitySubclass.class.getDeclaredField("unrelated")).unsetId(entity);
         assertNull(entity.getId());
     }
 
@@ -85,6 +101,23 @@ class EntityMetadataIdTest {
 
     }
 
+    @SuppressWarnings("removal")
+    static class IdentifiableEntity implements Identifiable<Long> {
+
+        Long code;
+
+        @Override
+        public Long getId() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void setId(Long id) {
+            throw new UnsupportedOperationException();
+        }
+
+    }
+
     static class PropertyAccessEntity {
 
         private Long value;
@@ -99,7 +132,7 @@ class EntityMetadataIdTest {
 
     }
 
-    static class IdentifiableEntity extends GeneratedIdEntity<Long> {
+    static class BaseEntitySubclass extends GeneratedIdEntity<Long> {
 
         private static final long serialVersionUID = 1L;
 

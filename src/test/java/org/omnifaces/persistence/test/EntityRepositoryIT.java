@@ -315,7 +315,7 @@ public class EntityRepositoryIT {
     }
 
     @Test
-    void testGetIdOfIdentifiableEntity() {
+    void testGetIdOfBaseEntity() {
         var text = new Text();
         var id = transactionServiceCDI.call(() -> textRepository.persist(text));
 
