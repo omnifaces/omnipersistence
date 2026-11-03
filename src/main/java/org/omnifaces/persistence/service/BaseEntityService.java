@@ -378,7 +378,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the ID of the given entity: via the persistence provider when it is a proxy, else via {@link Identifiable#getId()} when it implements it, else
-     * via its ID attribute.
+     * via its ID attribute. This is immutable (you can't override the method to change the internally used value).
      *
      * @param entity The entity, may be a proxy.
      * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.
@@ -876,7 +876,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Whether entity with given entity exists.
      */
     protected boolean exists(E entity) {
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
         return id != null && createLongQuery("SELECT COUNT(e) FROM " + getEntityName() + " e WHERE e." + idAttribute.getName() + " = :id")
             .setParameter("id", id)
             .getSingleResult().intValue() > 0;
@@ -1062,9 +1062,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
      */
     @Transactional(REQUIRED)
+    @SuppressWarnings("unchecked")
     public I persist(E entity) {
         return runWithCurrentInstance(() -> {
-            if (getId(entity) != null) {
+            if (idGetter.apply(entity) != null) {
                 if (generatedId || exists(entity)) {
                     throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
                 }
@@ -1085,7 +1086,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
             getEntityManager().flush();
 
-            return getId(entity);
+            return (I) idGetter.apply(entity);
         });
     }
 
@@ -1104,7 +1105,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E update(E entity) {
         return runWithCurrentInstance(() -> {
-            if (getId(entity) == null) {
+            if (idGetter.apply(entity) == null) {
                 if (generatedId) {
                     throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
                 }
@@ -1229,7 +1230,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E save(E entity) {
         return runWithCurrentInstance(() -> {
-            if (generatedId && getId(entity) == null || !generatedId && !exists(entity)) {
+            if (generatedId && idGetter.apply(entity) == null || !generatedId && !exists(entity)) {
                 persist(entity);
                 return entity;
             }
@@ -1367,7 +1368,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             throw new NullPointerException("Entity is null.");
         }
 
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
 
         if (id == null) {
             throw new IllegalEntityStateException(entity, "Entity has no ID.");
@@ -1447,8 +1448,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entity Entity to count all foreign key references for.
      * @return Count of all foreign key references to given entity.
      */
+    @SuppressWarnings("unchecked")
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, getId(manage(entity)));
+        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, (I) idGetter.apply(manage(entity)));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1569,8 +1571,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return entity;
     }
 
+    @SuppressWarnings("unchecked")
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-        var managed = getById(getId(entity));
+        var managed = getById((I) idGetter.apply(entity));
 
         for (var a : getMetamodel().getSingularAttributes()) {
             if (ofType.test(a.getJavaType())) {
@@ -2040,7 +2043,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var positions = new HashMap<I, Integer>(ids.size());
         range(0, ids.size()).forEach(i -> positions.put(ids.get(i), i));
         var entities = new ArrayList<>(getResultList(idsPageBuilder, buildEntityQuery(idsPageBuilder, criteriaBuilder)));
-        entities.sort(comparing(entity -> positions.get(getId(entity))));
+        entities.sort(comparing(entity -> positions.get(idGetter.apply(entity))));
         return entities;
     }
 
