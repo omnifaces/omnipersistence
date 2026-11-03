@@ -189,6 +189,17 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
     }
 
     /**
+     * See {@link BaseEntityService#getId(Object)}.
+     *
+     * @param entity The entity, may be a proxy.
+     * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.
+     * @throws IllegalArgumentException When the given entity is not an entity, or has an unsupported ID.
+     */
+    public I getId(E entity) {
+        return service().getId(entity);
+    }
+
+    /**
      * Returns the entity manager being used, as obtained from the supplier given in the constructor.
      *
      * @return The entity manager being used.

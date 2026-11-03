@@ -292,6 +292,42 @@ public class EntityRepositoryIT {
     }
 
     @Test
+    void testGetIdOfEntityWithoutBaseEntity() {
+        assertNull(articleRepository.getId(newArticle("getid", null)), "No generated code before persist");
+
+        var category = newCategory("getid", "GetId");
+        var article = newArticle("getid", null);
+
+        try {
+            transactionServiceCDI.run(() -> {
+                categoryRepository.persist(category);
+                article.setCategory(category);
+                articleRepository.persist(article);
+            });
+            assertEquals(article.getCode(), articleRepository.getId(article), "Generated code after persist");
+            var lazyCategorySlug = transactionServiceCDI.call(() -> categoryRepository.getId(articleRepository.getById(article.getCode()).getCategory()));
+            assertEquals("getid", lazyCategorySlug, "Slug of lazy category");
+        }
+        finally {
+            deleteArticles(List.of(article));
+            deleteCategories(List.of(category));
+        }
+    }
+
+    @Test
+    void testGetIdOfIdentifiableEntity() {
+        var text = new Text();
+        var id = transactionServiceCDI.call(() -> textRepository.persist(text));
+
+        try {
+            assertEquals(id, textRepository.getId(text), "ID of persisted text");
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id)));
+        }
+    }
+
+    @Test
     void testEntityWithoutBaseEntitySoftDelete() {
         var article = persistArticle("soft", null);
 

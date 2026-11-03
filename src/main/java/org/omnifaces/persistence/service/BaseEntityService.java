@@ -133,6 +133,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.model.LockedBaseEntity;
 import org.omnifaces.persistence.model.LockedEntity;
 import org.omnifaces.persistence.model.NonDeletable;
@@ -272,7 +273,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        var mappings = metadata.getMappings(getEntityManager().getEntityManagerFactory(), getProvider());
+        var mappings = metadata.getMappings(getEntityManager().getEntityManagerFactory(), provider);
         elementCollections = mappings::isElementCollection;
         manyOrOneToOnes = mappings::getManyOrOneToOnes;
         oneToManys = mappings::isOneToMany;
@@ -373,6 +374,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     protected boolean isGeneratedId() {
         return generatedId;
+    }
+
+    /**
+     * Returns the ID of the given entity: via the persistence provider when it is a proxy, else via {@link Identifiable#getId()} when it implements it, else
+     * via its ID attribute. This is immutable (you can't override the method to change the internally used value).
+     *
+     * @param entity The entity, may be a proxy.
+     * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.
+     * @throws IllegalArgumentException When the given entity is not an entity, or has an unsupported ID.
+     */
+    @SuppressWarnings("unchecked")
+    protected I getId(E entity) {
+        return (I) idGetter.apply(entity);
     }
 
     /**
@@ -835,7 +849,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         String paramNames;
         Map<String, Object> paramValues;
 
-        if (getProvider() == ECLIPSELINK) {
+        if (provider == ECLIPSELINK) {
             paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
             var map = new HashMap<String, Object>(copyOfIds.size());
             range(0, copyOfIds.size()).forEach(i -> map.put("id" + i, copyOfIds.get(i)));
@@ -862,7 +876,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Whether entity with given entity exists.
      */
     protected boolean exists(E entity) {
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
         return id != null && createLongQuery("SELECT COUNT(e) FROM " + getEntityName() + " e WHERE e." + idAttribute.getName() + " = :id")
             .setParameter("id", id)
             .getSingleResult().intValue() > 0;
@@ -1048,9 +1062,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws IllegalEntityStateException When entity is already persisted or its ID is not generated.
      */
     @Transactional(REQUIRED)
+    @SuppressWarnings("unchecked")
     public I persist(E entity) {
         return runWithCurrentInstance(() -> {
-            if (getId(entity) != null) {
+            if (idGetter.apply(entity) != null) {
                 if (generatedId || exists(entity)) {
                     throw new IllegalEntityStateException(entity, "Entity is already persisted. Use update() instead.");
                 }
@@ -1071,7 +1086,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
             getEntityManager().flush();
 
-            return this.<I>getId(entity);
+            return (I) idGetter.apply(entity);
         });
     }
 
@@ -1090,7 +1105,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E update(E entity) {
         return runWithCurrentInstance(() -> {
-            if (getId(entity) == null) {
+            if (idGetter.apply(entity) == null) {
                 if (generatedId) {
                     throw new IllegalEntityStateException(entity, "Entity is not persisted. Use persist() instead.");
                 }
@@ -1215,7 +1230,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public E save(E entity) {
         return runWithCurrentInstance(() -> {
-            if (generatedId && getId(entity) == null || !generatedId && !exists(entity)) {
+            if (generatedId && idGetter.apply(entity) == null || !generatedId && !exists(entity)) {
                 persist(entity);
                 return entity;
             }
@@ -1259,7 +1274,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var managed = getEntityManager().contains(entity);
             getEntityManager().remove(manage(entity));
 
-            if (!managed || getProvider() == HIBERNATE) {
+            if (!managed || provider == HIBERNATE) {
                 idUnsetter.accept(entity);
             }
         });
@@ -1353,7 +1368,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             throw new NullPointerException("Entity is null.");
         }
 
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
 
         if (id == null) {
             throw new IllegalEntityStateException(entity, "Entity has no ID.");
@@ -1363,7 +1378,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return entity;
         }
 
-        var managed = getEntityManager().find(getProvider().getEntityType(entity), id);
+        var managed = getEntityManager().find(provider.getEntityType(entity), id);
 
         if (managed == null) {
             throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
@@ -1390,13 +1405,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
 
         if (id == null || entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity)) {
             return entity;
         }
 
-        return coalesce(getEntityManager().find(getProvider().getEntityType(entity), id), entity);
+        return coalesce(getEntityManager().find(provider.getEntityType(entity), id), entity);
     }
 
     /**
@@ -1412,7 +1427,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void reset(E entity) {
         runWithCurrentInstance(() -> {
-            if (!getProvider().isProxy(entity) && getEntityManager().contains(entity)) {
+            if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
                 throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
             }
 
@@ -1433,8 +1448,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entity Entity to count all foreign key references for.
      * @return Count of all foreign key references to given entity.
      */
+    @SuppressWarnings("unchecked")
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, this.<I>getId(manage(entity)));
+        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, (I) idGetter.apply(manage(entity)));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1555,8 +1571,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return entity;
     }
 
+    @SuppressWarnings("unchecked")
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-        var managed = getById(this.<I>getId(entity));
+        var managed = getById((I) idGetter.apply(entity));
 
         for (var a : getMetamodel().getSingularAttributes()) {
             if (ofType.test(a.getJavaType())) {
@@ -1690,7 +1707,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about to be executed.
      */
     protected <T extends E> Consumer<TypedQuery<?>> onPage(Class<T> resultType, boolean cacheable) {
-        return typedQuery -> getProvider().configureSecondLevelCache(typedQuery, cacheable);
+        return typedQuery -> provider.configureSecondLevelCache(typedQuery, cacheable);
     }
 
     /**
@@ -1998,7 +2015,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 && postponedFetchRoot.hasPostponedFetches()
         ) {
             entities = postponedFetchRoot.runPostponedFetches(
-                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), this::getId, entities
+                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), idGetter, entities
             );
         }
 
@@ -2026,7 +2043,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var positions = new HashMap<I, Integer>(ids.size());
         range(0, ids.size()).forEach(i -> positions.put(ids.get(i), i));
         var entities = new ArrayList<>(getResultList(idsPageBuilder, buildEntityQuery(idsPageBuilder, criteriaBuilder)));
-        entities.sort(comparing(entity -> positions.get(this.<I>getId(entity))));
+        entities.sort(comparing(entity -> positions.get(idGetter.apply(entity))));
         return entities;
     }
 
@@ -2090,7 +2107,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var root = query.from(entityType);
         return query instanceof Subquery
             ? new SubqueryRoot<>(root)
-            : (getProvider() == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
+            : (provider == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
                 ? new PostponedFetchRoot<>(root)
                 : root;
     }
@@ -2110,7 +2127,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 criteriaQuery.multiselect(stream(paths).map(Alias::as).collect(toList()));
             }
 
-            Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> getProvider().isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
+            Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> provider.isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
 
             if (!aggregatedFields.isEmpty()) {
                 groupByIfNecessary(query, root);
@@ -2120,12 +2137,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping,
                                                         // we cannot reliably determine if custom criteria is used, so count subquery building cannot be
                                                         // reliably skipped.
-            pageBuilder.canBuildValueBasedPagingPredicate(getProvider() != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used
-                                                                                                                            // in Hibernate if ordering contains
-                                                                                                                            // aggregated fields, because
-                                                                                                                            // Hibernate may return a cartesian
-                                                                                                                            // product and apply
-                                                                                                                            // firstResult/maxResults in memory.
+            pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used
+                                                                                                                       // in Hibernate if ordering contains
+                                                                                                                       // aggregated fields, because
+                                                                                                                       // Hibernate may return a cartesian
+                                                                                                                       // product and apply
+                                                                                                                       // firstResult/maxResults in memory.
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
@@ -2193,7 +2210,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             else if (criteriaQuery.isDistinct()) {
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
-            else if (getDatabase() == DB2) {
+            else if (database == DB2) {
                 pageBuilder.shouldBuildIdQuery(true); // The order is then built by buildIdQuery.
             }
             else {
@@ -2536,7 +2553,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         ParameterBuilder parameterBuilder
     )
     {
-        var alias = Alias.create(getProvider(), path, field);
+        var alias = Alias.create(provider, path, field);
         var value = unwrapNot(criteria);
         var negated = isNegated(criteria);
         var negationApplied = false;
@@ -2617,7 +2634,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * </ul>
      */
     private boolean isElementCollectionSubqueried(AbstractQuery<?> query, Object value, boolean negated) {
-        if (getProvider() == ECLIPSELINK) {
+        if (provider == ECLIPSELINK) {
             return true;
         }
         else if (isBrokenSubqueryProvider()) {
@@ -2660,7 +2677,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private boolean isBrokenSubqueryProvider() {
-        return getProvider() == OPENJPA || getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER);
+        return provider == OPENJPA || provider == HIBERNATE && (database == POSTGRESQL || database == SQLSERVER);
     }
 
     @SuppressWarnings("unchecked")
@@ -2694,7 +2711,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var oneToManyField = oneToManys.test(field);
 
-        if (oneToManyField && getProvider() == OPENJPA && query instanceof Subquery) {
+        if (oneToManyField && provider == OPENJPA && query instanceof Subquery) {
             // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context; count may be slightly inaccurate, which is
             // acceptable for this known OpenJPA limitation.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
@@ -2941,12 +2958,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private boolean isEntity(Object value) {
-        return entityTypes.test(getProvider().getEntityType(value));
-    }
-
-    @SuppressWarnings("unchecked")
-    private <J> J getId(Object entity) {
-        return (J) idGetter.apply(entity);
+        return entityTypes.test(provider.getEntityType(value));
     }
 
     private static <T> T noop() {
