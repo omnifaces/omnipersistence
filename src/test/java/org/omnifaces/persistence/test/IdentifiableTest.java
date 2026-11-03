@@ -27,6 +27,7 @@ import org.omnifaces.persistence.test.model.Person;
 /**
  * {@link Identifiable} does not require its implementations to be serializable, but {@link BaseEntity} and therefore all its subclasses are.
  */
+@SuppressWarnings("removal")
 class IdentifiableTest {
 
     @Test

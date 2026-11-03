@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.service;
 
 import static java.lang.String.format;
+import static org.omnifaces.persistence.model.dto.Page.ID;
 import static org.omnifaces.utils.reflect.Reflections.findField;
 import static org.omnifaces.utils.reflect.Reflections.findGetter;
 
@@ -31,8 +32,6 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.IdentifiableType;
-
-import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Helper class of {@link BaseEntityService}.
@@ -74,7 +73,7 @@ class RootPathResolver implements PathResolver {
 
         path = root;
         boolean explicitJoin = field.charAt(0) == '@';
-        String originalField = explicitJoin ? field.substring(1) : Identifiable.ID.equals(field) ? idName : field;
+        String originalField = explicitJoin ? field.substring(1) : ID.equals(field) ? idName : field;
         String[] attributes = originalField.split("\\.");
         int depth = attributes.length;
 

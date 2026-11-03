@@ -41,7 +41,7 @@ import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.audit.AuditListener.copySnapshot;
-import static org.omnifaces.persistence.model.Identifiable.ID;
+import static org.omnifaces.persistence.model.dto.Page.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
@@ -133,7 +133,6 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
-import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.model.LockedBaseEntity;
 import org.omnifaces.persistence.model.LockedEntity;
 import org.omnifaces.persistence.model.NonDeletable;
@@ -377,8 +376,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the ID of the given entity: via the persistence provider when it is a proxy, else via {@link Identifiable#getId()} when it implements it, else
-     * via its ID attribute. This is immutable (you can't override the method to change the internally used value).
+     * Returns the ID of the given entity: via the persistence provider when it is a proxy, else via {@link BaseEntity#getId()} when it extends it, else via its
+     * ID attribute. This is immutable (you can't override the method to change the internally used value).
      *
      * @param entity The entity, may be a proxy.
      * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.

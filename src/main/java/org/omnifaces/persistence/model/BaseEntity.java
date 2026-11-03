@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 
@@ -102,6 +103,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)
+@SuppressWarnings("removal")
 public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -111,6 +113,23 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      */
     protected BaseEntity() {
     }
+
+    /**
+     * Returns the ID.
+     *
+     * @return The ID, or <code>null</code> if not set yet, e.g. when the entity has a generated ID and is not persisted yet.
+     */
+    @Override
+    @Nullable
+    public abstract I getId();
+
+    /**
+     * Sets the ID.
+     *
+     * @param id The ID, may be <code>null</code>.
+     */
+    @Override
+    public abstract void setId(@Nullable I id);
 
     /**
      * Returns the getters that define entity identity. The default implementation returns {@link BaseEntity#getId()}.

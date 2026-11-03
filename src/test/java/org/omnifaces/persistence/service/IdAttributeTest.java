@@ -32,6 +32,7 @@ import jakarta.persistence.metamodel.Type.PersistenceType;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Unit tests for {@link IdAttribute}. The metamodel is stubbed, see {@link Stubs}.
@@ -64,11 +65,19 @@ class IdAttributeTest {
     }
 
     @Test
-    void idIsSetViaIdentifiableMethodsWhenImplemented() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
+    void idIsSetViaBaseEntityMethodsWhenExtended() throws ReflectiveOperationException {
+        var entity = new BaseEntitySubclass();
         entity.setId(42L);
-        idAttribute(IdentifiableEntity.class.getDeclaredField("unrelated")).set(entity, null);
+        idAttribute(BaseEntitySubclass.class.getDeclaredField("unrelated")).set(entity, null);
         assertNull(entity.getId());
+    }
+
+    @Test
+    void idOfIdentifiableEntityNotExtendingBaseEntityIsSetViaIdAttribute() throws ReflectiveOperationException {
+        var entity = new IdentifiableEntity();
+        entity.code = 42L;
+        idAttribute(IdentifiableEntity.class.getDeclaredField("code")).set(entity, null);
+        assertNull(entity.code);
     }
 
     @Test
@@ -114,6 +123,23 @@ class IdAttributeTest {
 
     }
 
+    @SuppressWarnings("removal")
+    static class IdentifiableEntity implements Identifiable<Long> {
+
+        Long code;
+
+        @Override
+        public Long getId() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void setId(Long id) {
+            throw new UnsupportedOperationException();
+        }
+
+    }
+
     static class PrimitiveIdEntity {
 
         long code;
@@ -134,7 +160,7 @@ class IdAttributeTest {
 
     }
 
-    static class IdentifiableEntity extends GeneratedIdEntity<Long> {
+    static class BaseEntitySubclass extends GeneratedIdEntity<Long> {
 
         private static final long serialVersionUID = 1L;
 

@@ -23,11 +23,11 @@ import java.lang.reflect.Method;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.SingularAttribute;
 
-import org.omnifaces.persistence.model.Identifiable;
+import org.omnifaces.persistence.model.BaseEntity;
 
 /**
- * Helper class of {@link BaseEntityService}. Holds the single ID attribute of an entity type as mapped by the metamodel, so that entities need not implement
- * {@link Identifiable} for their ID to be named, read and assigned. An entity which does implement {@link Identifiable} is assigned via its methods.
+ * Helper class of {@link BaseEntityService}. Holds the single ID attribute of an entity type as mapped by the metamodel, so that entities need not extend
+ * {@link BaseEntity} for their ID to be named, read and assigned. An entity which does extend {@link BaseEntity} is assigned via its methods.
  */
 final class IdAttribute {
 
@@ -102,15 +102,15 @@ final class IdAttribute {
     }
 
     /**
-     * Sets the ID of the given entity, which may not be a proxy unless it implements {@link Identifiable} or the ID is accessed via its getter and setter.
+     * Sets the ID of the given entity, which may not be a proxy unless it extends {@link BaseEntity} or the ID is accessed via its getter and setter.
      *
      * @param entity The entity to set the ID on.
      * @param id The ID to set, may be <code>null</code>.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     void set(Object entity, Object id) {
-        if (entity instanceof Identifiable identifiable) {
-            identifiable.setId((Comparable) id);
+        if (entity instanceof BaseEntity baseEntity) {
+            baseEntity.setId((Comparable) id);
         }
         else if (member instanceof Method) {
             invokeSetter(entity, name, id);
