@@ -273,7 +273,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected void initWithEntityManager() {
         provider = Provider.of(getEntityManager());
         database = Database.of(getEntityManager());
-        var mappings = metadata.getMappings(getEntityManager().getEntityManagerFactory(), getProvider());
+        var mappings = metadata.getMappings(getEntityManager().getEntityManagerFactory(), provider);
         elementCollections = mappings::isElementCollection;
         manyOrOneToOnes = mappings::getManyOrOneToOnes;
         oneToManys = mappings::isOneToMany;
@@ -849,7 +849,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         String paramNames;
         Map<String, Object> paramValues;
 
-        if (getProvider() == ECLIPSELINK) {
+        if (provider == ECLIPSELINK) {
             paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
             var map = new HashMap<String, Object>(copyOfIds.size());
             range(0, copyOfIds.size()).forEach(i -> map.put("id" + i, copyOfIds.get(i)));
@@ -1274,7 +1274,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var managed = getEntityManager().contains(entity);
             getEntityManager().remove(manage(entity));
 
-            if (!managed || getProvider() == HIBERNATE) {
+            if (!managed || provider == HIBERNATE) {
                 idUnsetter.accept(entity);
             }
         });
@@ -1378,7 +1378,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return entity;
         }
 
-        var managed = getEntityManager().find(getProvider().getEntityType(entity), id);
+        var managed = getEntityManager().find(provider.getEntityType(entity), id);
 
         if (managed == null) {
             throw new EntityNotFoundException("Entity has in meanwhile been deleted.");
@@ -1411,7 +1411,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return entity;
         }
 
-        return coalesce(getEntityManager().find(getProvider().getEntityType(entity), id), entity);
+        return coalesce(getEntityManager().find(provider.getEntityType(entity), id), entity);
     }
 
     /**
@@ -1427,7 +1427,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Transactional(REQUIRED)
     public void reset(E entity) {
         runWithCurrentInstance(() -> {
-            if (!getProvider().isProxy(entity) && getEntityManager().contains(entity)) {
+            if (!provider.isProxy(entity) && getEntityManager().contains(entity)) {
                 throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
             }
 
@@ -1707,7 +1707,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return The callback method which is invoked when any query involved in {@link #getPage(Page, boolean)} is about to be executed.
      */
     protected <T extends E> Consumer<TypedQuery<?>> onPage(Class<T> resultType, boolean cacheable) {
-        return typedQuery -> getProvider().configureSecondLevelCache(typedQuery, cacheable);
+        return typedQuery -> provider.configureSecondLevelCache(typedQuery, cacheable);
     }
 
     /**
@@ -2107,7 +2107,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var root = query.from(entityType);
         return query instanceof Subquery
             ? new SubqueryRoot<>(root)
-            : (getProvider() == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
+            : (provider == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
                 ? new PostponedFetchRoot<>(root)
                 : root;
     }
@@ -2127,7 +2127,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 criteriaQuery.multiselect(stream(paths).map(Alias::as).collect(toList()));
             }
 
-            Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> getProvider().isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
+            Set<String> aggregatedFields = paths.entrySet().stream().filter(e -> provider.isAggregation(e.getValue())).map(Entry::getKey).collect(toSet());
 
             if (!aggregatedFields.isEmpty()) {
                 groupByIfNecessary(query, root);
@@ -2137,12 +2137,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping,
                                                         // we cannot reliably determine if custom criteria is used, so count subquery building cannot be
                                                         // reliably skipped.
-            pageBuilder.canBuildValueBasedPagingPredicate(getProvider() != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used
-                                                                                                                            // in Hibernate if ordering contains
-                                                                                                                            // aggregated fields, because
-                                                                                                                            // Hibernate may return a cartesian
-                                                                                                                            // product and apply
-                                                                                                                            // firstResult/maxResults in memory.
+            pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used
+                                                                                                                       // in Hibernate if ordering contains
+                                                                                                                       // aggregated fields, because
+                                                                                                                       // Hibernate may return a cartesian
+                                                                                                                       // product and apply
+                                                                                                                       // firstResult/maxResults in memory.
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
@@ -2210,7 +2210,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             else if (criteriaQuery.isDistinct()) {
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
-            else if (getDatabase() == DB2) {
+            else if (database == DB2) {
                 pageBuilder.shouldBuildIdQuery(true); // The order is then built by buildIdQuery.
             }
             else {
@@ -2553,7 +2553,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         ParameterBuilder parameterBuilder
     )
     {
-        var alias = Alias.create(getProvider(), path, field);
+        var alias = Alias.create(provider, path, field);
         var value = unwrapNot(criteria);
         var negated = isNegated(criteria);
         var negationApplied = false;
@@ -2634,7 +2634,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * </ul>
      */
     private boolean isElementCollectionSubqueried(AbstractQuery<?> query, Object value, boolean negated) {
-        if (getProvider() == ECLIPSELINK) {
+        if (provider == ECLIPSELINK) {
             return true;
         }
         else if (isBrokenSubqueryProvider()) {
@@ -2677,7 +2677,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private boolean isBrokenSubqueryProvider() {
-        return getProvider() == OPENJPA || getProvider() == HIBERNATE && (getDatabase() == POSTGRESQL || getDatabase() == SQLSERVER);
+        return provider == OPENJPA || provider == HIBERNATE && (database == POSTGRESQL || database == SQLSERVER);
     }
 
     @SuppressWarnings("unchecked")
@@ -2711,7 +2711,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var oneToManyField = oneToManys.test(field);
 
-        if (oneToManyField && getProvider() == OPENJPA && query instanceof Subquery) {
+        if (oneToManyField && provider == OPENJPA && query instanceof Subquery) {
             // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context; count may be slightly inaccurate, which is
             // acceptable for this known OpenJPA limitation.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
@@ -2958,7 +2958,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private boolean isEntity(Object value) {
-        return entityTypes.test(getProvider().getEntityType(value));
+        return entityTypes.test(provider.getEntityType(value));
     }
 
     private static <T> T noop() {
