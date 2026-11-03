@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.service;
 
+import java.util.List;
+
 import jakarta.persistence.criteria.Root;
 
 import org.omnifaces.persistence.model.dto.Page;
@@ -33,6 +35,9 @@ class PageBuilder<T> {
     private Root<?> entityQueryRoot;
     private boolean shouldBuildCountSubquery;
     private boolean canBuildValueBasedPagingPredicate;
+    private boolean shouldBuildIdQuery;
+    private boolean hasQueryBuilder;
+    private List<?> ids;
 
     public PageBuilder(Page page, boolean cacheable, Class<T> resultType, MappedQueryBuilder<T> queryBuilder) {
         this.page = page;
@@ -55,7 +60,7 @@ class PageBuilder<T> {
     }
 
     public boolean shouldBuildCountSubquery() {
-        return shouldBuildCountSubquery;
+        return shouldBuildCountSubquery || hasQueryBuilder;
     }
 
     public void canBuildValueBasedPagingPredicate(boolean yes) {
@@ -64,6 +69,30 @@ class PageBuilder<T> {
 
     public boolean canBuildValueBasedPagingPredicate() {
         return canBuildValueBasedPagingPredicate;
+    }
+
+    public void shouldBuildIdQuery(boolean yes) {
+        shouldBuildIdQuery |= yes;
+    }
+
+    public boolean shouldBuildIdQuery() {
+        return shouldBuildIdQuery;
+    }
+
+    public void hasQueryBuilder(boolean yes) {
+        hasQueryBuilder |= yes;
+    }
+
+    public boolean hasQueryBuilder() {
+        return hasQueryBuilder;
+    }
+
+    public void restrictToIds(List<?> ids) {
+        this.ids = ids;
+    }
+
+    public List<?> getIds() {
+        return ids;
     }
 
     public Page getPage() {
