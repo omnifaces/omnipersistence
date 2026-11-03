@@ -32,7 +32,6 @@ import jakarta.persistence.metamodel.Type.PersistenceType;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
-import org.omnifaces.persistence.model.Identifiable;
 
 /**
  * Unit tests for {@link IdAttribute}. The metamodel is stubbed, see {@link Stubs}.
@@ -70,14 +69,6 @@ class IdAttributeTest {
         entity.setId(42L);
         idAttribute(BaseEntitySubclass.class.getDeclaredField("unrelated")).set(entity, null);
         assertNull(entity.getId());
-    }
-
-    @Test
-    void idOfIdentifiableEntityNotExtendingBaseEntityIsSetViaIdAttribute() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
-        entity.code = 42L;
-        idAttribute(IdentifiableEntity.class.getDeclaredField("code")).set(entity, null);
-        assertNull(entity.code);
     }
 
     @Test
@@ -120,23 +111,6 @@ class IdAttributeTest {
     static class FieldAccessEntity {
 
         Long code;
-
-    }
-
-    @SuppressWarnings({"deprecation", "removal"})
-    static class IdentifiableEntity implements Identifiable<Long> {
-
-        Long code;
-
-        @Override
-        public Long getId() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setId(Long id) {
-            throw new UnsupportedOperationException();
-        }
 
     }
 

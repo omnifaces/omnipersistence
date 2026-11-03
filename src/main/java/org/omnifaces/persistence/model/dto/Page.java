@@ -123,7 +123,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * attribute is named <code>code</code> by its code. The actual name of the ID attribute works as well. A page without ordering is ordered by the ID
      * descending.
      *
-     * @since 1.3
+     * @since 2.0
      */
     public static final String ID = "id";
 
@@ -253,7 +253,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * applicable.
      *
      * @return The amount of records to skip after the record represented by the last ordering values.
-     * @since 1.3
+     * @since 2.0
      */
     public int getResidualOffset() {
         return residualOffset;
@@ -484,7 +484,7 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * @return This builder.
          * @see Page#getLastOrderingValues()
          * @see Page#getResidualOffset()
-         * @since 1.3
+         * @since 2.0
          */
         public Builder range(int offset, int limit, Map<String, Object> lastOrderingValues, int residualOffset, boolean reversed) {
             checkRangeNotSet();

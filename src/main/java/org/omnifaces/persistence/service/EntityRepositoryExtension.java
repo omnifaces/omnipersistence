@@ -40,7 +40,7 @@ import jakarta.inject.Provider;
  * does nothing.
  *
  * @author Bauke Scholtz
- * @since 1.3
+ * @since 2.0
  */
 public final class EntityRepositoryExtension implements Extension {
 

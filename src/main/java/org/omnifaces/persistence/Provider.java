@@ -46,7 +46,7 @@ import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.SingularAttribute;
 
-import org.omnifaces.persistence.model.Identifiable;
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -216,7 +216,7 @@ public enum Provider {
     );
     private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
-    private static final String ERROR_NOT_IDENTIFIABLE = "%s is not a proxy and does not implement Identifiable";
+    private static final String ERROR_NOT_BASE_ENTITY = "%s is not a proxy and does not extend BaseEntity";
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
         var packageName = entityManagerFactory.getClass().getPackage().getName();
@@ -366,25 +366,25 @@ public enum Provider {
 
     /**
      * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy. The default implementation returns
-     * {@link Identifiable#getId()}.
+     * {@link BaseEntity#getId()}.
      *
      * @param <I> The generic ID type.
      * @param entity The entity to get the identifier for, may be <code>null</code>.
      * @return The identifier of the given entity, or <code>null</code> when <code>null</code> was supplied or when the entity has no ID.
-     * @throws IllegalArgumentException When the given entity is not a proxy and does not implement {@link Identifiable}.
+     * @throws IllegalArgumentException When the given entity is not a proxy and does not extend {@link BaseEntity}.
      */
     @Nullable
-    @SuppressWarnings({ "unchecked", "deprecation", "removal" })
+    @SuppressWarnings("unchecked")
     public <I> I getIdentifier(@Nullable Object entity) {
         if (entity == null) {
             return null;
         }
 
-        if (!(entity instanceof Identifiable<?> identifiable)) {
-            throw new IllegalArgumentException(format(ERROR_NOT_IDENTIFIABLE, entity.getClass()));
+        if (!(entity instanceof BaseEntity<?> baseEntity)) {
+            throw new IllegalArgumentException(format(ERROR_NOT_BASE_ENTITY, entity.getClass()));
         }
 
-        return (I) identifiable.getId();
+        return (I) baseEntity.getId();
     }
 
     /**
@@ -410,7 +410,7 @@ public enum Provider {
      * @return The Jakarta Persistence entity name of the given entity type.
      * @throws NullPointerException When given entity type is <code>null</code>.
      * @see BaseEntityService#getEntityName()
-     * @since 1.3
+     * @since 2.0
      */
     public static String getEntityName(Class<?> entityType) {
         return findEntityClass(entityType)

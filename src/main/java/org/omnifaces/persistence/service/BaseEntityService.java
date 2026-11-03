@@ -426,7 +426,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns the entity name of current entity, to be used in JPQL. This is the name of {@link Entity}, or else the simple name of the entity class.
      *
      * @return The entity name of current entity.
-     * @since 1.3
+     * @since 2.0
      */
     protected String getEntityName() {
         return getMetamodel().getName();

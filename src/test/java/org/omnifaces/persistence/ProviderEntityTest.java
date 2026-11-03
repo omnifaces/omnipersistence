@@ -23,10 +23,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
 import org.junit.jupiter.api.Test;
-import org.omnifaces.persistence.model.Identifiable;
+import org.omnifaces.persistence.model.BaseEntity;
 
 /**
- * Unit tests for the entity methods of {@link Provider} on entities which do not implement {@link Identifiable}. This class lives outside the integration test
+ * Unit tests for the entity methods of {@link Provider} on entities which do not extend {@link BaseEntity}. This class lives outside the integration test
  * package so that its stub entity does not end up in the persistence unit of the integration tests.
  */
 class ProviderEntityTest {
@@ -37,7 +37,7 @@ class ProviderEntityTest {
     }
 
     @Test
-    void identifierOfNonProxyEntityNotImplementingIdentifiableIsRejected() {
+    void identifierOfNonProxyEntityNotExtendingBaseEntityIsRejected() {
         var entity = new PlainEntity();
         assertThrows(IllegalArgumentException.class, () -> HIBERNATE.getIdentifier(entity));
         assertThrows(IllegalArgumentException.class, () -> ECLIPSELINK.getIdentifier(entity));
