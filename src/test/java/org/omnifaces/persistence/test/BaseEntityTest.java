@@ -18,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -666,6 +668,24 @@ public class BaseEntityTest {
             var a = new TaggedEntity(1L, new Tag("x"));
             var b = new TaggedEntity(2L, new Tag("x"));
             assertTrue(a.equals(b));
+        }
+
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // Serialization
+    // ----------------------------------------------------------------------------------------------------------------
+
+    @Nested
+    class Serialization {
+
+        @Test
+        void baseEntityIsSerializable() throws Exception {
+            assertTrue(Serializable.class.isAssignableFrom(BaseEntity.class));
+
+            var person = new Person();
+            person.setId(42L);
+            assertEquals(person, serializeAndDeserialize(person));
         }
 
     }

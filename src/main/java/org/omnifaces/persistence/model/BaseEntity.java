@@ -103,8 +103,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)
-@SuppressWarnings({"deprecation", "removal"})
-public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
+public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -119,7 +118,6 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      *
      * @return The ID, or <code>null</code> if not set yet, e.g. when the entity has a generated ID and is not persisted yet.
      */
-    @Override
     @Nullable
     public abstract I getId();
 
@@ -128,7 +126,6 @@ public abstract class BaseEntity<I extends Comparable<I> & Serializable> impleme
      *
      * @param id The ID, may be <code>null</code>.
      */
-    @Override
     public abstract void setId(@Nullable I id);
 
     /**

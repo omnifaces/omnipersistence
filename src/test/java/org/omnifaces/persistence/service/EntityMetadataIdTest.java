@@ -29,7 +29,6 @@ import jakarta.persistence.metamodel.Type;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
-import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.service.EntityMetadata.Mappings;
 
 /**
@@ -52,21 +51,6 @@ class EntityMetadataIdTest {
         var entity = new BaseEntitySubclass();
         entity.setId(ID);
         assertEquals(ID, mappings(BaseEntitySubclass.class, BaseEntitySubclass.class.getDeclaredField("unrelated")).getId(entity));
-    }
-
-    @Test
-    void idOfIdentifiableEntityNotExtendingBaseEntityIsReadViaIdAttribute() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
-        entity.code = ID;
-        assertEquals(ID, mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("code")).getId(entity));
-    }
-
-    @Test
-    void idOfIdentifiableEntityNotExtendingBaseEntityIsUnsetViaIdAttribute() throws ReflectiveOperationException {
-        var entity = new IdentifiableEntity();
-        entity.code = ID;
-        mappings(IdentifiableEntity.class, IdentifiableEntity.class.getDeclaredField("code")).unsetId(entity);
-        assertNull(entity.code);
     }
 
     @Test
@@ -98,23 +82,6 @@ class EntityMetadataIdTest {
     static class PlainEntity {
 
         Long code;
-
-    }
-
-    @SuppressWarnings({"deprecation", "removal"})
-    static class IdentifiableEntity implements Identifiable<Long> {
-
-        Long code;
-
-        @Override
-        public Long getId() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setId(Long id) {
-            throw new UnsupportedOperationException();
-        }
 
     }
 

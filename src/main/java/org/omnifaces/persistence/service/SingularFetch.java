@@ -28,7 +28,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
  * join.
  *
  * @author Bauke Scholtz
- * @since 1.3
+ * @since 2.0
  * @see PostponedFetchRoot
  */
 class SingularFetch<Z, X> extends FetchWrapper<Z, X> {

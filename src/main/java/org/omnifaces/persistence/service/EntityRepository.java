@@ -69,7 +69,7 @@ import org.omnifaces.utils.collection.PartialResultList;
  * @param <I> The generic ID type.
  * @param <E> The generic entity type.
  * @see BaseEntityService
- * @since 1.3
+ * @since 2.0
  */
 public final class EntityRepository<I extends Comparable<I> & Serializable, E> implements Serializable {
 

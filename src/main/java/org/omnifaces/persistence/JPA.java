@@ -384,7 +384,7 @@ public final class JPA {
      * @param builder The involved criteria builder.
      * @param expression Expression to be lowercased.
      * @return A new expression wherein given expression is lowercased.
-     * @since 1.3
+     * @since 2.0
      */
     public static Expression<String> lower(CriteriaBuilder builder, Expression<String> expression) {
         return builder.function("LOWER", String.class, expression);

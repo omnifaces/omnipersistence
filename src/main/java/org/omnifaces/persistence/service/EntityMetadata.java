@@ -31,6 +31,7 @@ import java.util.logging.Logger;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.PersistenceUnitUtil;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.Metamodel;
@@ -115,7 +116,7 @@ final class EntityMetadata {
         var metamodel = entityManagerFactory.getMetamodel();
         return new Mappings(
             mappingsPerFactory.computeIfAbsent(entityManagerFactory, k -> new FactoryMappings()),
-            UNIT_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new UnitMappings(metamodel)), metamodel, provider
+            UNIT_MAPPINGS.computeIfAbsent(entityManagerFactory, k -> new UnitMappings(metamodel)), entityManagerFactory, metamodel, provider
         );
     }
 
@@ -127,12 +128,17 @@ final class EntityMetadata {
 
         private final FactoryMappings factoryMappings;
         private final UnitMappings unitMappings;
+        private final EntityManagerFactory entityManagerFactory;
         private final Metamodel metamodel;
         private final Provider provider;
 
-        private Mappings(FactoryMappings factoryMappings, UnitMappings unitMappings, Metamodel metamodel, Provider provider) {
+        private Mappings(
+            FactoryMappings factoryMappings, UnitMappings unitMappings, EntityManagerFactory entityManagerFactory, Metamodel metamodel, Provider provider
+        )
+        {
             this.factoryMappings = factoryMappings;
             this.unitMappings = unitMappings;
+            this.entityManagerFactory = entityManagerFactory;
             this.metamodel = metamodel;
             this.provider = provider;
         }
@@ -159,8 +165,8 @@ final class EntityMetadata {
         }
 
         /**
-         * Returns the ID of the given entity of this persistence unit: via the provider when it is a proxy, else via {@link BaseEntity#getId()} when it extends
-         * it, else via its ID attribute.
+         * Returns the ID of the given entity of this persistence unit: via {@link PersistenceUnitUtil#getIdentifier(Object)} when it is a proxy, which does not
+         * initialize the proxy, else via {@link BaseEntity#getId()} when it extends it, else via its ID attribute.
          *
          * @param <I> The generic ID type.
          * @param entity The entity, may be a proxy.
@@ -170,7 +176,7 @@ final class EntityMetadata {
         @SuppressWarnings("unchecked")
         <I> I getId(Object entity) {
             if (provider.isProxy(entity)) {
-                return provider.getIdentifier(entity);
+                return (I) entityManagerFactory.getPersistenceUnitUtil().getIdentifier(entity);
             }
 
             return entity instanceof BaseEntity<?> baseEntity ? (I) baseEntity.getId() : getIdAttribute(provider.getEntityType(entity)).get(entity);
