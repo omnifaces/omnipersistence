@@ -60,7 +60,7 @@ class PageBuilder<T> {
     }
 
     public boolean shouldBuildCountSubquery() {
-        return shouldBuildCountSubquery;
+        return shouldBuildCountSubquery || hasQueryBuilder;
     }
 
     public void canBuildValueBasedPagingPredicate(boolean yes) {

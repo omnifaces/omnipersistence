@@ -2129,8 +2129,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
-            pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
-            pageBuilder.hasQueryBuilder(mapping != null);
+            pageBuilder.hasQueryBuilder(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             // A collection ordering is a correlated subquery, and a non-null mapping may aggregate, so value based paging cannot be reliably used then.
             pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage()));
             return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
