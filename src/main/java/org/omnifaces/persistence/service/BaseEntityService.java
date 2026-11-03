@@ -133,6 +133,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.listener.BaseEntityListener;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
+import org.omnifaces.persistence.model.Identifiable;
 import org.omnifaces.persistence.model.LockedBaseEntity;
 import org.omnifaces.persistence.model.LockedEntity;
 import org.omnifaces.persistence.model.NonDeletable;
@@ -373,6 +374,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     protected boolean isGeneratedId() {
         return generatedId;
+    }
+
+    /**
+     * Returns the ID of the given entity: via the persistence provider when it is a proxy, else via {@link Identifiable#getId()} when it implements it, else
+     * via its ID attribute.
+     *
+     * @param entity The entity, may be a proxy.
+     * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.
+     * @throws IllegalArgumentException When the given entity is not an entity, or has an unsupported ID.
+     */
+    @SuppressWarnings("unchecked")
+    protected I getId(E entity) {
+        return (I) idGetter.apply(entity);
     }
 
     /**
@@ -1071,7 +1085,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             // Entity is not guaranteed to have been given an ID before either the TX commits or flush is called.
             getEntityManager().flush();
 
-            return this.<I>getId(entity);
+            return getId(entity);
         });
     }
 
@@ -1390,7 +1404,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var id = getId(entity);
+        var id = idGetter.apply(entity);
 
         if (id == null || entity.getClass().getAnnotation(Entity.class) != null && getEntityManager().contains(entity)) {
             return entity;
@@ -1434,7 +1448,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Count of all foreign key references to given entity.
      */
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, this.<I>getId(manage(entity)));
+        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, getId(manage(entity)));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1556,7 +1570,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-        var managed = getById(this.<I>getId(entity));
+        var managed = getById(getId(entity));
 
         for (var a : getMetamodel().getSingularAttributes()) {
             if (ofType.test(a.getJavaType())) {
@@ -1998,7 +2012,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 && postponedFetchRoot.hasPostponedFetches()
         ) {
             entities = postponedFetchRoot.runPostponedFetches(
-                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), this::getId, entities
+                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), idGetter, entities
             );
         }
 
@@ -2026,7 +2040,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var positions = new HashMap<I, Integer>(ids.size());
         range(0, ids.size()).forEach(i -> positions.put(ids.get(i), i));
         var entities = new ArrayList<>(getResultList(idsPageBuilder, buildEntityQuery(idsPageBuilder, criteriaBuilder)));
-        entities.sort(comparing(entity -> positions.get(this.<I>getId(entity))));
+        entities.sort(comparing(entity -> positions.get(getId(entity))));
         return entities;
     }
 
@@ -2942,11 +2956,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private boolean isEntity(Object value) {
         return entityTypes.test(getProvider().getEntityType(value));
-    }
-
-    @SuppressWarnings("unchecked")
-    private <J> J getId(Object entity) {
-        return (J) idGetter.apply(entity);
     }
 
     private static <T> T noop() {
