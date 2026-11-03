@@ -18,7 +18,6 @@ import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElse;
 import static java.util.stream.Collectors.toCollection;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
@@ -174,7 +173,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
-        distinctEntities = buildAndSortPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
+        buildPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
@@ -223,28 +222,14 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     /**
-     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. Finally, re-sorts the parent entities based on the first
-     * element of their sorted child lists.
+     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. The order of the entities is left as the paged query
+     * returned it.
      */
-    private static <T> List<T> buildAndSortPostponedFetches(
+    private static <T> void buildPostponedFetches(
         Page page, List<T> entities, List<String> fetchPaths, Map<String, Map<Object, Object>> fetchedEntities, List<List<Object>> fetchedEntityProperties
     )
     {
-        var rows = entities.stream().map(entity -> processEntityFetches(entity, fetchPaths, fetchedEntities, page)).collect(toList());
-        Comparator<EntityRow<T>> rowComparator = buildRowComparator(page, fetchPaths);
-
-        if (rowComparator != null) {
-            rows.sort(rowComparator);
-        }
-
-        var sortedEntities = new ArrayList<T>(entities.size());
-
-        for (var row : rows) {
-            sortedEntities.add(row.entity);
-            fetchedEntityProperties.add(row.fetchedEntityProperties);
-        }
-
-        return sortedEntities;
+        entities.forEach(entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page).fetchedEntityProperties()));
     }
 
     private record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
@@ -273,36 +258,6 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         }).toList();
 
         return new EntityRow<>(entity, copies);
-    }
-
-    private static <T> Comparator<EntityRow<T>> buildRowComparator(Page page, List<String> paths) {
-        Comparator<EntityRow<T>> rowComparator = null;
-
-        for (int i = 0; i < paths.size(); i++) {
-            var itemComp = buildFetchItemComparator(paths.get(i), page.getOrdering());
-
-            if (itemComp == null) {
-                continue;
-            }
-
-            final int fetchIndex = i;
-            Comparator<EntityRow<T>> propertyComparator = (rowA, rowB) -> {
-                var propertyA = rowA.fetchedEntityProperties.get(fetchIndex);
-                var propertyB = rowB.fetchedEntityProperties.get(fetchIndex);
-
-                if (propertyA instanceof List<?> listA && propertyB instanceof List<?> listB) {
-                    var firstA = listA.isEmpty() ? null : listA.get(0);
-                    var firstB = listB.isEmpty() ? null : listB.get(0);
-                    return itemComp.compare(firstA, firstB);
-                }
-
-                return 0;
-            };
-
-            rowComparator = (rowComparator == null) ? propertyComparator : rowComparator.thenComparing(propertyComparator);
-        }
-
-        return rowComparator;
     }
 
     @SuppressWarnings("unchecked")
