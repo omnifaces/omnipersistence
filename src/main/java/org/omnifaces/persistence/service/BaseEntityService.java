@@ -96,6 +96,7 @@ import jakarta.persistence.criteria.AbstractQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Join;
@@ -2609,7 +2610,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static boolean hasCollectionJoins(FetchParent<?, ?> parent) {
         Collection<? extends Join<?, ?>> joins = parent instanceof From<?, ?> from ? from.getJoins() : List.of();
         return joins.stream().anyMatch(join -> isCollection(join.getAttribute()) || hasCollectionJoins(join))
-            || parent.getFetches().stream().anyMatch(fetch -> isCollection(fetch.getAttribute()) || hasCollectionJoins(fetch));
+            || getFetches(parent).stream().anyMatch(fetch -> isCollection(fetch.getAttribute()) || hasCollectionJoins(fetch));
+    }
+
+    private static Set<? extends Fetch<?, ?>> getFetches(FetchParent<?, ?> parent) {
+        try {
+            return parent.getFetches();
+        }
+        catch (NullPointerException e) { // OpenJPA throws it on a fetch without fetches of its own.
+            return Set.of();
+        }
     }
 
     private static boolean isCollection(Attribute<?, ?> attribute) {
