@@ -98,6 +98,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.From;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Path;
@@ -2148,11 +2149,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 && (!optionalPredicates.isEmpty() // Optional (OR/global) predicates may span @ElementCollection fields; buildPredicate adds a root JOIN per
                                                   // such field unless isBuiltAsArrayPredicate, multiplying rows; DISTINCT deduplicates entities before LIMIT
                                                   // is applied.
-                    || hasFetches((From<?, ?>) pathResolver.get(null))); // Real plural fetch joins or @ElementCollection required-criteria JOINs with
-                                                                         // PostponedFetchRoot (it postpones plural fetches but buildPredicate still calls
-                                                                         // root.join() for element collection filters unless isBuiltAsArrayPredicate)
-                                                                         // multiply rows; DISTINCT ensures LIMIT paginates over entity rows, not join rows.
-                                                                         // Real singular fetch joins do not multiply rows, DISTINCT is then harmless.
+                    || hasCollectionJoins((From<?, ?>) pathResolver.get(null))); // Collection JOINs multiply rows; DISTINCT keeps LIMIT on entity rows.
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 
@@ -2231,12 +2228,21 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     private boolean isBuiltAsArrayPredicate(String field, Object criteria, AbstractQuery<?> query) {
         var value = Criteria.unwrap(criteria);
-        return oneToManys.test(field) && (value instanceof Iterable || value != null && value.getClass().isArray())
-            || elementCollections.test(field) && value != null && !isElementCollectionInPredicate(query, unwrapNot(criteria), isNegated(criteria));
+
+        if (value == null) {
+            return false;
+        }
+        else if (elementCollections.test(field)) {
+            return !isElementCollectionInPredicate(query, unwrapNot(criteria), isNegated(criteria));
+        }
+        else {
+            var items = unwrapNot(criteria);
+            return oneToManys.test(field) && (isOneToManySubqueried(query, isNegated(criteria)) || items instanceof Iterable || items.getClass().isArray());
+        }
     }
 
-    private <T extends E> Predicate buildTypedPredicate(
-        Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
+    private Predicate buildTypedPredicate(
+        Expression<?> path, Class<?> type, String field, Object criteria, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
         ParameterBuilder parameterBuilder
     )
     {
@@ -2254,12 +2260,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = buildElementCollectionPredicate(alias, path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
                 negationApplied = true;
             }
-            else if (value instanceof Criteria<?> criteriaObject) {
-                predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
-            }
-            else if (value instanceof Iterable || value.getClass().isArray()) {
+            else if (value instanceof Iterable || value.getClass().isArray() || oneToManys.test(field) && isOneToManySubqueried(query, negated)) {
                 predicate = buildArrayPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
                 negationApplied = true;
+            }
+            else if (value instanceof Criteria<?> criteriaObject) {
+                predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
             }
             else if (isEntity(value)) {
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
@@ -2290,8 +2296,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return predicate;
     }
 
-    private <T extends E> Predicate buildElementCollectionPredicate(
-        Alias alias, Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+    private Predicate buildElementCollectionPredicate(
+        Alias alias, Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
@@ -2340,6 +2346,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return !isElementCollectionSubqueried(query, value, negated) && !negated && !containsCriteria(value);
     }
 
+    /**
+     * Returns whether a criteria with a single value on a field nested in a <code>@OneToMany</code> is built as correlated subquery by
+     * {@link #buildArrayPredicate}. This is so in the data query, because a JOIN on the main query would return an entity once per matching element. In the
+     * count query, the JOIN is inside the subquery selecting the entities to count, so it does not multiply the count, and OpenJPA cannot resolve a nested
+     * correlated subquery there. A negated value is always built as correlated subquery, because a negated JOIN matches any other element instead of no
+     * element.
+     */
+    private static boolean isOneToManySubqueried(AbstractQuery<?> query, boolean negated) {
+        return negated || !(query instanceof Subquery);
+    }
+
     private static boolean containsCriteria(Object value) {
         return stream(value).anyMatch(Criteria.class::isInstance);
     }
@@ -2377,11 +2394,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds a predicate on multiple values. A negation is applied on the comparisons and not around the predicate, because OpenJPA cannot render a
-     * <code>NOT</code> around a comparison with a correlated subquery.
+     * Builds a predicate on multiple values, or on a value of a field nested in a <code>@OneToMany</code>. A negation is applied on the comparisons and not
+     * around the predicate, because OpenJPA cannot render a <code>NOT</code> around a comparison with a correlated subquery.
      */
-    private <T extends E> Predicate buildArrayPredicate(
-        Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+    private Predicate buildArrayPredicate(
+        Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
@@ -2450,8 +2467,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>Like</code> may match more than one element, so it gets its own subquery wherein at least one element must match: <code>COUNT &gt; 0</code>. When
      * negated, the comparison is inverted.
      */
-    private <T extends E> Predicate buildCollectionSubqueryPredicate(
-        Class<?> type, String field, List<?> items, boolean anyMatch, boolean negated, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder,
+    private Predicate buildCollectionSubqueryPredicate(
+        Class<?> type, String field, List<?> items, boolean anyMatch, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
@@ -2459,13 +2476,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         Root<E> subqueryRoot = subquery.from(entityType);
         var fieldPath = new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
         var resolvedType = (type == null) ? fieldPath.getJavaType() : type; // type is null when isBuiltAsArrayPredicate.
-        var elementCollectionField = elementCollections.test(field);
         var predicates = items.stream()
-            .map(
-                item -> elementCollectionField
-                    ? createElementCollectionCriteria(resolvedType, item).build(fieldPath, criteriaBuilder, parameterBuilder)
-                    : buildTypedPredicate(fieldPath, resolvedType, field, item, query, criteriaBuilder, pathResolver, parameterBuilder)
-            )
+            .map(item -> buildElementPredicate(fieldPath, resolvedType, item, criteriaBuilder, parameterBuilder))
             .filter(Objects::nonNull)
             .toList();
 
@@ -2485,6 +2497,29 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var allMatchCount = (long) predicates.size();
         return negated ? criteriaBuilder.notEqual(count, allMatchCount) : criteriaBuilder.equal(count, allMatchCount);
+    }
+
+    /**
+     * Builds the predicate of given item on given path of an element of a <code>@OneToMany</code> or <code>@ElementCollection</code> in a correlated subquery.
+     */
+    private Predicate buildElementPredicate(
+        Expression<?> path, Class<?> type, Object item, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
+    )
+    {
+        var value = unwrapNot(item);
+        Predicate predicate;
+
+        if (value == null) {
+            predicate = criteriaBuilder.isNull(path);
+        }
+        else if (isEntity(value)) {
+            predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
+        }
+        else {
+            predicate = createElementCollectionCriteria(type, value).build(path, criteriaBuilder, parameterBuilder);
+        }
+
+        return predicate != null && isNegated(item) ? criteriaBuilder.not(predicate) : predicate;
     }
 
     private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
@@ -2565,6 +2600,20 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private static boolean hasJoins(From<?, ?> from) {
         return !from.getJoins().isEmpty() || hasFetches(from);
+    }
+
+    /**
+     * Returns whether given fetch parent or any of its joins and fetches has a JOIN or fetch JOIN over a collection, which multiplies the rows. Fetches which
+     * {@link PostponedFetchRoot} has postponed are not part of the query, so these do not count, unlike in {@link #hasFetches(From)}.
+     */
+    private static boolean hasCollectionJoins(FetchParent<?, ?> parent) {
+        Collection<? extends Join<?, ?>> joins = parent instanceof From<?, ?> from ? from.getJoins() : List.of();
+        return joins.stream().anyMatch(join -> isCollection(join.getAttribute()) || hasCollectionJoins(join))
+            || parent.getFetches().stream().anyMatch(fetch -> isCollection(fetch.getAttribute()) || hasCollectionJoins(fetch));
+    }
+
+    private static boolean isCollection(Attribute<?, ?> attribute) {
+        return attribute != null && attribute.isCollection();
     }
 
     private static boolean hasFetches(From<?, ?> from) {
