@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -585,6 +586,52 @@ public abstract class OmniPersistenceIT {
         var result = personService()
             .getPage(Page.with().allMatch(Map.of("phones.number", List.of(Like.startsWith("0"), Like.contains("0")))).build(), true);
         assertEquals(all.size(), result.size(), "Every phone number starts with 0, so every person matches, also with multiple phones");
+    }
+
+    @Test
+    void testSingleCriteriaOnOneToManyReturnsEachEntityOnce() {
+        var expectedIds = personService().getAllWithPhones().stream()
+            .filter(person -> person.getPhones().stream().anyMatch(phone -> phone.getNumber().contains("1")))
+            .map(Person::getId).collect(toSet());
+        assertSingleCriteriaOnOneToManyReturnsEachEntityOnce(expectedIds, personService()::getPage);
+        assertSingleCriteriaOnOneToManyReturnsEachEntityOnce(expectedIds, personService()::getPageWithPhones);
+    }
+
+    private static void assertSingleCriteriaOnOneToManyReturnsEachEntityOnce(
+        Set<Long> expectedIds, BiFunction<Page, Boolean, PartialResultList<Person>> getPage
+    )
+    {
+        assertTrue(expectedIds.size() >= 20, "At least two pages of persons have a phone number containing 1");
+        var criteria = Map.<String, Object>of("phones.number", Like.contains("1"));
+        var firstPage = getPage.apply(Page.with().range(0, 10).allMatch(criteria).build(), true);
+        var secondPage = getPage.apply(Page.with().range(10, 10).allMatch(criteria).build(), false);
+        var ids = Stream.concat(firstPage.stream(), secondPage.stream()).map(Person::getId).toList();
+        assertEquals(20, ids.size(), "Two full pages");
+        assertEquals(ids.size(), ids.stream().distinct().count(), "Each entity is returned once");
+        assertTrue(expectedIds.containsAll(ids), "Only entities with a matching element");
+        assertEquals(expectedIds.size(), firstPage.getEstimatedTotalNumberOfResults(), "Count");
+    }
+
+    @Test
+    void testNegatedSingleCriteriaOnOneToManyMatchesEntitiesWithoutMatchingElement() {
+        var expectedIds = personService().getAllWithPhones().stream()
+            .filter(person -> person.getPhones().stream().noneMatch(phone -> phone.getNumber().contains("1")))
+            .map(Person::getId).collect(toSet());
+        var result = personService().getPage(Page.with().allMatch(Map.of("phones.number", Not.value(Like.contains("1")))).build(), true);
+        assertFalse(expectedIds.isEmpty(), "Some persons have no phone number containing 1");
+        assertEquals(expectedIds, result.stream().map(Person::getId).collect(toSet()), "Persons without matching phone number");
+
+        if (!isOpenJPA()) { // OpenJPA skips a negated criteria on a @OneToMany in the count query.
+            assertEquals(expectedIds.size(), result.getEstimatedTotalNumberOfResults(), "Count");
+        }
+    }
+
+    @Test
+    void testSingleEntityCriteriaOnOneToMany() {
+        var person = personService().getById(1L);
+        var result = personService().getPage(Page.with().allMatch(Map.of("phones.owner", person)).build(), true);
+        assertEquals(List.of(person.getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phones");
+        assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count");
     }
 
     @Test
