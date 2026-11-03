@@ -102,7 +102,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)
-public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I> {
+public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
 
     private static final long serialVersionUID = 1L;
 
