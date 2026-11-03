@@ -18,6 +18,7 @@ import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
+import static java.util.Comparator.comparing;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -27,6 +28,7 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
+import static org.omnifaces.persistence.Database.DB2;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
@@ -100,6 +102,7 @@ import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Path;
@@ -1893,7 +1896,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 var criteriaBuilder = getEntityManager().getCriteriaBuilder();
                 TypedQuery<T> entityQuery = buildEntityQuery(pageBuilder, criteriaBuilder);
                 var countQuery = count ? buildCountQuery(pageBuilder, criteriaBuilder) : null;
-                PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery);
+                PartialResultList<T> resultList = executeQuery(pageBuilder, entityQuery, countQuery, criteriaBuilder);
                 logger.log(FINER, () -> format(LOG_FINER_QUERY_RESULT, resultList, resultList.getEstimatedTotalNumberOfResults()));
                 return resultList;
             }
@@ -1910,7 +1913,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var entityQueryRoot = buildRoot(entityQuery, pageBuilder.getPage());
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
-        var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
+        var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver, new HashMap<>());
         buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
         return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
     }
@@ -1920,19 +1923,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var countQueryRoot = countQuery.from(entityType);
         countQuery.select(criteriaBuilder.count(countQueryRoot));
         var parameters = pageBuilder.shouldBuildCountSubquery()
-            ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder)
+            ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder, new HashMap<>())
             : Collections.<String, Object>emptyMap();
         return buildTypedQuery(pageBuilder, countQuery, null, parameters);
     }
 
     private <T extends E> Map<String, Object> buildCountSubquery(
-        PageBuilder<T> pageBuilder, CriteriaQuery<Long> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder
+        PageBuilder<T> pageBuilder, CriteriaQuery<?> countQuery, Root<E> countRoot, CriteriaBuilder criteriaBuilder, Map<String, Object> parameters
     )
     {
         var countSubquery = countQuery.subquery(pageBuilder.getResultType());
         var countSubqueryRoot = buildRoot(countSubquery, null);
         var subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
-        var parameters = buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver);
+        buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver, parameters);
 
         // SELECT COUNT(e) FROM E e WHERE EXISTS (SELECT t.id FROM T t WHERE [restrictions] AND t.id = e.id)
         countQuery.where(
@@ -1970,16 +1973,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         mappedParameters.forEach(query::setParameter);
     }
 
-    private <T extends E> PartialResultList<T> executeQuery(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery) {
+    private <T extends E> PartialResultList<T> executeQuery(
+        PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery, TypedQuery<Long> countQuery, CriteriaBuilder criteriaBuilder
+    )
+    {
         var page = pageBuilder.getPage();
-        var entities = entityQuery.getResultList();
-
-        if (
-            !entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof PostponedFetchRoot<?> postponedFetchRoot
-                && postponedFetchRoot.hasPostponedFetches()
-        ) {
-            entities = postponedFetchRoot.runPostponedFetches(page, getEntityManager(), entityType, idAttribute.getName(), this::getId, entities);
-        }
+        var entities = pageBuilder.shouldBuildIdQuery() ? getResultListViaIdQuery(pageBuilder, criteriaBuilder) : getResultList(pageBuilder, entityQuery);
 
         if (pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed()) {
             var reversed = new ArrayList<>(entities);
@@ -1989,6 +1988,100 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var estimatedTotalNumberOfResults = countQuery != null ? countQuery.getSingleResult().intValue() : -1;
         return new PartialResultList<>(entities, page.getOffset(), estimatedTotalNumberOfResults);
+    }
+
+    private <T extends E> List<T> getResultList(PageBuilder<T> pageBuilder, TypedQuery<T> entityQuery) {
+        var entities = entityQuery.getResultList();
+
+        if (
+            !entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof PostponedFetchRoot<?> postponedFetchRoot
+                && postponedFetchRoot.hasPostponedFetches()
+        ) {
+            entities = postponedFetchRoot.runPostponedFetches(
+                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), this::getId, entities
+            );
+        }
+
+        return entities;
+    }
+
+    /**
+     * Returns the entities of the page in two queries: first the IDs of the page in the desired order, then the entities having those IDs, which are put in the
+     * order of the IDs. This is used when ordering on a field of a <code>@OneToMany</code> or <code>@ElementCollection</code> on DB2, because DB2 does not
+     * accept a correlated subquery as order expression (SQLSTATE 42703), see {@link #buildIdQuery(PageBuilder, CriteriaBuilder)}.
+     */
+    private <T extends E> List<T> getResultListViaIdQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
+        var ids = buildIdQuery(pageBuilder, criteriaBuilder).getResultList();
+
+        if (ids.isEmpty()) {
+            return emptyList();
+        }
+
+        var page = pageBuilder.getPage();
+        var idsPage = Page.with().range(0, ids.size()).allMatch(page.getRequiredCriteria()).anyMatch(page.getOptionalCriteria());
+        page.getOrdering().forEach(idsPage::orderBy); // The ordering is still needed to sort the elements of fetched collections.
+        var idsPageBuilder = new PageBuilder<>(idsPage.build(), pageBuilder.isCacheable(), pageBuilder.getResultType(), pageBuilder.getQueryBuilder());
+        idsPageBuilder.restrictToIds(ids);
+
+        var positions = new HashMap<I, Integer>(ids.size());
+        range(0, ids.size()).forEach(i -> positions.put(ids.get(i), i));
+        var entities = new ArrayList<>(getResultList(idsPageBuilder, buildEntityQuery(idsPageBuilder, criteriaBuilder)));
+        entities.sort(comparing(entity -> positions.get(this.<I>getId(entity))));
+        return entities;
+    }
+
+    /**
+     * Builds the query returning the IDs of the page, ordered by the smallest or largest value of a field of a <code>@OneToMany</code> or
+     * <code>@ElementCollection</code> via an aggregate over a <code>LEFT JOIN</code> of the collection, grouped by the ID. The restrictions are applied the
+     * same as in the entity query, because some of them are weaker in a subquery on OpenJPA. Those of a {@link QueryBuilder} can only be applied via a
+     * subquery, so these are additionally applied via an <code>EXISTS</code> subquery, the same as in the count query. All parameters share one map, so that
+     * their names are unique. The query is not distinct, because it is grouped by the ID.
+     */
+    @SuppressWarnings("unchecked")
+    private <T extends E> TypedQuery<I> buildIdQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
+        var page = pageBuilder.getPage();
+        var idQuery = criteriaBuilder.createQuery(identifierType);
+        var idQueryRoot = idQuery.from(entityType);
+        var parameters = new HashMap<String, Object>();
+
+        if (pageBuilder.hasQueryBuilder()) {
+            buildCountSubquery(pageBuilder, idQuery, idQueryRoot, criteriaBuilder, parameters);
+        }
+
+        var pathResolver = new RootPathResolver(idQueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes);
+        buildRestrictions(pageBuilder, idQuery, criteriaBuilder, pathResolver, parameters);
+        var id = (Expression<I>) pathResolver.get(idAttribute.getName());
+        var elementPredicates = new ArrayList<Predicate>();
+        var groupBy = new ArrayList<Expression<?>>(List.of(id));
+        var orders = new ArrayList<Order>(page.getOrdering().size() + 1);
+        Entry<String, Boolean> lastCollectionOrder = null;
+
+        for (var order : page.getOrdering().entrySet()) {
+            var collectionPath = findCollectionPath(order.getKey());
+
+            if (collectionPath != null) {
+                lastCollectionOrder = order;
+                var aggregate = buildCollectionAggregate(order, collectionPath, page, idQueryRoot, criteriaBuilder, elementPredicates, parameters);
+                orders.add(order.getValue() ? criteriaBuilder.asc(aggregate) : criteriaBuilder.desc(aggregate));
+                continue;
+            }
+
+            if (!ID.equals(order.getKey()) && !idAttribute.getName().equals(order.getKey())) {
+                groupBy.add(pathResolver.get(order.getKey()));
+            }
+
+            orders.add(buildOrder(order, criteriaBuilder, pathResolver, false));
+        }
+
+        if (!elementPredicates.isEmpty()) {
+            // EclipseLink and OpenJPA do not register parameters which occur only in the ORDER BY clause.
+            var registration = criteriaBuilder.or(criteriaBuilder.and(toArray(elementPredicates)), criteriaBuilder.isNotNull(id));
+            idQuery.where(conjunctRestrictionsIfNecessary(criteriaBuilder, idQuery.getRestriction(), registration));
+        }
+
+        addIdTiebreakerIfNecessary(orders, page.getOrdering(), lastCollectionOrder, criteriaBuilder, pathResolver);
+        idQuery.select(id).distinct(false).groupBy(groupBy).orderBy(orders);
+        return buildTypedQuery(pageBuilder, idQuery, idQueryRoot, parameters);
     }
 
     // Selection actions ----------------------------------------------------------------------------------------------
@@ -2037,6 +2130,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
+            pageBuilder.hasQueryBuilder(mapping != null);
             // A collection ordering is a correlated subquery, and a non-null mapping may aggregate, so value based paging cannot be reliably used then.
             pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage()));
             return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
@@ -2074,15 +2168,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var page = pageBuilder.getPage();
         var ordering = page.getOrdering();
 
-        if (ordering.isEmpty()) {
+        if (ordering.isEmpty() || pageBuilder.getIds() != null) { // The entities restricted to IDs are put in the order of the IDs afterwards.
             return;
         }
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
         var root = pathResolver.get(null);
         var orders = new ArrayList<Order>(ordering.size() + 1);
-        var collectionOrdered = false;
-        var tiebreakerAscending = false;
+        Entry<String, Boolean> lastCollectionOrder = null;
 
         for (var order : ordering.entrySet()) {
             var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
@@ -2092,8 +2185,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 continue;
             }
 
-            collectionOrdered = true;
-            tiebreakerAscending = order.getValue();
+            lastCollectionOrder = order;
 
             if (!(root instanceof PostponedFetchRoot) && isFetched((From<?, ?>) root, collectionPath)) {
                 // The fetched elements are selected, also in a distinct query.
@@ -2102,18 +2194,31 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             else if (criteriaQuery.isDistinct()) {
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
+            else if (getDatabase() == DB2) {
+                pageBuilder.shouldBuildIdQuery(true); // The order is then built by buildIdQuery.
+            }
             else {
                 orders.add(buildCollectionOrder(order, collectionPath, page, criteriaQuery, criteriaBuilder, pathResolver, parameters));
             }
         }
 
-        if (collectionOrdered && !ordering.containsKey(ID) && !ordering.containsKey(idAttribute.getName())) {
-            // The ID keeps the page order stable when collection elements tie. Its direction is that of the last collection order.
-            var id = pathResolver.get(idAttribute.getName());
-            orders.add(tiebreakerAscending ? criteriaBuilder.asc(id) : criteriaBuilder.desc(id));
-        }
-
+        addIdTiebreakerIfNecessary(orders, ordering, lastCollectionOrder, criteriaBuilder, pathResolver);
         criteriaQuery.orderBy(orders);
+    }
+
+    /**
+     * Adds the ID as last order when there is a collection order, so that the page order stays stable when collection elements tie. Its direction is that of
+     * the last collection order.
+     */
+    private void addIdTiebreakerIfNecessary(
+        List<Order> orders, Map<String, Boolean> ordering, Entry<String, Boolean> lastCollectionOrder, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver
+    )
+    {
+        if (lastCollectionOrder != null && !ordering.containsKey(ID) && !ordering.containsKey(idAttribute.getName())) {
+            var id = pathResolver.get(idAttribute.getName());
+            orders.add(lastCollectionOrder.getValue() ? criteriaBuilder.asc(id) : criteriaBuilder.desc(id));
+        }
     }
 
     private boolean containsCollectionOrdering(Page page) {
@@ -2161,7 +2266,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database orders <code>null</code>.
      * <p>
      * The order is a correlated subquery wrapped in <code>COALESCE</code> with a <code>NULL</code> fallback, because EclipseLink does not accept a subquery as
-     * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument.
+     * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts neither, so there the order is built by
+     * {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private <T extends E> Order buildCollectionOrder(
@@ -2180,12 +2286,59 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var joins = new HashMap<String, From<?, ?>>();
         var predicates = new ArrayList<Predicate>();
         predicates.add(criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
+        predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page, criteriaBuilder, parameters));
+        Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
+        subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
+        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
+        return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
+    }
+
+    /**
+     * Builds the smallest value of a field of a <code>@OneToMany</code> or <code>@ElementCollection</code> among the elements of the collection when given
+     * ordering is ascending, or else the largest one, as an aggregate over a <code>LEFT JOIN</code> of the collection, for use in a query grouped by the ID. It
+     * considers the same elements as {@link #buildCollectionOrder(Entry, String, Page, CriteriaQuery, CriteriaBuilder, PathResolver, Map)}: the required
+     * criteria on the collection are applied per element via a <code>CASE</code>, so that an entity without matching elements gets <code>NULL</code>. These
+     * criteria are added to given element predicates.
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private Expression<?> buildCollectionAggregate(
+        Entry<String, Boolean> order, String collectionPath, Page page, Root<E> root, CriteriaBuilder criteriaBuilder, List<Predicate> elementPredicates,
+        Map<String, Object> parameters
+    )
+    {
+        From<?, ?> collection = root;
+
+        for (var attribute : collectionPath.split("\\.")) {
+            collection = collection.join(attribute, JoinType.LEFT);
+        }
+
+        var joins = new HashMap<String, From<?, ?>>();
+        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, page, criteriaBuilder, parameters);
+        var field = (Expression<Comparable>) getElementPath(collection, collectionPath, order.getKey(), JoinType.LEFT, joins);
+        elementPredicates.addAll(predicates);
+        // NULLIF(field, field) is NULL; OpenJPA cannot render a NULL literal in a CASE.
+        Expression<Comparable> value = predicates.isEmpty()
+            ? field
+            : criteriaBuilder.<Comparable>selectCase().when(criteriaBuilder.and(toArray(predicates)), field)
+                .otherwise(criteriaBuilder.nullif(field, (Expression<?>) field));
+        return order.getValue() ? criteriaBuilder.least(value) : criteriaBuilder.greatest(value);
+    }
+
+    /**
+     * Returns the predicates of the required criteria on given collection, applied per element, with multiple values and a negation applied per element.
+     */
+    private List<Predicate> buildElementPredicates(
+        From<?, ?> collection, String collectionPath, JoinType joinType, Map<String, From<?, ?>> joins, Page page, CriteriaBuilder criteriaBuilder,
+        Map<String, Object> parameters
+    )
+    {
+        var predicates = new ArrayList<Predicate>();
 
         for (var criteria : page.getRequiredCriteria().entrySet()) {
             var field = criteria.getKey();
 
             if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
-                var path = getElementPath(collection, collectionPath, field, joins);
+                var path = getElementPath(collection, collectionPath, field, joinType, joins);
                 var predicate = buildElementPredicate(
                     path, path.getJavaType(), criteria.getValue(), criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameters)
                 );
@@ -2196,17 +2349,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             }
         }
 
-        Expression field = getElementPath(collection, collectionPath, order.getKey(), joins);
-        subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
-        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
-        return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
+        return predicates;
     }
 
     /**
      * Returns the path of given field of an element of given collection. JOINs are shared via given map, so that the criteria and the order on the elements
      * apply to the same elements.
      */
-    private Expression<?> getElementPath(From<?, ?> collection, String collectionPath, String field, Map<String, From<?, ?>> joins) {
+    private Expression<?> getElementPath(From<?, ?> collection, String collectionPath, String field, JoinType joinType, Map<String, From<?, ?>> joins) {
         if (field.equals(collectionPath)) {
             return collection;
         }
@@ -2224,7 +2374,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var parent = from;
             var attribute = attributes[i];
             path += "." + attribute;
-            from = joins.computeIfAbsent(path, k -> parent.join(attribute));
+            from = joins.computeIfAbsent(path, k -> parent.join(attribute, joinType));
         }
 
         return from;
@@ -2238,11 +2388,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Searching actions -----------------------------------------------------------------------------------------------
 
     private <T extends E> Map<String, Object> buildRestrictions(
-        PageBuilder<T> pageBuilder, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver
+        PageBuilder<T> pageBuilder, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
         var page = pageBuilder.getPage();
-        var parameters = new HashMap<String, Object>(page.getRequiredCriteria().size() + page.getOptionalCriteria().size());
         var requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameters);
         var optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameters);
         Predicate restriction = null;
@@ -2282,6 +2431,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             restriction = conjunctRestrictionsIfNecessary(
                 criteriaBuilder, restriction, buildValueBasedPagingPredicate(page, criteriaBuilder, pathResolver, parameters)
             );
+        }
+
+        if (!(query instanceof Subquery) && pageBuilder.getIds() != null) {
+            restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, pathResolver.get(idAttribute.getName()).in(pageBuilder.getIds()));
         }
 
         if (restriction != null) {
@@ -2328,8 +2481,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return criteriaBuilder.or(toArray(predicates));
     }
 
-    private <T extends E> List<Predicate> buildPredicates(
-        Map<String, Object> criteria, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
+    private List<Predicate> buildPredicates(
+        Map<String, Object> criteria, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
         return stream(criteria)
@@ -2338,8 +2491,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             .collect(toList());
     }
 
-    private <T extends E> Predicate buildPredicate(
-        Entry<String, Object> parameter, AbstractQuery<T> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
+    private Predicate buildPredicate(
+        Entry<String, Object> parameter, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
         var field = parameter.getKey();

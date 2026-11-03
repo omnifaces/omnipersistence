@@ -784,6 +784,65 @@ public abstract class OmniPersistenceIT {
         assertOrderedAcrossPages(withoutOne, key, true, (offset, limit) -> personService().getPage(negatedPage.apply(offset, limit), false));
     }
 
+    /**
+     * Ordering on a collection field must not drop entities which match the criteria on the collection but have no single element matching all of them, such as
+     * an entity with only a MOBILE phone for "not both MOBILE and HOME", or an entity whose MOBILE phone and whose number with a 1 are on different phones.
+     */
+    @Test
+    void testPageOrderedByOneToManyKeepsEntitiesWithoutMatchingElement() {
+        var persons = personService().getAllWithPhones();
+        var notBothMobileAndHome = Map.<String, Object>of("phones.type", Not.value(List.of(Phone.Type.MOBILE, Phone.Type.HOME)));
+        assertTrue(
+            persons.stream().map(OmniPersistenceIT::phoneTypes)
+                .anyMatch(types -> types.equals(Set.of(Phone.Type.MOBILE)) || types.equals(Set.of(Phone.Type.HOME))),
+            "Some person has only MOBILE or only HOME phones"
+        );
+        assertKeepsAllMatchingEntities("phones.number", notBothMobileAndHome);
+
+        var mobileAndNumberWith1 = Map.<String, Object>of("phones.type", Phone.Type.MOBILE, "phones.number", Like.contains("1"));
+        assertTrue(
+            persons.stream().map(Person::getPhones).anyMatch(
+                phones -> phones.stream().anyMatch(phone -> phone.getType() == Phone.Type.MOBILE)
+                    && phones.stream().anyMatch(phone -> phone.getNumber().contains("1"))
+                    && phones.stream().noneMatch(phone -> phone.getType() == Phone.Type.MOBILE && phone.getNumber().contains("1"))
+            ),
+            "Some person has a MOBILE phone and a number with a 1 on different phones"
+        );
+        assertKeepsAllMatchingEntities("phones.number", mobileAndNumberWith1);
+    }
+
+    /**
+     * Ordering on an enum field of a <code>@OneToMany</code> and on an <code>@ElementCollection</code>, with criteria on the same collection, must return each
+     * matching entity once.
+     */
+    @Test
+    void testPageOrderedByEnumOfCollectionWithCriteriaOnIt() {
+        assertKeepsAllMatchingEntities("phones.type", Map.of("phones.number", Like.contains("1")));
+        assertKeepsAllMatchingEntities("groups", Map.of("groups", Not.value(Group.USER)));
+    }
+
+    private static Set<Phone.Type> phoneTypes(Person person) {
+        return person.getPhones().stream().map(Phone::getType).collect(toSet());
+    }
+
+    private void assertKeepsAllMatchingEntities(String orderBy, Map<String, Object> criteria) {
+        var expected = personService().getPage(Page.with().allMatch(criteria).build(), false).stream().map(Person::getId).sorted().toList();
+        assertFalse(expected.isEmpty(), "Some entities match " + criteria);
+        var ids = new ArrayList<Long>();
+
+        for (var offset = 0;; offset += 10) {
+            var persons = personService().getPage(Page.with().range(offset, 10).allMatch(criteria).orderBy(orderBy, true).build(), false);
+
+            if (persons.isEmpty()) {
+                break;
+            }
+
+            persons.forEach(person -> ids.add(person.getId()));
+        }
+
+        assertEquals(expected, ids.stream().sorted().toList(), "Each entity matching " + criteria + " is on exactly one page when ordered by " + orderBy);
+    }
+
     @Test
     void testPageOrderedByOneToManyWithOptionalCriteria() {
         var matching = personService().getAllWithPhones().stream()
