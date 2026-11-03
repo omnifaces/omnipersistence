@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
@@ -736,6 +737,103 @@ public abstract class OmniPersistenceIT {
         var result = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("groups", true).build(), false);
         assertEquals(10, result.size(), "Page with groups sorted ascending returns 10 persons");
         result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated"));
+    }
+
+    @Test
+    void testPageOrderedByOneToManyAcrossPages() {
+        var all = personService().getAllWithPhones();
+
+        for (var ascending : List.of(true, false)) {
+            Function<Person, String> key = person -> extreme(person.getPhones().stream().map(Phone::getNumber), ascending);
+            BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).orderBy("phones.number", ascending).build();
+            assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
+            assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPageWithPhones(page.apply(offset, limit), false));
+        }
+    }
+
+    @Test
+    void testPageOrderedByOneToManyWithCriteriaOnIt() {
+        var all = personService().getAllWithPhones();
+        Function<Person, String> key = person -> extreme(person.getPhones().stream().map(Phone::getNumber).filter(number -> number.contains("11")), true);
+        BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with()
+            .range(offset, limit).allMatch(Map.of("phones.number", Like.contains("11"))).orderBy("phones.number", true).build();
+        assertOrderedAcrossPages(all, key, true, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
+        assertOrderedAcrossPages(all, key, true, (offset, limit) -> personService().getPageWithPhones(page.apply(offset, limit), false));
+    }
+
+    @Test
+    void testPageOrderedByElementCollectionNestedInOneToMany() {
+        var all = personService().getAllWithGroups();
+        Function<Person, String> key = person -> extreme(person.getGroups().stream().map(Group::name), true); // Every phone is owned by the person itself.
+        BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).orderBy("phones.owner.groups", true).build();
+        assertOrderedAcrossPages(all, key, true, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
+    }
+
+    @Test
+    void testPageOrderedByOneToManyWithListAndNegatedCriteriaOnIt() {
+        var all = personService().getAllWithPhones();
+        Function<Person, String> key = person -> extreme(person.getPhones().stream().map(Phone::getNumber), true);
+
+        BiFunction<Integer, Integer, Page> listPage = (offset, limit) -> Page.with()
+            .range(offset, limit).allMatch(Map.of("phones.number", List.of(Like.startsWith("0")))).orderBy("phones.number", true).build();
+        assertOrderedAcrossPages(all, key, true, (offset, limit) -> personService().getPage(listPage.apply(offset, limit), false));
+
+        var withoutOne = all.stream().filter(person -> person.getPhones().stream().noneMatch(phone -> phone.getNumber().contains("1"))).toList();
+        BiFunction<Integer, Integer, Page> negatedPage = (offset, limit) -> Page.with()
+            .range(offset, limit).allMatch(Map.of("phones.number", Not.value(Like.contains("1")))).orderBy("phones.number", true).build();
+        assertOrderedAcrossPages(withoutOne, key, true, (offset, limit) -> personService().getPage(negatedPage.apply(offset, limit), false));
+    }
+
+    @Test
+    void testPageOrderedByOneToManyWithOptionalCriteria() {
+        var matching = personService().getAllWithPhones().stream()
+            .filter(person -> person.getEmail().contains("1") || person.getPhones().stream().anyMatch(phone -> phone.getNumber().contains("11")))
+            .toList();
+        Function<Person, String> key = person -> extreme(person.getPhones().stream().map(Phone::getNumber), true);
+        var criteria = Map.<String, Object>of("phones.number", Like.contains("11"), "email", Like.contains("1"));
+        BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).anyMatch(criteria).orderBy("phones.number", true).build();
+        assertOrderedAcrossPages(matching, key, true, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
+    }
+
+    @Test
+    void testPageOrderOnElementCollectionWithOptionalCriteriaIsStable() {
+        var criteria = Map.<String, Object>of("groups", Group.USER, "email", Like.contains("1"));
+        var ids = Stream.of(0, 10)
+            .flatMap(offset -> personService().getPage(Page.with().range(offset, 10).anyMatch(criteria).orderBy("groups", true).build(), false).stream())
+            .map(Person::getId).toList();
+        assertEquals(20, ids.size(), "Two full pages");
+        assertEquals(ids.size(), ids.stream().distinct().count(), "Each entity is on only one page");
+    }
+
+    @Test
+    void testPageOrderedByElementCollectionAcrossPages() {
+        var all = personService().getAllWithGroups();
+
+        for (var ascending : List.of(true, false)) {
+            Function<Person, String> key = person -> extreme(person.getGroups().stream().map(Group::name), ascending); // @Enumerated(STRING)
+            BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).orderBy("groups", ascending).build();
+            assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
+            assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPageWithGroups(page.apply(offset, limit), false));
+        }
+    }
+
+    private static <K extends Comparable<K>> K extreme(Stream<K> values, boolean smallest) {
+        return values.reduce((left, right) -> (left.compareTo(right) <= 0) == smallest ? left : right).orElse(null);
+    }
+
+    private static <K extends Comparable<K>> void assertOrderedAcrossPages(
+        List<Person> all, Function<Person, K> key, boolean ascending, BiFunction<Integer, Integer, List<Person>> pageLoader
+    )
+    {
+        var keys = new HashMap<Long, K>();
+        all.forEach(person -> keys.put(person.getId(), key.apply(person)));
+        var ids = Stream.concat(pageLoader.apply(0, 10).stream(), pageLoader.apply(10, 10).stream()).map(Person::getId).toList();
+        assertEquals(ids.size(), ids.stream().distinct().count(), "Each entity is on only one page");
+
+        Comparator<K> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
+        var actualKeys = ids.stream().map(keys::get).toList();
+        var expectedKeys = keys.values().stream().filter(Objects::nonNull).sorted(order).limit(ids.size()).toList();
+        assertEquals(expectedKeys, actualKeys, "Entities are ordered across pages by the " + (ascending ? "smallest" : "largest") + " element");
     }
 
     @Test

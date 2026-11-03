@@ -200,6 +200,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
     private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
     private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+    private static final String LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER = "Cannot order by %s in a distinct query which does not select it, skipping! The query is distinct because it joins a collection. Consider using DTO mapping or DB view instead.";
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults may be slightly inaccurate. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
@@ -1909,8 +1910,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var entityQueryRoot = buildRoot(entityQuery, pageBuilder.getPage());
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
-        buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
-        return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver));
+        var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver);
+        buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
+        return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
     }
 
     private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
@@ -2035,8 +2037,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.shouldBuildCountSubquery(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
-            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null); // when mapping is not null, we cannot reliably determine if ordering contains
-                                                                            // aggregated fields, so value based paging cannot be reliably used.
+            // A collection ordering is a correlated subquery, and a non-null mapping may aggregate, so value based paging cannot be reliably used then.
+            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage()));
             return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
         }
         else {
@@ -2066,7 +2068,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Sorting actions ------------------------------------------------------------------------------------------------
 
     private <T extends E> void buildOrderBy(
-        PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver
+        PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
         var page = pageBuilder.getPage();
@@ -2078,16 +2080,154 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
         var root = pathResolver.get(null);
-        var skipOneToManyOrdering = root instanceof PostponedFetchRoot<?>; // PostponedFetchRoot is only created when page.getLimit() < MAX_VALUE or always for
-                                                                           // EclipseLink; non-paged queries don't suffer from join row inflation.
-        criteriaQuery.orderBy(
-            stream(ordering)
-                .filter(order -> !skipOneToManyOrdering || !oneToManys.test(order.getKey())) // @OneToMany ordering is handled in-memory by runPostponedFetches
-                                                                                             // in executeQuery; skip it here to avoid adding a join that
-                                                                                             // inflates the row count.
-                .map(order -> buildOrder(order, criteriaBuilder, pathResolver, reversed))
-                .collect(toList())
-        );
+        var orders = new ArrayList<Order>(ordering.size() + 1);
+        var collectionOrdered = false;
+        var tiebreakerAscending = false;
+
+        for (var order : ordering.entrySet()) {
+            var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
+
+            if (collectionPath == null) {
+                orders.add(buildOrder(order, criteriaBuilder, pathResolver, reversed));
+                continue;
+            }
+
+            collectionOrdered = true;
+            tiebreakerAscending = order.getValue();
+
+            if (!(root instanceof PostponedFetchRoot) && isFetched((From<?, ?>) root, collectionPath)) {
+                // The fetched elements are selected, also in a distinct query.
+                orders.add(buildOrder(order, criteriaBuilder, pathResolver, reversed));
+            }
+            else if (criteriaQuery.isDistinct()) {
+                logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
+            }
+            else {
+                orders.add(buildCollectionOrder(order, collectionPath, page, criteriaQuery, criteriaBuilder, pathResolver, parameters));
+            }
+        }
+
+        if (collectionOrdered && !ordering.containsKey(ID) && !ordering.containsKey(idAttribute.getName())) {
+            // The ID keeps the page order stable when collection elements tie. Its direction is that of the last collection order.
+            var id = pathResolver.get(idAttribute.getName());
+            orders.add(tiebreakerAscending ? criteriaBuilder.asc(id) : criteriaBuilder.desc(id));
+        }
+
+        criteriaQuery.orderBy(orders);
+    }
+
+    private boolean containsCollectionOrdering(Page page) {
+        return page.getOrdering().keySet().stream().anyMatch(field -> findCollectionPath(field) != null);
+    }
+
+    /**
+     * Returns the path of the <code>@OneToMany</code> or <code>@ElementCollection</code> field which given field is or is nested in, or <code>null</code> when
+     * it is in none of them.
+     */
+    private String findCollectionPath(String field) {
+        var attributes = field.split("\\.");
+
+        for (var i = 1; i <= attributes.length; i++) {
+            var path = String.join(".", Arrays.copyOf(attributes, i));
+
+            if (elementCollections.test(path) || i < attributes.length && oneToManys.test(path + "." + attributes[i])) {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean isFetched(From<?, ?> root, String collectionPath) {
+        FetchParent<?, ?> parent = root;
+
+        for (var attribute : collectionPath.split("\\.")) {
+            var fetch = getFetches(parent).stream().filter(f -> f.getAttribute() != null && f.getAttribute().getName().equals(attribute)).findFirst();
+
+            if (fetch.isEmpty()) {
+                return false;
+            }
+
+            parent = fetch.get();
+        }
+
+        return true;
+    }
+
+    /**
+     * Builds the order of given ordering on a field of a <code>@OneToMany</code> or <code>@ElementCollection</code>. The root entities are ordered by the
+     * smallest value of the field among the elements of the collection when ascending, or else by the largest one. Only the elements matching the required
+     * criteria on the collection are considered, with multiple values and a negation applied per element; optional criteria are not. A plain order on the field
+     * would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database orders <code>null</code>.
+     * <p>
+     * The order is a correlated subquery wrapped in <code>COALESCE</code> with a <code>NULL</code> fallback, because EclipseLink does not accept a subquery as
+     * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument.
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private <T extends E> Order buildCollectionOrder(
+        Entry<String, Boolean> order, String collectionPath, Page page, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver, Map<String, Object> parameters
+    )
+    {
+        var subquery = criteriaQuery.subquery(Comparable.class);
+        Root<E> subqueryRoot = subquery.from(entityType);
+        From<?, ?> collection = subqueryRoot;
+
+        for (var attribute : collectionPath.split("\\.")) {
+            collection = collection.join(attribute);
+        }
+
+        var joins = new HashMap<String, From<?, ?>>();
+        var predicates = new ArrayList<Predicate>();
+        predicates.add(criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
+
+        for (var criteria : page.getRequiredCriteria().entrySet()) {
+            var field = criteria.getKey();
+
+            if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
+                var path = getElementPath(collection, collectionPath, field, joins);
+                var predicate = buildElementPredicate(
+                    path, path.getJavaType(), criteria.getValue(), criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameters)
+                );
+
+                if (predicate != null) {
+                    predicates.add(predicate);
+                }
+            }
+        }
+
+        Expression field = getElementPath(collection, collectionPath, order.getKey(), joins);
+        subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
+        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
+        return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
+    }
+
+    /**
+     * Returns the path of given field of an element of given collection. JOINs are shared via given map, so that the criteria and the order on the elements
+     * apply to the same elements.
+     */
+    private Expression<?> getElementPath(From<?, ?> collection, String collectionPath, String field, Map<String, From<?, ?>> joins) {
+        if (field.equals(collectionPath)) {
+            return collection;
+        }
+
+        var attributes = field.substring(collectionPath.length() + 1).split("\\.");
+        var last = attributes.length - 1;
+        var path = collectionPath;
+        From<?, ?> from = collection;
+
+        for (var i = 0; i <= last; i++) {
+            if (i == last && !elementCollections.test(field)) {
+                return from.get(attributes[i]);
+            }
+
+            var parent = from;
+            var attribute = attributes[i];
+            path += "." + attribute;
+            from = joins.computeIfAbsent(path, k -> parent.join(attribute));
+        }
+
+        return from;
     }
 
     private static Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
@@ -2147,10 +2287,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         if (restriction != null) {
             var distinct = !(pathResolver instanceof MappedPathResolver) // DTO queries have GROUP BY from aggregations; DISTINCT is redundant and causes
                                                                          // OpenJPA to wrap the query losing projected columns.
-                && (!optionalPredicates.isEmpty() // Optional (OR/global) predicates may span @ElementCollection fields; buildPredicate adds a root JOIN per
-                                                  // such field unless isBuiltAsArrayPredicate, multiplying rows; DISTINCT deduplicates entities before LIMIT
-                                                  // is applied.
-                    || hasCollectionJoins((From<?, ?>) pathResolver.get(null))); // Collection JOINs multiply rows; DISTINCT keeps LIMIT on entity rows.
+                && hasCollectionJoins((From<?, ?>) pathResolver.get(null)); // Collection JOINs multiply rows; DISTINCT keeps LIMIT on entity rows.
             query.distinct(distinct).where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), restriction));
         }
 
@@ -2238,7 +2375,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         else {
             var items = unwrapNot(criteria);
-            return oneToManys.test(field) && (isOneToManySubqueried(query, isNegated(criteria)) || items instanceof Iterable || items.getClass().isArray());
+            return oneToManys.test(field) && (isOneToManySubqueried(query, isNegated(criteria)) || isMultiValued(items));
         }
     }
 
@@ -2261,7 +2398,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = buildElementCollectionPredicate(alias, path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
                 negationApplied = true;
             }
-            else if (value instanceof Iterable || value.getClass().isArray() || oneToManys.test(field) && isOneToManySubqueried(query, negated)) {
+            else if (isMultiValued(value) || oneToManys.test(field) && isOneToManySubqueried(query, negated)) {
                 predicate = buildArrayPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
                 negationApplied = true;
             }
@@ -2501,17 +2638,30 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds the predicate of given item on given path of an element of a <code>@OneToMany</code> or <code>@ElementCollection</code> in a correlated subquery.
+     * Builds the predicate of given criteria on given path of an element of a <code>@OneToMany</code> or <code>@ElementCollection</code> in a correlated
+     * subquery. Multiple values are ORed.
      */
     private Predicate buildElementPredicate(
-        Expression<?> path, Class<?> type, Object item, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
+        Expression<?> path, Class<?> type, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
     )
     {
-        var value = unwrapNot(item);
+        var value = unwrapNot(criteria);
         Predicate predicate;
 
         if (value == null) {
             predicate = criteriaBuilder.isNull(path);
+        }
+        else if (isMultiValued(value)) {
+            var predicates = stream(value)
+                .map(item -> buildElementPredicate(path, type, item, criteriaBuilder, parameterBuilder))
+                .filter(Objects::nonNull)
+                .toList();
+
+            if (predicates.isEmpty()) {
+                return null;
+            }
+
+            predicate = criteriaBuilder.or(toArray(predicates));
         }
         else if (isEntity(value)) {
             predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
@@ -2520,7 +2670,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             predicate = createElementCollectionCriteria(type, value).build(path, criteriaBuilder, parameterBuilder);
         }
 
-        return predicate != null && isNegated(item) ? criteriaBuilder.not(predicate) : predicate;
+        return predicate != null && isNegated(criteria) ? criteriaBuilder.not(predicate) : predicate;
+    }
+
+    /**
+     * Returns whether given value holds multiple values, which <code>Streams#stream(Object)</code> of OmniUtils streams one by one.
+     */
+    private static boolean isMultiValued(Object value) {
+        return value instanceof Iterable || value instanceof Object[] || value instanceof int[] || value instanceof long[] || value instanceof double[];
     }
 
     private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
