@@ -13,11 +13,7 @@
 package org.omnifaces.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
-import static org.omnifaces.persistence.Provider.OPENJPA;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -30,19 +26,6 @@ import org.omnifaces.persistence.model.BaseEntity;
  * package so that its stub entity does not end up in the persistence unit of the integration tests.
  */
 class ProviderEntityTest {
-
-    @Test
-    void identifierOfNullIsNull() {
-        assertNull(HIBERNATE.getIdentifier(null));
-    }
-
-    @Test
-    void identifierOfNonProxyEntityNotExtendingBaseEntityIsRejected() {
-        var entity = new PlainEntity();
-        assertThrows(IllegalArgumentException.class, () -> HIBERNATE.getIdentifier(entity));
-        assertThrows(IllegalArgumentException.class, () -> ECLIPSELINK.getIdentifier(entity));
-        assertThrows(IllegalArgumentException.class, () -> OPENJPA.getIdentifier(entity));
-    }
 
     @Test
     void entityTypeOfSubclassIsEntityAnnotatedSuperclass() {

@@ -16,7 +16,6 @@ import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.EL
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
-import static java.lang.String.format;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
@@ -31,7 +30,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-import jakarta.annotation.Nullable;
 import jakarta.persistence.CacheRetrieveMode;
 import jakarta.persistence.CacheStoreMode;
 import jakarta.persistence.ElementCollection;
@@ -46,7 +44,6 @@ import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.SingularAttribute;
 
-import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -104,12 +101,6 @@ public enum Provider {
         @Override
         public <E> Class<E> getEntityType(E entity) {
             return invokeOnProxy(entity, "getPersistentClass", super::getEntityType);
-        }
-
-        @Override
-        @Nullable
-        public <I> I getIdentifier(@Nullable Object entity) {
-            return invokeOnProxy(entity, "getIdentifier", super::getIdentifier);
         }
 
         @Override
@@ -216,7 +207,6 @@ public enum Provider {
     );
     private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
-    private static final String ERROR_NOT_BASE_ENTITY = "%s is not a proxy and does not extend BaseEntity";
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
         var packageName = entityManagerFactory.getClass().getPackage().getName();
@@ -362,29 +352,6 @@ public enum Provider {
     @SuppressWarnings("unchecked")
     public <E> Class<E> getEntityType(E entity) {
         return (Class<E>) findEntityClass(entity.getClass()).orElse(entity.getClass());
-    }
-
-    /**
-     * Returns the identifier of the given entity. If it is a proxy, then the identifier will be extracted from the proxy. The default implementation returns
-     * {@link BaseEntity#getId()}.
-     *
-     * @param <I> The generic ID type.
-     * @param entity The entity to get the identifier for, may be <code>null</code>.
-     * @return The identifier of the given entity, or <code>null</code> when <code>null</code> was supplied or when the entity has no ID.
-     * @throws IllegalArgumentException When the given entity is not a proxy and does not extend {@link BaseEntity}.
-     */
-    @Nullable
-    @SuppressWarnings("unchecked")
-    public <I> I getIdentifier(@Nullable Object entity) {
-        if (entity == null) {
-            return null;
-        }
-
-        if (!(entity instanceof BaseEntity<?> baseEntity)) {
-            throw new IllegalArgumentException(format(ERROR_NOT_BASE_ENTITY, entity.getClass()));
-        }
-
-        return (I) baseEntity.getId();
     }
 
     /**

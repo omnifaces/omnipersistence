@@ -305,8 +305,16 @@ public class EntityRepositoryIT {
                 articleRepository.persist(article);
             });
             assertEquals(article.getCode(), articleRepository.getId(article), "Generated code after persist");
-            var lazyCategorySlug = transactionServiceCDI.call(() -> categoryRepository.getId(articleRepository.getById(article.getCode()).getCategory()));
-            assertEquals("getid", lazyCategorySlug, "Slug of lazy category");
+            var lazyCategory = transactionServiceCDI.call(() -> {
+                var reference = articleRepository.getById(article.getCode()).getCategory();
+                var provider = categoryRepository.getProvider();
+                return List.of(categoryRepository.getId(reference), provider.isProxy(reference), provider.isProxyUninitialized(reference));
+            });
+            assertEquals("getid", lazyCategory.get(0), "Slug of lazy category");
+
+            if (!OmniPersistenceIT.isEclipseLink() && !OmniPersistenceIT.isOpenJPA()) {
+                assertEquals(List.of(true, true), lazyCategory.subList(1, 3), "Lazy category is a proxy which stays uninitialized");
+            }
         }
         finally {
             deleteArticles(List.of(article));
