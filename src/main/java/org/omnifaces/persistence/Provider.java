@@ -374,7 +374,7 @@ public enum Provider {
      * @throws IllegalArgumentException When the given entity is not a proxy and does not implement {@link Identifiable}.
      */
     @Nullable
-    @SuppressWarnings({ "unchecked", "removal" })
+    @SuppressWarnings({ "unchecked", "deprecation", "removal" })
     public <I> I getIdentifier(@Nullable Object entity) {
         if (entity == null) {
             return null;

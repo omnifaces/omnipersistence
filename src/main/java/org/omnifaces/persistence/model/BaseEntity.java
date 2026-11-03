@@ -103,7 +103,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @MappedSuperclass
 @EntityListeners(BaseEntityListener.class)
-@SuppressWarnings("removal")
+@SuppressWarnings({"deprecation", "removal"})
 public abstract class BaseEntity<I extends Comparable<I> & Serializable> implements Comparable<BaseEntity<I>>, Identifiable<I>, Serializable {
 
     private static final long serialVersionUID = 1L;

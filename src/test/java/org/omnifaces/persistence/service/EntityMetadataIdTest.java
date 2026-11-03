@@ -101,7 +101,7 @@ class EntityMetadataIdTest {
 
     }
 
-    @SuppressWarnings("removal")
+    @SuppressWarnings({"deprecation", "removal"})
     static class IdentifiableEntity implements Identifiable<Long> {
 
         Long code;
