@@ -45,8 +45,10 @@ import jakarta.persistence.criteria.Predicate;
  * criteria.put("email", Like.endsWith("@foo.com")); // LOWER(email) LIKE '%@foo.com'
  * </pre>
  * <p>
- * This also works on enum and boolean fields. For enums, it will match enum constants whose name contains the search string and generate an IN predicate. For
- * booleans, it delegates to {@link Bool}.
+ * This also works on enum and boolean fields, the same way as {@link #applies(Object)}. For enums, it will match enum constants whose name contains the search
+ * string and generate an IN predicate. For booleans, it will match <code>true</code> and/or <code>false</code> when their name contains the search string, e.g.
+ * <code>Like.contains("tru")</code> matches only <code>true</code>, and a search string which matches neither, such as <code>Like.contains("foo")</code>,
+ * matches nothing. To match a boolean by a truthy or falsy value such as <code>"1"</code>, use {@link Bool#parse(Object)} instead.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -135,19 +137,38 @@ public final class Like extends Criteria<String> {
 
         if (type.isEnum() && path instanceof Path<?> p && isEnumeratedByOrdinal(p)) {
             Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
-            return matches.isEmpty()
-                ? criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1))
-                : path.in(parameterBuilder.create(matches));
+            return matches.isEmpty() ? matchNothing(criteriaBuilder, parameterBuilder) : path.in(parameterBuilder.create(matches));
         }
         else if (Bool.is(type)) {
-            Expression<Boolean> pathAsBoolean = (Expression<Boolean>) path;
-            return Bool.isTruthy(getValue()) ? criteriaBuilder.isTrue(pathAsBoolean) : criteriaBuilder.isFalse(pathAsBoolean);
+            return buildBooleanPredicate((Expression<Boolean>) path, criteriaBuilder, parameterBuilder);
         }
         else {
             boolean lowercaseable = !Numeric.is(type);
             String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
             Expression<String> pathAsString = castAsString(criteriaBuilder, path);
             return criteriaBuilder.like(lowercaseable ? lower(criteriaBuilder, pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+        }
+    }
+
+    private static Predicate matchNothing(CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        return criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1));
+    }
+
+    private Predicate buildBooleanPredicate(Expression<Boolean> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        var matchesTrue = applies(true);
+        var matchesFalse = applies(false);
+
+        if (matchesTrue && matchesFalse) {
+            return criteriaBuilder.isNotNull(path);
+        }
+        else if (matchesTrue) {
+            return criteriaBuilder.isTrue(path);
+        }
+        else if (matchesFalse) {
+            return criteriaBuilder.isFalse(path);
+        }
+        else {
+            return matchNothing(criteriaBuilder, parameterBuilder);
         }
     }
 

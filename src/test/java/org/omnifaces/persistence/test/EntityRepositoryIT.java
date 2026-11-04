@@ -25,6 +25,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_REC
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -392,6 +393,12 @@ public class EntityRepositoryIT {
             assertEquals(
                 2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", Like.contains("X"))).build(), true).size(), "Like on element collection"
             );
+            assertEquals(3, countArticles(titled, "deleted", Like.contains("fals")), "Like on boolean matching false");
+            assertEquals(0, countArticles(titled, "deleted", Like.contains("tru")), "Like on boolean matching true");
+            assertEquals(3, countArticles(titled, "deleted", Like.contains("e")), "Like on boolean matching true and false");
+            assertEquals(0, countArticles(titled, "deleted", Like.contains("foo")), "Like on boolean matching neither true nor false");
+            assertEquals(1, countArticles(titled, "flags", Like.contains("tru")), "Like on boolean element collection");
+            assertEquals(0, countArticles(titled, "flags", Like.contains("foo")), "Like on boolean element collection matching neither");
             assertEquals(
                 List.of(articles.get(2).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(Like.contains("x")))).build(), true)),
@@ -500,6 +507,12 @@ public class EntityRepositoryIT {
         category.setSlug(slug);
         category.setName(name);
         return category;
+    }
+
+    private int countArticles(Map<String, Object> criteria, String field, Object value) {
+        var allCriteria = new HashMap<>(criteria);
+        allCriteria.put(field, value);
+        return articleRepository.getPage(Page.with().allMatch(allCriteria).build(), true).size();
     }
 
     private void deleteArticles(List<Article> articles) {
