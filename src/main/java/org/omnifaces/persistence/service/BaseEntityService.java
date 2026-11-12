@@ -2629,7 +2629,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <li>Hibernate with PostgreSQL or SQL Server: always, because these databases enforce a strict <code>GROUP BY</code> which Hibernate does not add for a
      * plain <code>IN</code>.
      * <li>OpenJPA: in the data query only, because in the count query OpenJPA correlates the nested subquery with an extra cross-joined entity instead of the
-     * counted one.
+     * counted one, as it incorrectly declares the root of the enclosing subquery once more when the nested subquery refers to it.
      * <li>Hibernate with other databases: only when the value contains a {@link Criteria} or is negated, because a plain <code>IN</code> cannot express a
      * {@link Criteria}, and a negated plain <code>IN</code> on the joined elements matches any other element instead of no element.
      * </ul>

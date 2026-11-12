@@ -11,30 +11,30 @@
 -- specific language governing permissions and limitations under the License.
 --
 
-DROP TABLE hard_delete_id_enum_info IF EXISTS;
-DROP TABLE soft_delete_id_enum_info IF EXISTS;
-DROP TABLE soft_delete_id_enum_info_history IF EXISTS;
-DROP TABLE hard_delete_id_table_info IF EXISTS;
-DROP TABLE soft_delete_id_table_info IF EXISTS;
+DROP TABLE IF EXISTS hard_delete_id_enum_info;
+DROP TABLE IF EXISTS soft_delete_id_enum_info;
+DROP TABLE IF EXISTS soft_delete_id_enum_info_history;
+DROP TABLE IF EXISTS hard_delete_id_table_info;
+DROP TABLE IF EXISTS soft_delete_id_table_info;
 
-DROP TABLE hard_delete_code_enum_info IF EXISTS;
-DROP TABLE soft_delete_code_enum_info IF EXISTS;
-DROP TABLE soft_delete_code_enum_info_history IF EXISTS;
-DROP TABLE hard_delete_code_table_info IF EXISTS;
-DROP TABLE soft_delete_code_table_info IF EXISTS;
+DROP TABLE IF EXISTS hard_delete_code_enum_info;
+DROP TABLE IF EXISTS soft_delete_code_enum_info;
+DROP TABLE IF EXISTS soft_delete_code_enum_info_history;
+DROP TABLE IF EXISTS hard_delete_code_table_info;
+DROP TABLE IF EXISTS soft_delete_code_table_info;
 
-DROP TABLE hard_delete_only_id_enum_info IF EXISTS;
-DROP TABLE soft_delete_only_id_enum_info IF EXISTS;
-DROP TABLE soft_delete_only_id_enum_info_history IF EXISTS;
-DROP TABLE hard_delete_only_id_table_info IF EXISTS;
-DROP TABLE soft_delete_only_id_table_info IF EXISTS;
+DROP TABLE IF EXISTS hard_delete_only_id_enum_info;
+DROP TABLE IF EXISTS soft_delete_only_id_enum_info;
+DROP TABLE IF EXISTS soft_delete_only_id_enum_info_history;
+DROP TABLE IF EXISTS hard_delete_only_id_table_info;
+DROP TABLE IF EXISTS soft_delete_only_id_table_info;
 
-DROP TABLE hard_delete_only_code_enum_info IF EXISTS;
-DROP TABLE soft_delete_only_code_enum_info IF EXISTS;
-DROP TABLE soft_delete_only_code_enum_info_history IF EXISTS;
-DROP TABLE hard_delete_only_code_table_info IF EXISTS;
-DROP TABLE soft_delete_only_code_table_info IF EXISTS;
+DROP TABLE IF EXISTS hard_delete_only_code_enum_info;
+DROP TABLE IF EXISTS soft_delete_only_code_enum_info;
+DROP TABLE IF EXISTS soft_delete_only_code_enum_info_history;
+DROP TABLE IF EXISTS hard_delete_only_code_table_info;
+DROP TABLE IF EXISTS soft_delete_only_code_table_info;
 
-DROP TABLE table_for_another_enum IF EXISTS;
-DROP TABLE table_for_another_enum_history IF EXISTS;
-DROP TABLE yet_another_table_for_another_enum IF EXISTS;
+DROP TABLE IF EXISTS table_for_another_enum;
+DROP TABLE IF EXISTS table_for_another_enum_history;
+DROP TABLE IF EXISTS yet_another_table_for_another_enum;

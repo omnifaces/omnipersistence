@@ -21,12 +21,13 @@ on:
 
 jobs:
   test:
-    name: Run tests on ${{matrix.server}}
+    name: Run tests on ${{matrix.server}} + ${{matrix.database}}
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
       matrix:
         server: [wildfly-hibernate, glassfish-eclipselink, tomee-openjpa]
+        database: [H2, PostgreSQL]
 
     steps:
     - uses: actions/checkout@v4
@@ -36,5 +37,13 @@ jobs:
         java-version: '21'
         distribution: 'adopt'
         cache: maven
+    - name: Set up PostgreSQL (already provided by ubuntu-latest)
+      if: matrix.database == 'PostgreSQL'
+      run: |
+        sudo systemctl start postgresql.service
+        sudo -u postgres psql postgres -c "CREATE USER test WITH ENCRYPTED PASSWORD 'test';"
+        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT; do
+          sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C';"
+        done
     - name: Test with Maven
-      run: mvn -B verify -DskipUTs=false -DskipITs=false -Dmaven.javadoc.skip=true -P ${{matrix.server}}
+      run: mvn -B verify -DskipUTs=false -DskipITs=false -Dmaven.javadoc.skip=true -Dtest.database=${{matrix.database}} -P ${{matrix.server}}

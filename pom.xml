@@ -81,6 +81,9 @@
         <test.tomee.version>10.2.0</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
         <test.tomee.openjpa.version>4.1.1</test.tomee.openjpa.version> <!-- https://mvnrepository.com/artifact/org.apache.openjpa/openjpa-all --> <!-- NOTE: This must be OpenJPA version bundled in test.tomee.version -->
         <test.h2.version>2.5.252</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
+        <test.postgresql-driver.version>42.7.14</test.postgresql-driver.version> <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+        <test.postgresql.url>jdbc:postgresql://localhost:5432/</test.postgresql.url> <!-- The persistence unit name is appended as database name. -->
+        <test.database>H2</test.database> <!-- H2 or PostgreSQL -->
     </properties>
 
     <dependencies>
@@ -349,6 +352,9 @@
                     <systemPropertyVariables>
                         <profile.id>${project.activeProfiles[0].id}</profile.id>
                         <test.h2.version>${test.h2.version}</test.h2.version>
+                        <test.postgresql-driver.version>${test.postgresql-driver.version}</test.postgresql-driver.version>
+                        <test.database>${test.database}</test.database>
+                        <test.postgresql.url>${test.postgresql.url}</test.postgresql.url>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
@@ -462,7 +468,7 @@
                                 </configuration>
                             </execution>
                             <execution>
-                                <id>install-h2-in-glassfish</id>
+                                <id>install-jdbc-drivers-in-glassfish</id>
                                 <phase>process-test-classes</phase>
                                 <goals>
                                     <goal>copy</goal>
@@ -473,6 +479,13 @@
                                             <groupId>com.h2database</groupId>
                                             <artifactId>h2</artifactId>
                                             <version>${test.h2.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>org.postgresql</groupId>
+                                            <artifactId>postgresql</artifactId>
+                                            <version>${test.postgresql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
@@ -530,7 +543,7 @@
                                 </configuration>
                             </execution>
                             <execution>
-                                <id>install-h2-in-tomee</id>
+                                <id>install-jdbc-drivers-in-tomee</id>
                                 <phase>process-test-classes</phase>
                                 <goals>
                                     <goal>copy</goal>
@@ -541,6 +554,13 @@
                                             <groupId>com.h2database</groupId>
                                             <artifactId>h2</artifactId>
                                             <version>${test.h2.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>org.postgresql</groupId>
+                                            <artifactId>postgresql</artifactId>
+                                            <version>${test.postgresql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>
