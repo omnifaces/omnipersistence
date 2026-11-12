@@ -382,9 +382,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param entity The entity, may be a proxy.
      * @return The ID of the given entity, or <code>null</code> when it has none, e.g. when it has a generated ID and is not persisted yet.
      * @throws IllegalArgumentException When the given entity is not an entity, or has an unsupported ID.
+     * @since 2.0
      */
     @SuppressWarnings("unchecked")
-    protected I getId(E entity) {
+    public I getId(E entity) {
         return (I) idGetter.apply(entity);
     }
 
