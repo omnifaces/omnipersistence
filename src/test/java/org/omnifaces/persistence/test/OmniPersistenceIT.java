@@ -1625,7 +1625,7 @@ public abstract class OmniPersistenceIT {
     private static List<String> auditedValueChanges() {
         return TestAuditListener.getChanges().stream()
             .filter(change -> "value".equals(change.getPropertyName()))
-            .map(change -> change.getOldValue() + " -> " + change.getNewValue())
+            .map(change -> change.getEntityId() + ": " + change.getOldValue() + " -> " + change.getNewValue())
             .toList();
     }
 
@@ -1633,28 +1633,33 @@ public abstract class OmniPersistenceIT {
     void testAuditTracksChangesOfSameEntityInConcurrentPersistenceContexts() {
         var config = persistAuditedConfig("audit.concurrent", "original");
         configService().updateValueWhileConcurrentlyUpdated(config.getId(), "outer", () -> plainConfigUpdater.updateValue(config.getId(), "inner"));
-        assertEquals(List.of("original -> inner", "original -> outer"), auditedValueChanges(), "Both changes were audited against their own snapshot");
+        assertEquals(
+            List.of(config.getId() + ": original -> inner", config.getId() + ": original -> outer"), auditedValueChanges(),
+            "Both changes were audited against their own snapshot"
+        );
     }
 
     @Test
     void testAuditTracksEachChangeOfSameEntityInSamePersistenceContext() {
         var config = persistAuditedConfig("audit.twice", "original");
         configService().updateValueTwice(config.getId(), "first", "second");
-        assertEquals(List.of("original -> first", "first -> second"), auditedValueChanges(), "Each flushed change was audited");
+        assertEquals(
+            List.of(config.getId() + ": original -> first", config.getId() + ": first -> second"), auditedValueChanges(), "Each flushed change was audited"
+        );
     }
 
     @Test
     void testAuditTracksChangeOutsideService() {
         var config = persistAuditedConfig("audit.plain", "original");
         plainConfigUpdater.updateValue(config.getId(), "plain");
-        assertEquals(List.of("original -> plain"), auditedValueChanges(), "Change via plain entity manager was audited");
+        assertEquals(List.of(config.getId() + ": original -> plain"), auditedValueChanges(), "Change via plain entity manager was audited");
     }
 
     @Test
     void testAuditTracksValueChange() {
         var config = persistAuditedConfig("audit.key", "original");
         configService().updateValue(config.getId(), "modified");
-        assertEquals(List.of("original -> modified"), auditedValueChanges(), "Value change was audited");
+        assertEquals(List.of(config.getId() + ": original -> modified"), auditedValueChanges(), "Value change was audited");
     }
 
     @Test
@@ -1663,7 +1668,7 @@ public abstract class OmniPersistenceIT {
         var detachedConfig = configService().getById(config.getId());
         detachedConfig.setValue("modified");
         configService().update(detachedConfig);
-        assertEquals(List.of("original -> modified"), auditedValueChanges(), "Value change of detached entity was audited");
+        assertEquals(List.of(config.getId() + ": original -> modified"), auditedValueChanges(), "Value change of detached entity was audited");
     }
 
     @Test

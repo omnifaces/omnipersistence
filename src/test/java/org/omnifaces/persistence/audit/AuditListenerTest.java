@@ -13,16 +13,21 @@
 package org.omnifaces.persistence.audit;
 
 import static java.lang.management.ManagementFactory.getRuntimeMXBean;
+import static java.util.Collections.singletonList;
 import static java.util.stream.IntStream.range;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import java.io.Serializable;
 import java.util.List;
 
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
+import jakarta.persistence.MappedSuperclass;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
@@ -104,6 +109,75 @@ class AuditListenerTest {
     }
 
     @Test
+    void entityIdOfBaseEntityIsItsId() {
+        var entity = loaded(new AuditedEntity(), "old");
+        entity.setValue("new");
+        assertEquals(List.of(1L), entityIds(entity));
+    }
+
+    @Test
+    void entityIdOfEntityWithoutBaseEntityIsItsIdField() {
+        var entity = new PlainAuditedEntity();
+        entity.setCode(42L);
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        assertEquals(List.of(42L), entityIds(entity));
+    }
+
+    @Test
+    void entityIdOfEntityWithIdOnGetterIsItsIdGetter() {
+        var entity = new PropertyAccessAuditedEntity();
+        entity.setKey("k");
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        assertEquals(List.of("k"), entityIds(entity));
+    }
+
+    @Test
+    void entityIdOfEntityWithEmbeddedIdIsItsEmbeddedId() {
+        var entity = new EmbeddedIdAuditedEntity();
+        var id = new CompositeId(1L, 2L);
+        entity.setId(id);
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        assertEquals(List.of(id), entityIds(entity));
+    }
+
+    @Test
+    void entityIdOfEntityWithIdInMappedSuperclassIsItsIdField() {
+        var entity = new MappedSuperclassAuditedEntity();
+        entity.setCode(42L);
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        assertEquals(List.of(42L), entityIds(entity));
+    }
+
+    @Test
+    void entityIdIsSameForEachChangeOfOneUpdate() {
+        var entity = new TwoAuditedFieldsEntity();
+        entity.setCode(42L);
+        entity.setValue("old");
+        entity.setOther("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        entity.setOther("new");
+        assertEquals(List.of(42L, 42L), entityIds(entity));
+    }
+
+    @Test
+    void entityIdOfEntityWithIdClassIsNull() {
+        var entity = new CompositeIdAuditedEntity();
+        entity.setValue("old");
+        listener.beforeUpdate(entity);
+        entity.setValue("new");
+        assertEquals(singletonList(null), entityIds(entity));
+    }
+
+    @Test
     void entityWithoutSnapshotHasNoChanges() {
         var entity = new AuditedEntity();
         entity.setValue("new");
@@ -177,6 +251,10 @@ class AuditListenerTest {
         return AuditListener.detectChanges(entity).stream().map(AuditedChange::getEntityName).toList();
     }
 
+    private static List<Object> entityIds(Object entity) {
+        return AuditListener.detectChanges(entity).stream().map(AuditedChange::getEntityId).toList();
+    }
+
     private static List<String> changes(Object entity) {
         return AuditListener.detectChanges(entity).stream()
             .map(change -> change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue())
@@ -227,6 +305,10 @@ class AuditListenerTest {
         @Audit
         private String value;
 
+        public void setCode(Long code) {
+            this.code = code;
+        }
+
         public String getValue() {
             return value;
         }
@@ -257,6 +339,137 @@ class AuditListenerTest {
     }
 
     public static class NamedAuditedSubclass extends NamedAuditedEntity {
+    }
+
+    @Entity
+    public static class PropertyAccessAuditedEntity {
+
+        private String key;
+
+        @Audit
+        private String value;
+
+        @Id
+        public String getKey() {
+            return key;
+        }
+
+        public void setKey(String key) {
+            this.key = key;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+    }
+
+    @Entity
+    @IdClass(CompositeId.class)
+    public static class CompositeIdAuditedEntity {
+
+        @Id
+        private Long first;
+
+        @Id
+        private Long second;
+
+        @Audit
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+    }
+
+    public record CompositeId(Long first, Long second) implements Serializable {
+    }
+
+    @Entity
+    public static class EmbeddedIdAuditedEntity {
+
+        @EmbeddedId
+        private CompositeId id;
+
+        @Audit
+        private String value;
+
+        public void setId(CompositeId id) {
+            this.id = id;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+    }
+
+    @MappedSuperclass
+    public abstract static class CodedEntity {
+
+        @Id
+        private Long code;
+
+        public void setCode(Long code) {
+            this.code = code;
+        }
+
+    }
+
+    @Entity
+    public static class MappedSuperclassAuditedEntity extends CodedEntity {
+
+        @Audit
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+    }
+
+    @Entity
+    public static class TwoAuditedFieldsEntity extends CodedEntity {
+
+        @Audit
+        private String value;
+
+        @Audit
+        private String other;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
+
+        public String getOther() {
+            return other;
+        }
+
+        public void setOther(String other) {
+            this.other = other;
+        }
+
     }
 
 }

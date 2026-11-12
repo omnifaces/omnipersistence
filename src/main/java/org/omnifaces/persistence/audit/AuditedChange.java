@@ -12,6 +12,12 @@
  */
 package org.omnifaces.persistence.audit;
 
+import jakarta.persistence.EmbeddedId;
+import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
+
+import org.omnifaces.persistence.model.BaseEntity;
+
 /**
  * <p>
  * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a Jakarta Persistence {@code @PreUpdate} lifecycle
@@ -24,8 +30,7 @@ package org.omnifaces.persistence.audit;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     YourEntity entity = change.getEntity();
- *     log.setEntityId(entity.getId());
+ *     log.setEntityId(change.getEntityId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));
@@ -41,13 +46,15 @@ package org.omnifaces.persistence.audit;
 public class AuditedChange {
 
     private final Object entity;
+    private final Object entityId;
     private final String entityName;
     private final String propertyName;
     private final Object oldValue;
     private final Object newValue;
 
-    AuditedChange(Object entity, String entityName, String propertyName, Object oldValue, Object newValue) {
+    AuditedChange(Object entity, Object entityId, String entityName, String propertyName, Object oldValue, Object newValue) {
         this.entity = entity;
+        this.entityId = entityId;
         this.entityName = entityName;
         this.propertyName = propertyName;
         this.oldValue = oldValue;
@@ -64,6 +71,22 @@ public class AuditedChange {
     @SuppressWarnings("unchecked")
     public <E> E getEntity() {
         return (E) entity;
+    }
+
+    /**
+     * Returns the ID of the entity that was changed: via {@link BaseEntity#getId()} when it extends it, else via its single attribute annotated with {@link Id}
+     * or {@link EmbeddedId}, on its field, or else on its getter as declared by the entity class itself. A getter which overrides an annotated getter without
+     * repeating the annotation is not recognized, because annotations on methods are not inherited.
+     *
+     * @param <I> The generic ID type.
+     * @return The ID of the entity that was changed, or <code>null</code> when it has none, or when its ID is not a single annotated attribute, e.g. when it is
+     * mapped by an {@link IdClass} or only in <code>orm.xml</code>.
+     * @throws ClassCastException When <code>I</code> is of wrong type.
+     * @since 2.0
+     */
+    @SuppressWarnings("unchecked")
+    public <I> I getEntityId() {
+        return (I) entityId;
     }
 
     /**
