@@ -2615,7 +2615,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return buildInPredicate(alias, path, type, value, criteriaBuilder, parameterBuilder);
         }
         else {
-            // Count query on OpenJPA or Hibernate with PostgreSQL or SQL Server, see isElementCollectionSubqueried; the count ignores this criteria.
+            // Count query on OpenJPA, see isElementCollectionSubqueried; the count ignores this criteria.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
@@ -2626,18 +2626,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>IN</code> by {@link #buildInPredicate}.
      * <ul>
      * <li>EclipseLink: always, because a plain <code>IN</code> causes a cartesian product.
-     * <li>OpenJPA and Hibernate with PostgreSQL or SQL Server: in the data query only, because these cannot resolve the nested correlated subquery in the count
-     * query. Hibernate with PostgreSQL or SQL Server also cannot use a plain <code>IN</code> in the data query, because these databases enforce a strict
-     * <code>GROUP BY</code> which Hibernate does not add.
+     * <li>Hibernate with PostgreSQL or SQL Server: always, because these databases enforce a strict <code>GROUP BY</code> which Hibernate does not add for a
+     * plain <code>IN</code>.
+     * <li>OpenJPA: in the data query only, because in the count query OpenJPA correlates the nested subquery with an extra cross-joined entity instead of the
+     * counted one.
      * <li>Hibernate with other databases: only when the value contains a {@link Criteria} or is negated, because a plain <code>IN</code> cannot express a
      * {@link Criteria}, and a negated plain <code>IN</code> on the joined elements matches any other element instead of no element.
      * </ul>
      */
     private boolean isElementCollectionSubqueried(AbstractQuery<?> query, Object value, boolean negated) {
-        if (provider == ECLIPSELINK) {
+        if (provider == ECLIPSELINK || provider == HIBERNATE && (database == POSTGRESQL || database == SQLSERVER)) {
             return true;
         }
-        else if (isBrokenSubqueryProvider()) {
+        else if (provider == OPENJPA) {
             return !(query instanceof Subquery);
         }
         else {
@@ -2674,10 +2675,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private static Object unwrapNot(Object criteria) {
         return criteria instanceof Not not ? not.getValue() : criteria;
-    }
-
-    private boolean isBrokenSubqueryProvider() {
-        return provider == OPENJPA || provider == HIBERNATE && (database == POSTGRESQL || database == SQLSERVER);
     }
 
     @SuppressWarnings("unchecked")
