@@ -18,6 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OPENJPA;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA_COUNT;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.PROFILE_ID;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_RECORDS;
@@ -39,6 +43,7 @@ import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
@@ -66,6 +71,8 @@ import org.omnifaces.persistence.test.service.TransactionServiceEJB;
 public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
+    private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
+    private static final String NO_LAZY_PROXY = "EclipseLink and OpenJPA return a loaded plain instance for a lazy @ManyToOne, not a proxy";
 
     @Deployment
     public static WebArchive createDeployment() {
@@ -113,11 +120,8 @@ public class EntityRepositoryIT {
     }
 
     @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not support EntityManager#getEntityGraph()")
     void testGetByIdWithLoadGraph() {
-        if (OmniPersistenceIT.isOpenJPA()) {
-            return; // OpenJPA does not support EntityManager#getEntityGraph().
-        }
-
         var person = personRepository.getByIdWithLoadGraph(1L, Person.WITH_PHONES);
         assertTrue(personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil().isLoaded(person, "phones"), "Phones are loaded");
         assertEquals(TOTAL_PHONES_PER_PERSON_0, person.getPhones().size(), "Phones loaded by entity graph");
@@ -275,21 +279,27 @@ public class EntityRepositoryIT {
     }
 
     @Test
+    void testDeleteOfLazyAssociation() {
+        deleteLazyCategory("lazy");
+        assertNull(categoryRepository.getById("lazy"), "Deleted category");
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = MANAGED_ID_IMMUTABLE)
     void testDeleteOfLazyAssociationUnsetsItsId() {
-        var category = newCategory("lazy", "Lazy");
+        assertNull(deleteLazyCategory("unset").getSlug(), "Slug is unset after delete");
+    }
+
+    private Category deleteLazyCategory(String slug) {
+        var category = newCategory(slug, slug);
         transactionServiceCDI.run(() -> categoryRepository.persist(category));
-        var article = persistArticle("lazy", category);
-        var lazyCategory = transactionServiceCDI.call(() -> {
+        var article = persistArticle(slug, category);
+        return transactionServiceCDI.call(() -> {
             var reference = articleRepository.getById(article.getCode()).getCategory();
             articleRepository.delete(article);
             categoryRepository.delete(reference);
             return reference;
         });
-        assertNull(categoryRepository.getById("lazy"), "Deleted category");
-
-        if (!OmniPersistenceIT.isEclipseLink() && !OmniPersistenceIT.isOpenJPA()) {
-            assertNull(lazyCategory.getSlug(), "Slug is unset after delete");
-        }
     }
 
     @Test
@@ -306,16 +316,30 @@ public class EntityRepositoryIT {
                 articleRepository.persist(article);
             });
             assertEquals(article.getCode(), articleRepository.getId(article), "Generated code after persist");
-            var lazyCategory = transactionServiceCDI.call(() -> {
+            var slug = transactionServiceCDI.call(() -> categoryRepository.getId(articleRepository.getById(article.getCode()).getCategory()));
+            assertEquals("getid", slug, "Slug of lazy category");
+        }
+        finally {
+            deleteArticles(List.of(article));
+            deleteCategories(List.of(category));
+        }
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = NO_LAZY_PROXY)
+    void testGetIdOfLazyAssociationKeepsProxyUninitialized() {
+        var category = newCategory("proxy", "Proxy");
+        transactionServiceCDI.run(() -> categoryRepository.persist(category));
+        var article = persistArticle("proxy", category);
+
+        try {
+            var proxyState = transactionServiceCDI.call(() -> {
                 var reference = articleRepository.getById(article.getCode()).getCategory();
                 var provider = categoryRepository.getProvider();
-                return List.of(categoryRepository.getId(reference), provider.isProxy(reference), provider.isProxyUninitialized(reference));
+                categoryRepository.getId(reference);
+                return List.of(provider.isProxy(reference), provider.isProxyUninitialized(reference));
             });
-            assertEquals("getid", lazyCategory.get(0), "Slug of lazy category");
-
-            if (!OmniPersistenceIT.isEclipseLink() && !OmniPersistenceIT.isOpenJPA()) {
-                assertEquals(List.of(true, true), lazyCategory.subList(1, 3), "Lazy category is a proxy which stays uninitialized");
-            }
+            assertEquals(List.of(true, true), proxyState, "Lazy category is a proxy which stays uninitialized");
         }
         finally {
             deleteArticles(List.of(article));
@@ -350,6 +374,26 @@ public class EntityRepositoryIT {
         }
         finally {
             deleteArticles(List.of(article));
+        }
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testCountOfNegatedElementCollectionCriteria() {
+        var category = newCategory("count", "Count");
+        var articles = new ArrayList<Article>();
+
+        try {
+            transactionServiceCDI.run(() -> categoryRepository.persist(category));
+            articles.add(persistArticle("count-a", category, "x", "y"));
+            articles.add(persistArticle("count-b", category, "x", "xy"));
+            articles.add(persistArticle("count-c", category));
+            var notAllOf = articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(List.of("x", "y")))).build(), true);
+            assertEquals(2, notAllOf.getEstimatedTotalNumberOfResults(), "Count of not all of element collection");
+        }
+        finally {
+            deleteArticles(articles);
+            deleteCategories(List.of(category));
         }
     }
 
@@ -430,10 +474,6 @@ public class EntityRepositoryIT {
             );
             var notAllOf = articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(List.of("x", "y")))).build(), true);
             assertEquals(List.of(articles.get(2).getCode(), articles.get(1).getCode()), codesOf(notAllOf), "Not all of element collection");
-
-            if (!OmniPersistenceIT.isOpenJPA()) { // OpenJPA skips a negated element collection criteria in the count query.
-                assertEquals(2, notAllOf.getEstimatedTotalNumberOfResults(), "Count of not all of element collection");
-            }
             assertEquals(
                 List.of(articles.get(2).getCode(), articles.get(1).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(List.of(Like.contains("x"), "y")))).build(), true)),

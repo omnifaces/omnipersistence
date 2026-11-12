@@ -204,7 +204,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
     private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
     private static final String LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER = "Cannot order by %s in a distinct query which does not select it, skipping! The query is distinct because it joins a collection. Consider using DTO mapping or DB view instead.";
-    private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults may be slightly inaccurate. Consider using DTO mapping or DB view instead.";
+    private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults ignores this criteria. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
     private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
@@ -2615,7 +2615,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return buildInPredicate(alias, path, type, value, criteriaBuilder, parameterBuilder);
         }
         else {
-            // Count query on OpenJPA or Hibernate with PostgreSQL or SQL Server, see isElementCollectionSubqueried; the count may be too high.
+            // Count query on OpenJPA or Hibernate with PostgreSQL or SQL Server, see isElementCollectionSubqueried; the count ignores this criteria.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
@@ -2712,8 +2712,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var oneToManyField = oneToManys.test(field);
 
         if (oneToManyField && provider == OPENJPA && query instanceof Subquery) {
-            // OpenJPA generates broken nested correlated subqueries for @OneToMany in count subquery context; count may be slightly inaccurate, which is
-            // acceptable for this known OpenJPA limitation.
+            // OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity; the count ignores this criteria.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }

@@ -55,6 +55,7 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.criteria.Between;
 import org.omnifaces.persistence.criteria.Criteria;
@@ -88,6 +89,12 @@ import org.omnifaces.utils.collection.PartialResultList;
 
 @ExtendWith(ArquillianExtension.class)
 public abstract class OmniPersistenceIT {
+
+    static final String PROFILE_ID = "profile.id";
+    static final String OPENJPA = ".*-openjpa";
+    static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
+    static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
+        + " so this criteria is left out of the count query";
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
@@ -615,16 +622,28 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testNegatedSingleCriteriaOnOneToManyMatchesEntitiesWithoutMatchingElement() {
-        var expectedIds = personService().getAllWithPhones().stream()
-            .filter(person -> person.getPhones().stream().noneMatch(phone -> phone.getNumber().contains("1")))
-            .map(Person::getId).collect(toSet());
-        var result = personService().getPage(Page.with().allMatch(Map.of("phones.number", Not.value(Like.contains("1")))).build(), true);
+        var expectedIds = idsOfPersonsWithoutPhoneNumberContaining1();
+        var result = pageOfPersonsWithoutPhoneNumberContaining1();
         assertFalse(expectedIds.isEmpty(), "Some persons have no phone number containing 1");
         assertEquals(expectedIds, result.stream().map(Person::getId).collect(toSet()), "Persons without matching phone number");
+    }
 
-        if (!isOpenJPA()) { // OpenJPA skips a negated criteria on a @OneToMany in the count query.
-            assertEquals(expectedIds.size(), result.getEstimatedTotalNumberOfResults(), "Count");
-        }
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testNegatedSingleCriteriaOnOneToManyCountsEntitiesWithoutMatchingElement() {
+        assertEquals(
+            idsOfPersonsWithoutPhoneNumberContaining1().size(), pageOfPersonsWithoutPhoneNumberContaining1().getEstimatedTotalNumberOfResults(), "Count"
+        );
+    }
+
+    private Set<Long> idsOfPersonsWithoutPhoneNumberContaining1() {
+        return personService().getAllWithPhones().stream()
+            .filter(person -> person.getPhones().stream().noneMatch(phone -> phone.getNumber().contains("1")))
+            .map(Person::getId).collect(toSet());
+    }
+
+    private PartialResultList<Person> pageOfPersonsWithoutPhoneNumberContaining1() {
+        return personService().getPage(Page.with().allMatch(Map.of("phones.number", Not.value(Like.contains("1")))).build(), true);
     }
 
     @Test
@@ -662,20 +681,24 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithPhonesFilteredByTypeSet() {
-        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
+        var result = pageWithMobilePhones();
         assertFalse(result.isEmpty(), "Some persons have MOBILE phones");
-        if (!isOpenJPA()) {
-            assertTrue(result.getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones"); // OpenJPA generates broken nested
-                                                                                                                         // correlated subqueries for @OneToMany
-                                                                                                                         // in count subquery context, so the
-                                                                                                                         // count is inaccurate there.
-        }
         result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Filtered person has phones"));
         result.forEach(
             person -> person.getPhones().forEach(
                 phone -> assertEquals(Phone.Type.MOBILE, phone.getType(), "Only MOBILE phones remain after in-memory filtering of postponed fetch")
             )
         );
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testPageWithPhonesFilteredByTypeSetCountsOnlyMatchingPersons() {
+        assertTrue(pageWithMobilePhones().getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones");
+    }
+
+    private PartialResultList<Person> pageWithMobilePhones() {
+        return personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
     }
 
     @Test
