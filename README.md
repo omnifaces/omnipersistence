@@ -454,6 +454,10 @@ The entity can still be soft-deleted if it also carries `@SoftDeletable`.
 
 Add `@EntityListeners(AuditListener.class)` to the entity and mark audited fields with `@Audit`. Whenever a marked field changes, `AuditListener` fires a CDI `AuditedChange` event — no subclassing required.
 
+Only updates are audited.
+For persist and delete, observe the CDI events `@Created` and `@Deleted` instead.
+`BaseEntityListener` fires them for every entity extending `BaseEntity`, and for any other entity which declares it, e.g. `@EntityListeners({ BaseEntityListener.class, AuditListener.class })`.
+
 **Entity**
 
 ```java
@@ -476,10 +480,9 @@ public class Config extends GeneratedIdEntity<Long> {
 public class AuditLog {
 
     public void onAuditedChange(@Observes AuditedChange change) {
-        Config config = change.getEntity();
         System.out.printf("[AUDIT] %s#%s.%s: %s → %s%n",
             change.getEntityName(),
-            config.getId(),
+            change.getEntityId(),
             change.getPropertyName(),
             change.getOldValue(),
             change.getNewValue());
@@ -487,7 +490,7 @@ public class AuditLog {
 }
 ```
 
-`AuditedChange` carries the full entity reference, entity name, property name, old value and new value. The event is only fired when the value actually changes (old ≠ new).
+`AuditedChange` carries the full entity reference, entity ID, entity name, property name, old value and new value. The event is only fired when the value actually changes (old ≠ new).
 
 ---
 
@@ -849,7 +852,7 @@ In the source, these changes need your attention:
 
 - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
 - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
-- `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first.
+- `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
 
 OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 

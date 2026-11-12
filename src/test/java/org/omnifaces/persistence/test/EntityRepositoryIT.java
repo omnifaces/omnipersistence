@@ -472,10 +472,7 @@ public class EntityRepositoryIT {
 
     private static List<String> auditedArticleChanges() {
         return TestAuditListener.getChanges().stream()
-            .map(change -> {
-                Article article = change.getEntity();
-                return article.getCode() + "." + change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue();
-            })
+            .map(change -> change.getEntityId() + "." + change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue())
             .toList();
     }
 

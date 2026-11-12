@@ -15,9 +15,9 @@ package org.omnifaces.persistence.audit;
 import static java.beans.Introspector.getBeanInfo;
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toSet;
+import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
-import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.beans.IntrospectionException;
 import java.beans.PropertyDescriptor;
@@ -28,16 +28,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Id;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PreUpdate;
 
 import org.omnifaces.persistence.Provider;
+import org.omnifaces.persistence.event.Created;
+import org.omnifaces.persistence.event.Deleted;
+import org.omnifaces.persistence.listener.BaseEntityListener;
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
@@ -56,6 +64,12 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * context are audited, so an entity which is persisted and then modified in the same persistence context is not audited. Each flush of a change is audited
  * against the values of the previous flush. The {@link Audit} fields must be of a basic type, such as a string, number, date or enum, and not an entity or
  * collection, because the values are kept until the entity instance itself is released.
+ * <p>
+ * Only updates are audited. For persist and delete, observe the CDI events {@link Created} and {@link Deleted} instead. {@link BaseEntityListener} fires them
+ * for every entity extending {@code BaseEntity}, and for any other entity which declares it in {@link EntityListeners}.
+ * <p>
+ * The values of the {@link Audit} fields and the ID are read via reflection during {@link PreUpdate}. When reading fails, for example because reflective access
+ * is refused, an {@link IllegalStateException} is thrown, which aborts the flush.
  * <p>
  * Entity example:
  *
@@ -79,8 +93,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
  *     YourAuditLog log = new YourAuditLog();
  *     log.setEntityName(change.getEntityName());
- *     YourEntity entity = change.getEntity();
- *     log.setEntityId(entity.getId());
+ *     log.setEntityId(change.getEntityId());
  *     log.setPropertyName(change.getPropertyName());
  *     log.setOldValue(Objects.toString(change.getOldValue(), null));
  *     log.setNewValue(Objects.toString(change.getNewValue(), null));
@@ -100,6 +113,15 @@ public class AuditListener {
         @Override
         protected List<PropertyDescriptor> computeValue(Class<?> type) {
             return computeAuditableProperties(type);
+        }
+
+    };
+
+    private static final ClassValue<Function<Object, Object>> ID_GETTERS = new ClassValue<>() {
+
+        @Override
+        protected Function<Object, Object> computeValue(Class<?> type) {
+            return computeIdGetter(type);
         }
 
     };
@@ -181,12 +203,17 @@ public class AuditListener {
         var newValues = readValues(entity, AUDITABLE_PROPERTIES.get(entity.getClass()));
         SNAPSHOTS.put(entity, newValues);
         var changes = new ArrayList<AuditedChange>();
+        Object entityId = null;
 
         for (var newValue : newValues.entrySet()) {
             var oldValue = oldValues.get(newValue.getKey());
 
             if (!Objects.equals(oldValue, newValue.getValue())) {
-                changes.add(new AuditedChange(entity, Provider.getEntityName(entity.getClass()), newValue.getKey(), oldValue, newValue.getValue()));
+                if (changes.isEmpty()) {
+                    entityId = ID_GETTERS.get(entity.getClass()).apply(entity);
+                }
+
+                changes.add(new AuditedChange(entity, entityId, Provider.getEntityName(entity.getClass()), newValue.getKey(), oldValue, newValue.getValue()));
             }
         }
 
@@ -196,8 +223,38 @@ public class AuditListener {
     private static List<PropertyDescriptor> computeAuditableProperties(Class<?> type) {
         var auditableFieldNames = listAnnotatedFields(type, Audit.class).stream().map(Field::getName).collect(toSet());
 
+        return getPropertyDescriptors(type).stream().filter(property -> auditableFieldNames.contains(property.getName())).toList();
+    }
+
+    private static Function<Object, Object> computeIdGetter(Class<?> type) {
+        if (BaseEntity.class.isAssignableFrom(type)) {
+            return entity -> ((BaseEntity<?>) entity).getId();
+        }
+
+        var idFields = listAnnotatedFields(type, Id.class);
+        idFields.addAll(listAnnotatedFields(type, EmbeddedId.class));
+
+        if (!idFields.isEmpty()) {
+            return singleOrNull(idFields, (entity, idField) -> accessField(entity, idField));
+        }
+
+        var idGetters = getPropertyDescriptors(type).stream().map(PropertyDescriptor::getReadMethod).filter(Objects::nonNull)
+            .filter(getter -> getter.isAnnotationPresent(Id.class) || getter.isAnnotationPresent(EmbeddedId.class)).toList();
+        return singleOrNull(idGetters, (entity, idGetter) -> invokeMethod(entity, idGetter));
+    }
+
+    private static <M> Function<Object, Object> singleOrNull(List<M> idMembers, BiFunction<Object, M, Object> reader) {
+        if (idMembers.size() != 1) {
+            return entity -> null;
+        }
+
+        var idMember = idMembers.get(0);
+        return entity -> reader.apply(entity, idMember);
+    }
+
+    private static List<PropertyDescriptor> getPropertyDescriptors(Class<?> type) {
         try {
-            return stream(getBeanInfo(type).getPropertyDescriptors()).filter(property -> auditableFieldNames.contains(property.getName())).toList();
+            return List.of(getBeanInfo(type).getPropertyDescriptors());
         }
         catch (IntrospectionException e) {
             throw new UnsupportedOperationException(e);
