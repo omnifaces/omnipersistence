@@ -832,7 +832,7 @@ OmniPersistence is **exclusively Jakarta Persistence (relational)**. It exposes 
 
 ## 14. Integration tests and further examples
 
-OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, PostgreSQL and SQL Server:
+OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, MySQL, PostgreSQL and SQL Server:
 
 | Server | JPA Provider |
 |---|---|
@@ -842,7 +842,7 @@ OmniPersistence ships its own Arquillian-based integration test suite. Every sce
 
 The tests cover CRUD, paginated queries, all `Criteria` types, `@OneToMany` and `@ElementCollection` filtering and ordering, cursor-based paging, DTO projection, soft delete, `@NonDeletable`, auditing, and provider/database detection.
 
-More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`. OptimusFaces also carries a more elaborate integration test suite that exercises the full DataTable behavior against all supported databases: **H2**, **MySQL**, **PostgreSQL**, **SQL Server** and **DB2** (OmniPersistence itself runs its own integration tests against H2, PostgreSQL and SQL Server only).
+More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`. OptimusFaces also carries a more elaborate integration test suite that exercises the full DataTable behavior against all supported databases: **H2**, **MySQL**, **PostgreSQL**, **SQL Server** and **DB2** (OmniPersistence itself runs its own integration tests against H2, MySQL, PostgreSQL and SQL Server only).
 
 
 ## 15. Upgrading from 1.x

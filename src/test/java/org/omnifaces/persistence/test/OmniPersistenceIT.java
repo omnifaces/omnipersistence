@@ -119,6 +119,7 @@ public abstract class OmniPersistenceIT {
                 maven
                     .resolve(
                         "com.h2database:h2:" + getProperty("test.h2.version"),
+                        "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version"),
                         "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version"),
                         "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version")
                     )
@@ -136,6 +137,11 @@ public abstract class OmniPersistenceIT {
                 "${dataSourceClassName}", "org.h2.jdbcx.JdbcDataSource",
                 "${dataSourceUrl}", "jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY",
                 "${dataSourceCredentials}", ""
+            );
+            case MYSQL -> Map.of(
+                "${dataSourceClassName}", "com.mysql.cj.jdbc.MysqlDataSource",
+                "${dataSourceUrl}", getProperty("test.mysql.url") + persistenceUnitName + "?fallbackToSystemKeyStore=false", // Avoids GlassFish keystore.
+                "${dataSourceCredentials}", credentialsOf("test", "test")
             );
             case POSTGRESQL -> Map.of(
                 "${dataSourceClassName}", "org.postgresql.ds.PGSimpleDataSource",
