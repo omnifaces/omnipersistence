@@ -90,7 +90,10 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
             );
             mapping.put(PersonCard::getTotalPhones, builder.count(personPhones));
 
-            query.groupBy(personAddress);
+            query.groupBy(
+                person.get("id"), person.get("email"), personAddress.get("street"), personAddress.get("houseNumber"), personAddress.get("postcode"),
+                personAddress.get("city"), personAddress.get("country")
+            );
             return mapping;
         });
     }

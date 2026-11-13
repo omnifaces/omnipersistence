@@ -118,7 +118,9 @@ public abstract class OmniPersistenceIT {
             .addAsLibraries(
                 maven
                     .resolve(
-                        "com.h2database:h2:" + getProperty("test.h2.version"), "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version")
+                        "com.h2database:h2:" + getProperty("test.h2.version"),
+                        "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version"),
+                        "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version")
                     )
                     .withTransitivity().asFile()
             );
@@ -138,12 +140,23 @@ public abstract class OmniPersistenceIT {
             case POSTGRESQL -> Map.of(
                 "${dataSourceClassName}", "org.postgresql.ds.PGSimpleDataSource",
                 "${dataSourceUrl}", getProperty("test.postgresql.url") + persistenceUnitName,
-                "${dataSourceCredentials}",
-                "<user>test</user><password>test</password>"
-                    + "<property><name>user</name><value>test</value></property><property><name>password</name><value>test</value></property>"
+                "${dataSourceCredentials}", credentialsOf("test", "test")
+            );
+            case SQLSERVER -> Map.of(
+                "${dataSourceClassName}", "com.microsoft.sqlserver.jdbc.SQLServerDataSource",
+                "${dataSourceUrl}", getProperty("test.sqlserver.url") + persistenceUnitName,
+                "${dataSourceCredentials}", credentialsOf("test", "PassW0rd!")
             );
             default -> throw new UnsupportedOperationException(database.name());
         };
+    }
+
+    /**
+     * Returns the given credentials as elements as well as properties of the data source, because TomEE ignores the elements.
+     */
+    private static String credentialsOf(String user, String password) {
+        return "<user>" + user + "</user><password>" + password + "</password>"
+            + "<property><name>user</name><value>" + user + "</value></property><property><name>password</name><value>" + password + "</value></property>";
     }
 
     private static String substitute(String resourceName, String persistenceUnitName) {
