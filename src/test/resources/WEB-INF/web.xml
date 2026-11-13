@@ -21,11 +21,5 @@
 >
     <display-name>OmniPersistenceIT</display-name>
 
-    <data-source>
-        <name>java:app/${persistenceUnitName}</name>
-        <class-name>${dataSourceClassName}</class-name>
-        <url>${dataSourceUrl}</url>${dataSourceCredentials}
-        <transactional>true</transactional>
-        <isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>
-    </data-source>
+    ${dataSource}
 </web-app>
