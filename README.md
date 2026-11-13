@@ -854,9 +854,14 @@ OmniPersistence ships its own Arquillian-based integration test suite. Every sce
 | GlassFish | EclipseLink |
 | TomEE | OpenJPA |
 
-The tests cover CRUD, paginated queries, all `Criteria` types, `@OneToMany` and `@ElementCollection` filtering and ordering, cursor-based paging, DTO projection, soft delete, `@NonDeletable`, auditing, and provider/database detection.
+The tests cover CRUD, soft delete, `@NonDeletable`, auditing, and provider/database detection.
+They cover paginated queries with offset based and value based paging, also on nullable fields, multiple fields and DTO projections.
+They cover all `Criteria` types, also `null`, `Not` and `Like.pattern()`, on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
+They also cover the fetched elements of fetch fields, and the agreement of `Criteria#applies()` with the SQL.
 
-More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`. OptimusFaces also carries a more elaborate integration test suite that exercises the full DataTable behavior against the same databases.
+More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`.
+OptimusFaces translates the DataTable state into a `Page` with `Criteria`, and every query shape which it generates is covered by the integration tests of OmniPersistence on all databases.
+The integration tests of OptimusFaces therefore run on H2 only, and cover the DataTable behavior itself.
 
 
 ## 15. Upgrading from 1.x
