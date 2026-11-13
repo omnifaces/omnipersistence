@@ -13,19 +13,27 @@
 package org.omnifaces.persistence.criteria;
 
 import static java.util.stream.Collectors.toSet;
+import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
 import static org.omnifaces.persistence.JPA.castAsString;
+import static org.omnifaces.persistence.JPA.escapeLike;
+import static org.omnifaces.persistence.JPA.escapeLikePattern;
 import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
 import static org.omnifaces.persistence.JPA.lower;
+import static org.omnifaces.persistence.JPA.matchNothing;
 import static org.omnifaces.utils.stream.Streams.stream;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
+
+import org.omnifaces.persistence.JPA;
 
 /**
  * Creates <code>path LIKE value</code>.
@@ -49,6 +57,9 @@ import jakarta.persistence.criteria.Predicate;
  * string and generate an IN predicate. For booleans, it will match <code>true</code> and/or <code>false</code> when their name contains the search string, e.g.
  * <code>Like.contains("tru")</code> matches only <code>true</code>, and a search string which matches neither, such as <code>Like.contains("foo")</code>,
  * matches nothing. To match a boolean by a truthy or falsy value such as <code>"1"</code>, use {@link Bool#parse(Object)} instead.
+ * <p>
+ * The value of {@link #contains(String)}, {@link #startsWith(String)} and {@link #endsWith(String)} matches literally: <code>%</code> and <code>_</code>, and
+ * <code>[</code> on SQL Server, are no wildcards in it, see {@link JPA#escapeLike(String)}. Use {@link #pattern(String)} to match by wildcards.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -58,11 +69,15 @@ import jakarta.persistence.criteria.Predicate;
 public final class Like extends Criteria<String> {
 
     private static final long serialVersionUID = 1L;
+    private static final char ANY_CHARACTERS = '%';
+    private static final char ANY_CHARACTER = '_';
+    private static final String ANY = String.valueOf(ANY_CHARACTERS);
 
     private enum Type {
         STARTS_WITH,
         ENDS_WITH,
-        CONTAINS;
+        CONTAINS,
+        PATTERN;
     }
 
     /** The like type. */
@@ -104,6 +119,20 @@ public final class Like extends Criteria<String> {
     }
 
     /**
+     * Returns a new LIKE criteria that matches values matching the given pattern. In the pattern, <code>%</code> matches any characters, <code>_</code> matches
+     * any single character, and {@link JPA#LIKE_ESCAPE} escapes the next character, so that <code>\%</code>, <code>\_</code> and <code>\\</code> match
+     * literally. Any other character matches literally, on every database. On DB2, {@link JPA#LIKE_ESCAPE} may only precede <code>%</code>, <code>_</code> or
+     * itself. A trailing {@link JPA#LIKE_ESCAPE} matches itself.
+     *
+     * @param pattern The pattern.
+     * @return A new PATTERN LIKE criteria.
+     * @since 2.0
+     */
+    public static Like pattern(String pattern) {
+        return new Like(Type.PATTERN, pattern);
+    }
+
+    /**
      * Returns whether this criteria is a STARTS_WITH type.
      *
      * @return True if STARTS_WITH, false otherwise.
@@ -130,6 +159,16 @@ public final class Like extends Criteria<String> {
         return type == Type.CONTAINS;
     }
 
+    /**
+     * Returns whether this criteria is a PATTERN type.
+     *
+     * @return True if PATTERN, false otherwise.
+     * @since 2.0
+     */
+    public boolean pattern() {
+        return type == Type.PATTERN;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
@@ -144,14 +183,11 @@ public final class Like extends Criteria<String> {
         }
         else {
             boolean lowercaseable = !Numeric.is(type);
-            String searchValue = (startsWith() ? "" : "%") + (lowercaseable ? getValue().toLowerCase() : getValue()) + (endsWith() ? "" : "%");
+            String value = lowercaseable ? getValue().toLowerCase(Locale.ROOT) : getValue();
+            String searchValue = pattern() ? escapeLikePattern(value) : (startsWith() ? "" : ANY) + escapeLike(value) + (endsWith() ? "" : ANY);
             Expression<String> pathAsString = castAsString(criteriaBuilder, path);
-            return criteriaBuilder.like(lowercaseable ? lower(criteriaBuilder, pathAsString) : pathAsString, parameterBuilder.create(searchValue));
+            return criteriaBuilder.like(lowercaseable ? lower(criteriaBuilder, pathAsString) : pathAsString, parameterBuilder.create(searchValue), LIKE_ESCAPE);
         }
-    }
-
-    private static Predicate matchNothing(CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        return criteriaBuilder.notEqual(criteriaBuilder.literal(1), parameterBuilder.create(1));
     }
 
     private Predicate buildBooleanPredicate(Expression<Boolean> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
@@ -178,10 +214,13 @@ public final class Like extends Criteria<String> {
             return false;
         }
 
-        String lowerCasedValue = getValue().toLowerCase();
-        String lowerCasedModelValue = modelValue.toString().toLowerCase();
+        String lowerCasedValue = getValue().toLowerCase(Locale.ROOT);
+        String lowerCasedModelValue = modelValue.toString().toLowerCase(Locale.ROOT);
 
-        if (startsWith()) {
+        if (pattern()) {
+            return matches(lowerCasedValue, lowerCasedModelValue);
+        }
+        else if (startsWith()) {
             return lowerCasedModelValue.startsWith(lowerCasedValue);
         }
         else if (endsWith()) {
@@ -190,6 +229,29 @@ public final class Like extends Criteria<String> {
         else {
             return lowerCasedModelValue.contains(lowerCasedValue);
         }
+    }
+
+    private static boolean matches(String pattern, String value) {
+        var regex = new StringBuilder();
+
+        for (var i = 0; i < pattern.length(); i++) {
+            var character = pattern.charAt(i);
+
+            if (character == LIKE_ESCAPE && i + 1 < pattern.length()) {
+                regex.append(Pattern.quote(String.valueOf(pattern.charAt(++i))));
+            }
+            else if (character == ANY_CHARACTERS) {
+                regex.append(".*");
+            }
+            else if (character == ANY_CHARACTER) {
+                regex.append('.');
+            }
+            else {
+                regex.append(Pattern.quote(String.valueOf(character)));
+            }
+        }
+
+        return Pattern.compile(regex.toString(), Pattern.DOTALL).matcher(value).matches();
     }
 
     @Override
@@ -204,7 +266,7 @@ public final class Like extends Criteria<String> {
 
     @Override
     public String toString() {
-        return "LIKE " + (startsWith() ? "" : "%") + getValue() + (endsWith() ? "" : "%");
+        return "LIKE " + (pattern() ? getValue() : (startsWith() ? "" : ANY) + getValue() + (endsWith() ? "" : ANY));
     }
 
 }

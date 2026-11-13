@@ -29,9 +29,9 @@ import jakarta.persistence.criteria.Predicate;
  * Usage examples:
  *
  * <pre>
- * criteria.put("active", Bool.value(true)); // active IS TRUE
- * criteria.put("active", Bool.value(false)); // active IS NOT TRUE
- * criteria.put("active", Bool.parse("1")); // active IS TRUE (truthy)
+ * criteria.put("active", Bool.value(true)); // active = TRUE
+ * criteria.put("active", Bool.value(false)); // NOT (active = TRUE), which excludes NULL
+ * criteria.put("active", Bool.parse("1")); // active = TRUE (truthy)
  * </pre>
  *
  * @author Bauke Scholtz
@@ -86,7 +86,7 @@ public final class Bool extends Criteria<Boolean> {
 
     @Override
     public boolean applies(@Nullable Object modelValue) {
-        return Objects.equals(isTruthy(modelValue), getValue());
+        return modelValue != null && Objects.equals(isTruthy(modelValue), getValue());
     }
 
     /**

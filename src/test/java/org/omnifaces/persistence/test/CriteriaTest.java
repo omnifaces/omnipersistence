@@ -23,6 +23,9 @@ import static org.omnifaces.persistence.test.Serializations.serializeAndDeserial
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Nested;
@@ -102,6 +105,28 @@ public class CriteriaTest {
 
     @Nested
     class LikeTest {
+
+        @Test
+        void patternMatchesByWildcards() {
+            var like = Like.pattern("j_hn%");
+            assertTrue(like.applies("John Doe"));
+            assertTrue(like.applies("jahn"));
+            assertFalse(like.applies("Big John"));
+            assertFalse(like.applies("jhn"));
+        }
+
+        @Test
+        void patternMatchesEscapedWildcardsAndOtherCharactersLiterally() {
+            assertTrue(Like.pattern("100\\%").applies("100%"));
+            assertFalse(Like.pattern("100\\%").applies("1000"));
+            assertTrue(Like.pattern("a\\_b").applies("a_b"));
+            assertFalse(Like.pattern("a\\_b").applies("axb"));
+            assertTrue(Like.pattern("c:\\\\%").applies("c:\\dir"));
+            assertTrue(Like.pattern("[a].*").applies("[A].*"));
+            assertFalse(Like.pattern("[a].*").applies("a.x"));
+            assertTrue(Like.pattern("a\\[b").applies("a[b"));
+            assertTrue(Like.pattern("100\\").applies("100\\"));
+        }
 
         @Test
         void containsMatchesSubstring() {
@@ -408,7 +433,12 @@ public class CriteriaTest {
             assertTrue(bool.applies(-1));
             assertTrue(bool.applies("false"));
             assertTrue(bool.applies("0"));
-            assertTrue(bool.applies(null));
+        }
+
+        @Test
+        void doesNotApplyToNull() {
+            assertFalse(Bool.value(false).applies(null));
+            assertFalse(Bool.value(true).applies(null));
         }
 
         @Test
@@ -737,6 +767,64 @@ public class CriteriaTest {
             var not = Not.value(42);
             assertTrue(not.applies(43));
             assertFalse(not.applies(42));
+        }
+
+        @Test
+        void appliesNegatesOtherCriteria() {
+            var not = Not.value(Like.contains("x"));
+            assertFalse(not.applies("xyz"));
+            assertTrue(not.applies("abc"));
+            assertTrue(not.applies(null));
+            var notBetween = Not.value(Between.range(1, 5));
+            assertFalse(notBetween.applies(3));
+            assertTrue(notBetween.applies(6));
+            assertTrue(notBetween.applies(null));
+        }
+
+        @Test
+        void isMultiValuedOnlyForIterablesAndStreamableArrays() {
+            assertTrue(Criteria.isMultiValued(List.of()));
+            assertTrue(Criteria.isMultiValued(new Object[0]));
+            assertTrue(Criteria.isMultiValued(new int[0]));
+            assertTrue(Criteria.isMultiValued(new long[0]));
+            assertTrue(Criteria.isMultiValued(new double[0]));
+            assertFalse(Criteria.isMultiValued(null));
+            assertFalse(Criteria.isMultiValued("a"));
+            assertFalse(Criteria.isMultiValued(new byte[0]));
+            assertFalse(Criteria.isMultiValued(Map.of()));
+        }
+
+        @Test
+        void appliesNegatesNegatedItemOfMultipleValues() {
+            var notNotA = Not.value(List.of(Not.value("a")));
+            assertTrue(notNotA.applies("a"));
+            assertFalse(notNotA.applies("b"));
+            assertTrue(notNotA.applies(null));
+            var notNotNull = Not.value(List.of(Not.value(null)));
+            assertTrue(notNotNull.applies(null));
+            assertFalse(notNotNull.applies("x"));
+            var notNotNullOrB = Not.value(Arrays.asList(Not.value(null), "b"));
+            assertTrue(notNotNullOrB.applies(null));
+            assertFalse(notNotNullOrB.applies("a"));
+            assertFalse(notNotNullOrB.applies("b"));
+        }
+
+        @Test
+        void appliesNegatesNestedMultipleValues() {
+            assertFalse(Not.value(List.of(List.of("a"))).applies("a"));
+            assertTrue(Not.value(List.of(List.of("a"))).applies("b"));
+        }
+
+        @Test
+        void appliesNegatesAnyOfMultipleValues() {
+            var not = Not.value(List.of("a", Like.startsWith("b")));
+            assertFalse(not.applies("a"));
+            assertFalse(not.applies("bc"));
+            assertTrue(not.applies("c"));
+            assertTrue(not.applies(null));
+            assertFalse(Not.value(Arrays.asList("a", null)).applies(null));
+            assertFalse(Not.value(new Object[] { "a" }).applies("a"));
+            assertTrue(Not.value(new Object[] { "a" }).applies("b"));
         }
 
         @Test

@@ -29,9 +29,14 @@ import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.IdentifiableType;
+import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.PluralAttribute;
+import jakarta.persistence.metamodel.SingularAttribute;
 
 /**
  * Helper class of {@link BaseEntityService}.
@@ -81,7 +86,7 @@ class RootPathResolver implements PathResolver {
             String attribute = attributes[i];
 
             if (i + 1 < depth || elementCollections.test(originalField)) {
-                path = explicitJoin || !joins.containsKey(attribute) ? ((From<?, ?>) path).join(attribute) : joins.get(attribute);
+                path = explicitJoin || !joins.containsKey(attribute) ? join((From<?, ?>) path, attribute) : joins.get(attribute);
             }
             else {
                 try {
@@ -107,6 +112,41 @@ class RootPathResolver implements PathResolver {
 
         paths.put(field, path);
         return path;
+    }
+
+    /**
+     * Joins given attribute of given parent, with a <code>LEFT JOIN</code> when it is an optional singular association, so that an entity without the
+     * association is kept, else with an <code>INNER JOIN</code>.
+     */
+    private static Join<?, ?> join(From<?, ?> from, String attribute) {
+        return from.join(attribute, isOptionalSingularAssociation(from, attribute) ? JoinType.LEFT : JoinType.INNER);
+    }
+
+    private static boolean isOptionalSingularAssociation(From<?, ?> from, String attribute) {
+        var type = getManagedType(from.getModel());
+
+        try {
+            return type != null && type.getAttribute(attribute) instanceof SingularAttribute<?, ?> singularAttribute && singularAttribute.isAssociation()
+                && singularAttribute.isOptional();
+        }
+        catch (IllegalArgumentException e) {
+            return false; // The attribute is not declared on the static type, e.g. on a subtype.
+        }
+    }
+
+    private static ManagedType<?> getManagedType(Bindable<?> model) {
+        if (model instanceof ManagedType<?> managedType) {
+            return managedType;
+        }
+        else if (model instanceof SingularAttribute<?, ?> singularAttribute && singularAttribute.getType() instanceof ManagedType<?> managedType) {
+            return managedType;
+        }
+        else if (model instanceof PluralAttribute<?, ?, ?> pluralAttribute && pluralAttribute.getElementType() instanceof ManagedType<?> managedType) {
+            return managedType;
+        }
+        else {
+            return null;
+        }
     }
 
     private static boolean isTransient(Class<?> type, String property) {

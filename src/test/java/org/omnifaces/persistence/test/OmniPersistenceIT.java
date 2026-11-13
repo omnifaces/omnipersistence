@@ -15,6 +15,8 @@ package org.omnifaces.persistence.test;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.singletonMap;
+import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
+import static org.omnifaces.persistence.test.service.StartupServiceEJB.ROWS_PER_PAGE;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_RECORDS;
 
@@ -31,22 +34,24 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.Predicate;
 
 import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
@@ -70,8 +75,10 @@ import org.omnifaces.persistence.criteria.Order;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
+import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
@@ -81,6 +88,7 @@ import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -100,8 +108,16 @@ public abstract class OmniPersistenceIT {
     static final String OPENJPA = ".*-openjpa";
     static final String ECLIPSELINK = ".*-eclipselink";
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
+    static final String HIBERNATE_FORMULA = "Address.string is a Hibernate specific @Formula";
     static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
         + " so this criteria is left out of the count query";
+    private static final Map<String, Object> UNPARSEABLE_PLAIN_ITEM_OF_ELEMENT_COLLECTION = Map.of("groups", List.of("USER", "abc"));
+    private static final int ORDERED_PAGES = 3;
+    private static final int STRING_IDS = 3;
+    private static final long MIN_ID = 10;
+    private static final long MAX_ID = 190;
+    private static final LocalDate MAX_DATE_OF_BIRTH = LocalDate.of(1970, 1, 1);
+    private static final long TOTAL_PHONES = 3;
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
@@ -661,7 +677,7 @@ public abstract class OmniPersistenceIT {
         }
 
         @Override
-        public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        public jakarta.persistence.criteria.Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
             return null;
         }
 
@@ -1125,6 +1141,557 @@ public abstract class OmniPersistenceIT {
         result.forEach(p -> assertEquals(expectedEmail, p.getEmail(), "All matching phones belong to the expected owner"));
     }
 
+    // Page with combined criteria and ordering -----------------------------------------------------------------------
+
+    @Test
+    void testPageWithLikeOnLongId() {
+        assertPage(personService().list(), person -> likes("2", person.getId()), Map.of("id", Like.contains("2")), Map.of(), personService()::getPage, true);
+    }
+
+    @Test
+    void testPageWithLikeOnOrdinalEnum() {
+        assertPage(
+            personService().list(), person -> likes("fem", person.getGender()), Map.of("gender", Like.contains("fem")), Map.of(), personService()::getPage, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeOnLocalDate() {
+        assertPage(
+            personService().list(), person -> likes("-01-", person.getDateOfBirth()), Map.of("dateOfBirth", Like.contains("-01-")), Map.of(),
+            personService()::getPage, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeOnStringEnum() {
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> likes("mob", phone.getType()), Map.of("type", Like.contains("mob")), Map.of(),
+            phoneService()::getPageWithOwners, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeOnOrdinalEnumOfManyToOne() {
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> likes("fem", phone.getOwner().getGender()), Map.of("owner.gender", Like.contains("fem")), Map.of(),
+            phoneService()::getPageWithOwners, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeOnTransientField() {
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> likes("name1", phone.getEmail()), Map.of("email", Like.contains("name1")), Map.of(),
+            phoneService()::getPageWithOwners, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeOnStringEnumOfOneToMany() {
+        assertPage(
+            personService().getAllWithPhones(), person -> phoneTypes(person).stream().anyMatch(type -> likes("mob", type)),
+            Map.of("phones.type", Like.contains("mob")), Map.of(), personService()::getPageWithPhones, true
+        );
+    }
+
+    @Test
+    void testPageWithLikeMatchesWildcardCharactersLiterally() {
+        for (var term : List.of("name1_@", "name1%@", "[n]ame1@", "\\name1")) { // The [ only differs on SQL Server.
+            var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("email", Like.contains(term))).build(), true);
+            assertEquals(List.of(), page, "No email contains " + term + " literally");
+            assertEquals(0, page.getEstimatedTotalNumberOfResults(), "Count of emails containing " + term + " literally");
+        }
+    }
+
+    @Test
+    void testPageWithLikePattern() {
+        assertPage(
+            personService().list(), person -> Like.pattern("name1_@%").applies(person.getEmail()), Map.of("email", Like.pattern("name1_@%")), Map.of(),
+            personService()::getPage, true
+        );
+
+        for (var pattern : List.of("[n]ame1_@%", "name1\\")) { // The [ only differs on SQL Server.
+            var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("email", Like.pattern(pattern))).build(), true);
+            assertEquals(List.of(), page, "No email matches " + pattern);
+            assertEquals(0, page.getEstimatedTotalNumberOfResults(), "Count of emails matching " + pattern);
+        }
+    }
+
+    @Test
+    void testPageWithNullCriteria() {
+        assertPage(personService().list(), person -> person.nickname() == null, singletonMap("nickname", null), Map.of(), personService()::getPage, true);
+        assertPage(
+            personService().list(), person -> person.nickname() != null, singletonMap("nickname", Not.value(null)), Map.of(), personService()::getPage, true
+        );
+        for (var not : List
+            .of(
+                Not.value(Like.contains("nick1")), Not.value("nick1"), Not.value(List.of("nick1", "nick3")), Not.value(Arrays.asList("nick1", null)),
+                Not.value(List.of(Arrays.asList((Object) null))), Not.value(List.of(Not.value("nick1"))), Not.value(List.of(Not.value(null))),
+                Not.value(List.of("nick1", Not.value("nick3"))), Not.value(Arrays.asList(Not.value(null), "nick1"))
+            )) {
+            assertPage(personService().list(), person -> not.applies(person.nickname()), Map.of("nickname", not), Map.of(), personService()::getPage, true);
+        }
+    }
+
+    @Test
+    void testPageWithStringValuesOfEnum() {
+        var all = personService().getAllWithGroups();
+        assertPage(all, person -> person.getGender() == Gender.FEMALE, Map.of("gender", "FEMALE"), Map.of(), personService()::getPageWithGroups, true);
+        assertPage(
+            all, person -> person.getGender() != Gender.TRANS && person.getGender() != Gender.OTHER, Map.of("gender", Set.of("MALE", "FEMALE")), Map.of(),
+            personService()::getPageWithGroups, true
+        );
+        assertPage(
+            all, person -> person.getGroups().containsAll(Set.of(Group.USER, Group.DEVELOPER)), Map.of("groups", Set.of("USER", "DEVELOPER")), Map.of(),
+            personService()::getPageWithGroups, true
+        );
+    }
+
+    @Test
+    void testPageWithRequiredAndOptionalCriteria() {
+        assertPage(
+            personService().list(),
+            person -> likes("2", person.getId())
+                && Stream.of(person.getId(), person.getEmail(), person.getGender(), person.getDateOfBirth()).anyMatch(value -> likes("1", value)),
+            Map.of("id", Like.contains("2")), likeOnAll("1", "id", "email", "gender", "dateOfBirth"), personService()::getPage, true
+        );
+    }
+
+    @Test
+    void testPageWithRequiredAndOptionalCriteriaOnOneToMany() {
+        assertPage(
+            personService().getAllWithPhones(),
+            person -> likes("1", person.getId())
+                && (likes("name2", person.getEmail())
+                    || person.getPhones().stream().anyMatch(phone -> likes("11", phone.getNumber()) || likes("mob", phone.getType()))),
+            Map.of("id", Like.contains("1")),
+            Map.of("email", Like.contains("name2"), "phones.number", Like.contains("11"), "phones.type", Like.contains("mob")),
+            personService()::getPageWithPhones, true
+        );
+    }
+
+    @Test
+    void testPageWithRequiredAndOptionalCriteriaOnElementCollection() {
+        assertRequiredAndOptionalCriteriaOnElementCollection(false);
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testPageWithRequiredAndOptionalCriteriaOnElementCollectionCount() {
+        assertRequiredAndOptionalCriteriaOnElementCollection(true);
+    }
+
+    private void assertRequiredAndOptionalCriteriaOnElementCollection(boolean count) {
+        assertPage(
+            personService().getAllWithGroups(),
+            person -> likes("1", person.getId()) && (likes("name2", person.getEmail()) || person.getGroups().stream().anyMatch(group -> likes("dev", group))),
+            Map.of("id", Like.contains("1")), Map.of("email", Like.contains("name2"), "groups", Like.contains("dev")), personService()::getPageWithGroups, count
+        );
+    }
+
+    @Test
+    void testPageWithRequiredAndOptionalCriteriaOnManyToOne() {
+        assertPage(
+            phoneService().getAllWithOwners(),
+            phone -> likes("1", phone.getNumber())
+                && (likes("mob", phone.getType()) || likes("name1", phone.getEmail()) || likes("fem", phone.getOwner().getGender())),
+            Map.of("number", Like.contains("1")), Map.of("type", Like.contains("mob"), "email", Like.contains("name1"), "owner.gender", Like.contains("fem")),
+            phoneService()::getPageWithOwners, true
+        );
+    }
+
+    @Test
+    void testPageWithRequiredCriteriaOfDifferentTypes() {
+        var emailStart = Like.startsWith("name1");
+        assertPage(
+            personService().list(),
+            person -> person.getId() >= MIN_ID && person.getId() <= MAX_ID && emailStart.applies(person.getEmail()) && person.getGender() != Gender.OTHER
+                && person.getDateOfBirth().isBefore(MAX_DATE_OF_BIRTH),
+            Map.of(
+                "id", Between.range(MIN_ID, MAX_ID), "email", emailStart, "gender", Not.value(Gender.OTHER), "dateOfBirth", Order.lessThan(MAX_DATE_OF_BIRTH)
+            ),
+            Map.of(), personService()::getPage, true
+        );
+    }
+
+    @Test
+    void testPageWithIdCriteriaAsString() {
+        var ids = personService().list().stream().map(Person::getId).sorted().limit(STRING_IDS).toList();
+        var stringIds = ids.stream().map(String::valueOf).toList();
+        var page = personService().getPage(Page.with().range(0, stringIds.size()).allMatch(Map.of(Page.ID, stringIds)).build(), false);
+        assertEquals(Set.copyOf(ids), page.stream().map(Person::getId).collect(toSet()), "Persons by IDs as strings");
+        var single = personService().getPage(Page.with().range(0, 1).allMatch(Map.of(Page.ID, List.of(stringIds.get(0)))).build(), false);
+        assertEquals(List.of(ids.get(0)), single.stream().map(Person::getId).toList(), "Person by ID as string");
+    }
+
+    @Test
+    void testPageWithUnparseableIdCriteriaMatchesNothing() {
+        var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of(Page.ID, List.of("abc"))).build(), true);
+        assertEquals(List.of(), page, "No person has ID abc");
+        assertEquals(0, page.getEstimatedTotalNumberOfResults(), "Count of persons having ID abc");
+    }
+
+    @Test
+    void testPageWithNegatedUnparseableIdCriteriaMatchesEverything() {
+        var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of(Page.ID, Not.value(List.of("abc")))).build(), true);
+        assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Count of persons not having ID abc");
+    }
+
+    @Test
+    void testPageWithEmptyMultiValuedCriteriaImposesNoRestriction() {
+        var allPhones = personService().getAllWithPhones().stream().collect(toMap(Person::getId, person -> Set.copyOf(person.getPhones())));
+
+        for (var field : List.of("gender", "phones.type", "groups")) {
+            for (var value : List.of(Set.of(), Not.value(Set.of()), List.of(Set.of()))) {
+                var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of(field, value)).build(), true);
+                assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Count of persons matching " + value + " on " + field);
+                assertEquals(ROWS_PER_PAGE, page.size(), "Page of persons matching " + value + " on " + field);
+                var pageWithPhones = personService().getPageWithPhones(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of(field, value)).build(), false);
+                assertEquals(ROWS_PER_PAGE, pageWithPhones.size(), "Page with phones of persons matching " + value + " on " + field);
+                pageWithPhones.forEach(
+                    person -> assertEquals(
+                        allPhones.get(person.getId()), Set.copyOf(person.getPhones()), "All fetched phones of " + person + " matching " + value + " on " + field
+                    )
+                );
+            }
+        }
+    }
+
+    @Test
+    void testPageWithUnparseableItemOfMultiValuedCriteriaOnCollectionMatchesNothing() {
+        for (var criteria : unparseableItemsOfMultiValuedCriteriaOnCollection()) {
+            var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(criteria).build(), false);
+            assertEquals(List.of(), page, "No person matches " + criteria);
+        }
+    }
+
+    @Test
+    void testPageWithUnparseableItemOfMultiValuedCriteriaOnCollectionCountsNothing() {
+        for (var criteria : unparseableItemsOfMultiValuedCriteriaOnCollection()) {
+            if (!isOpenJPA() || criteria.equals(UNPARSEABLE_PLAIN_ITEM_OF_ELEMENT_COLLECTION)) { // See OPENJPA_COUNT.
+                var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(criteria).build(), true);
+                assertEquals(0, page.getEstimatedTotalNumberOfResults(), "Count of persons matching " + criteria);
+            }
+        }
+    }
+
+    private static List<Map<String, Object>> unparseableItemsOfMultiValuedCriteriaOnCollection() {
+        return List.of(
+            UNPARSEABLE_PLAIN_ITEM_OF_ELEMENT_COLLECTION, Map.of("phones.type", List.of("MOBILE", "abc")), Map.of("groups", List.of("USER", Not.value("abc"))),
+            Map.of("phones.type", List.of("MOBILE", Not.value("abc")))
+        );
+    }
+
+    @Test
+    void testPageOrderedByCollectionWithUnparseableCriteriaOnItMatchesNothing() {
+        var page = personService()
+            .getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("phones.type", "abc")).orderBy("phones.number", true).build(), true);
+        assertEquals(List.of(), page, "No person has a phone of type abc");
+        assertEquals(0, page.getEstimatedTotalNumberOfResults(), "Count of persons having a phone of type abc");
+    }
+
+    @Test
+    void testPageWithMultiValuedCriteriaOnOneToMany() {
+        assertMultiValuedCriteriaOnOneToMany(false);
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testPageWithMultiValuedCriteriaOnOneToManyCount() {
+        assertMultiValuedCriteriaOnOneToMany(true);
+    }
+
+    private void assertMultiValuedCriteriaOnOneToMany(boolean count) {
+        var all = personService().getAllWithPhones();
+
+        for (var size = 1; size <= Phone.Type.values().length; size++) {
+            var types = Set.of(Arrays.copyOf(Phone.Type.values(), size));
+            assertPage(all, person -> phoneTypes(person).containsAll(types), Map.of("phones.type", types), Map.of(), personService()::getPageWithPhones, count);
+        }
+    }
+
+    @Test
+    void testPageWithPhonesFilteredByTypeListKeepsOnlyListedPhones() {
+        var types = List.of(Phone.Type.MOBILE, Phone.Type.HOME);
+        var result = personService().getPageWithPhones(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("phones.type", types)).build(), false);
+        assertFalse(result.isEmpty(), "Some persons have MOBILE and HOME phones");
+        result.forEach(person -> assertFalse(person.getPhones().isEmpty(), "Fetched phones of " + person));
+        result.forEach(person -> assertTrue(types.containsAll(phoneTypes(person)), "Only listed phone types of " + person));
+    }
+
+    @Test
+    void testPageWithPhonesFilteredByNegatedTypeSetKeepsAllPhones() {
+        var allPhones = personService().getAllWithPhones().stream().collect(toMap(Person::getId, person -> Set.copyOf(person.getPhones())));
+        var page = Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("phones.type", Not.value(Set.of(Phone.Type.MOBILE, Phone.Type.HOME)))).build();
+        var result = personService().getPageWithPhones(page, false);
+        assertFalse(result.isEmpty(), "Some persons do not have both MOBILE and HOME phones");
+        result.forEach(person -> assertEquals(allPhones.get(person.getId()), Set.copyOf(person.getPhones()), "All fetched phones of " + person));
+    }
+
+    @Test
+    void testPageWithMultiValuedCriteriaOnElementCollection() {
+        var all = personService().getAllWithGroups();
+
+        for (var size = 1; size <= Group.values().length; size++) {
+            var groups = Set.of(Arrays.copyOf(Group.values(), size));
+            assertPage(all, person -> person.getGroups().containsAll(groups), Map.of("groups", groups), Map.of(), personService()::getPageWithGroups, true);
+        }
+    }
+
+    @Test
+    void testPageOrderedByFieldOfEachTypeWithCriteria() {
+        var all = personService().list();
+        Predicate<Person> expected = person -> likes("1", person.getEmail());
+        var required = Map.<String, Object>of("email", Like.contains("1"));
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, expected, required, ordering("email", ascending), byKey(Person::getEmail, ascending),
+                person -> orderingValues("email", person.getEmail(), person), personService()::getPage
+            );
+            assertOrderedPages(
+                all, expected, required, ordering("gender", ascending), byKey(Person::getGender, ascending),
+                person -> orderingValues("gender", person.getGender(), person), personService()::getPage
+            );
+            assertOrderedPages(
+                all, expected, required, ordering("dateOfBirth", ascending), byKey(Person::getDateOfBirth, ascending),
+                person -> orderingValues("dateOfBirth", person.getDateOfBirth(), person), personService()::getPage
+            );
+        }
+    }
+
+    @Test
+    void testPageOrderedByMultipleFields() {
+        var ordering = new LinkedHashMap<String, Boolean>();
+        ordering.put("gender", true);
+        ordering.put("email", false);
+        assertOrderedPages(
+            personService().list(), person -> true, Map.of(), ordering, byKey(Person::getGender, true).thenComparing(byKey(Person::getEmail, false)),
+            person -> Map.of("gender", person.getGender(), "email", person.getEmail(), Page.ID, person.getId()), personService()::getPage
+        );
+    }
+
+    @Test
+    void testPageOrderedByFieldOfManyToOneAndTransientField() {
+        var all = phoneService().getAllWithOwners();
+        Predicate<Phone> expected = phone -> likes("1", phone.getNumber());
+        var required = Map.<String, Object>of("number", Like.contains("1"));
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, expected, required, ordering("owner.email", ascending), byKey(Phone::getEmail, ascending),
+                phone -> orderingValues("owner.email", phone.getEmail(), phone), phoneService()::getPageWithOwners
+            );
+            assertOrderedPages(
+                all, expected, required, ordering("email", ascending), byKey(Phone::getEmail, ascending),
+                phone -> orderingValues("email", phone.getEmail(), phone), phoneService()::getPageWithOwners
+            );
+        }
+    }
+
+    @Test
+    void testPageOrderedByNullableFieldPagesByOrderingValuesAsByOffset() {
+        for (var ascending : List.of(true, false)) {
+            var direction = ascending ? "ascending" : "descending";
+            BiFunction<Page.Builder, Boolean, PartialResultList<Person>> getPage = (builder, count) -> personService()
+                .getPage(orderingOf(builder, ordering("nickname", ascending)).build(), count);
+            var offsetPages = Stream.iterate(0, offset -> offset + ROWS_PER_PAGE).limit(TOTAL_RECORDS / ROWS_PER_PAGE)
+                .flatMap(offset -> getPage.apply(Page.with().range(offset, ROWS_PER_PAGE), false).stream()).toList();
+            assertEquals(TOTAL_RECORDS, offsetPages.size(), "All persons on offset pages ordered by nickname " + direction);
+
+            for (var offset = ROWS_PER_PAGE; offset < TOTAL_RECORDS; offset += ROWS_PER_PAGE) {
+                var expected = ids(offsetPages.subList(offset, offset + ROWS_PER_PAGE));
+                var last = offsetPages.get(offset - 1);
+                assertEquals(
+                    expected, ids(getPage.apply(Page.with().range(0, ROWS_PER_PAGE, nicknameOrderingValues(last), false), false)),
+                    "Page at " + offset + " after nickname " + last.nickname() + ", " + direction
+                );
+
+                if (offset >= 2 * ROWS_PER_PAGE) {
+                    var lastOfPreviousPage = offsetPages.get(offset - ROWS_PER_PAGE - 1);
+                    assertEquals(
+                        expected,
+                        ids(getPage.apply(Page.with().range(0, ROWS_PER_PAGE, nicknameOrderingValues(lastOfPreviousPage), ROWS_PER_PAGE, false), false)),
+                        "Page at " + offset + " after nickname " + lastOfPreviousPage.nickname() + " plus a residual offset, " + direction
+                    );
+                }
+
+                if (offset + ROWS_PER_PAGE < TOTAL_RECORDS) {
+                    var firstOfNextPage = offsetPages.get(offset + ROWS_PER_PAGE);
+                    assertEquals(
+                        expected, ids(getPage.apply(Page.with().range(0, ROWS_PER_PAGE, nicknameOrderingValues(firstOfNextPage), true), false)),
+                        "Page at " + offset + " reversed before nickname " + firstOfNextPage.nickname() + ", " + direction
+                    );
+                }
+            }
+        }
+    }
+
+    private static Map<String, Object> nicknameOrderingValues(Person person) {
+        return orderingValues("nickname", person.nickname(), person);
+    }
+
+    @Test
+    void testPageWithCriteriaAndOrderingOnOneToOne() {
+        var all = personService().getAllWithAddress();
+        assertPage(
+            all, person -> likes("1", person.getId()) && (likes("name2", person.getEmail()) || likes("3", person.getAddress().getHouseNumber())),
+            Map.of("id", Like.contains("1")), Map.of("email", Like.contains("name2"), "address.houseNumber", Like.contains("3")),
+            personService()::getPageWithAddress, true
+        );
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, person -> likes("1", person.getAddress().getHouseNumber()), Map.of("address.houseNumber", Like.contains("1")),
+                ordering("address.houseNumber", ascending),
+                byKey(person -> person.getAddress().getHouseNumber(), ascending),
+                person -> orderingValues("address.houseNumber", person.getAddress().getHouseNumber(), person),
+                personService()::getPageWithAddress
+            );
+        }
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = HIBERNATE_FORMULA)
+    void testPageWithCriteriaAndOrderingOnFormula() {
+        var all = personService().getAllWithAddress();
+        Function<Person, String> addressString = person -> addressStringOf(person.getAddress());
+        assertPage(
+            all, person -> likes("street1 ", addressString.apply(person)), Map.of("address.string", Like.contains("street1 ")), Map.of(),
+            personService()::getPageWithAddress, true
+        );
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, person -> likes("1", person.getId()), Map.of("id", Like.contains("1")), ordering("address.string", ascending),
+                byKey(addressString, ascending),
+                person -> orderingValues("address.string", addressString.apply(person), person), personService()::getPageWithAddress
+            );
+        }
+    }
+
+    private static String addressStringOf(Address address) {
+        return address.getStreet() + " " + address.getHouseNumber() + ", " + address.getPostcode() + " " + address.getCity() + ", " + address.getCountry();
+    }
+
+    private static boolean likes(String term, Object value) {
+        return Like.contains(term).applies(value);
+    }
+
+    private static Map<String, Object> likeOnAll(String term, String... fields) {
+        return Stream.of(fields).collect(toMap(Function.identity(), field -> Like.contains(term)));
+    }
+
+    private static Map<String, Boolean> ordering(String field, boolean ascending) {
+        return Map.of(field, ascending);
+    }
+
+    /**
+     * Returns the ordering values of the given entity for the given field followed by its ID. The value may be <code>null</code>.
+     */
+    private static Map<String, Object> orderingValues(String field, Object value, BaseEntity<Long> entity) {
+        var orderingValues = new LinkedHashMap<String, Object>();
+        orderingValues.put(field, value);
+        orderingValues.put(Page.ID, entity.getId());
+        return orderingValues;
+    }
+
+    private static <E, K extends Comparable<? super K>> Comparator<E> byKey(Function<E, K> key, boolean ascending) {
+        return ascending ? Comparator.comparing(key) : Comparator.comparing(key, Comparator.reverseOrder());
+    }
+
+    private static List<Long> ids(List<? extends BaseEntity<Long>> entities) {
+        return entities.stream().map(BaseEntity::getId).toList();
+    }
+
+    /**
+     * Asserts that the given page loader returns exactly the entities of <code>all</code> matching <code>expected</code>, each once, for the given required and
+     * optional criteria, and that a limited first page returns only matching entities, each once. When <code>count</code> is true, also asserts that the count
+     * of the limited first page equals the amount of matching entities.
+     */
+    private static <E extends BaseEntity<Long>> void assertPage(
+        List<E> all, Predicate<E> expected, Map<String, Object> required, Map<String, Object> optional, BiFunction<Page, Boolean, PartialResultList<E>> getPage,
+        boolean count
+    )
+    {
+        var expectedIds = all.stream().filter(expected).map(E::getId).collect(toSet());
+        assertFalse(expectedIds.isEmpty(), "Some entities match");
+        assertTrue(expectedIds.size() < all.size(), "Not all entities match");
+        var description = "entities matching " + required + " and any of " + optional;
+        var ids = ids(getPage.apply(criteriaOf(Page.with(), required, optional).build(), false));
+        assertEquals(ids.size(), ids.stream().distinct().count(), "Each of " + description + " is returned once");
+        assertEquals(expectedIds, Set.copyOf(ids), description);
+
+        var firstPage = getPage.apply(criteriaOf(Page.with().range(0, ROWS_PER_PAGE), required, optional).build(), count);
+        var firstPageIds = ids(firstPage);
+        assertEquals(
+            Math.min(ROWS_PER_PAGE, expectedIds.size()), Set.copyOf(firstPageIds).size(), "First page of " + description + " is full and has each once"
+        );
+        assertTrue(expectedIds.containsAll(firstPageIds), "First page has only " + description);
+
+        if (count) {
+            assertEquals(expectedIds.size(), firstPage.getEstimatedTotalNumberOfResults(), "Count of " + description);
+        }
+    }
+
+    /**
+     * Asserts that the first pages of the entities of <code>all</code> matching <code>expected</code> are in the given order, followed by descending ID as tie
+     * breaker: with offset paging, from the ordering values of the last entity of the previous page, from those ordering values plus a residual offset, and
+     * reversed from the ordering values of the first entity of the next page. Also asserts the count of the first page.
+     */
+    private static <E extends BaseEntity<Long>> void assertOrderedPages(
+        List<E> all, Predicate<E> expected, Map<String, Object> required, Map<String, Boolean> ordering, Comparator<E> order,
+        Function<E, Map<String, Object>> orderingValues, BiFunction<Page, Boolean, PartialResultList<E>> getPage
+    )
+    {
+        var expectedEntities = all.stream().filter(expected).sorted(order.thenComparing(E::getId, Comparator.reverseOrder())).toList();
+        assertTrue(expectedEntities.size() > ORDERED_PAGES * ROWS_PER_PAGE, "More than " + ORDERED_PAGES + " pages of entities match");
+        var expectedIds = ids(expectedEntities);
+        var description = "entities matching " + required + " ordered by " + ordering;
+        BiFunction<Page.Builder, Boolean, PartialResultList<E>> getOrderedPage = (builder, count) -> getPage
+            .apply(orderingOf(criteriaOf(builder, required, Map.of()), ordering).build(), count);
+        var offsetIds = new ArrayList<Long>();
+
+        for (var offset = 0; offset < ORDERED_PAGES * ROWS_PER_PAGE; offset += ROWS_PER_PAGE) {
+            var page = getOrderedPage.apply(Page.with().range(offset, ROWS_PER_PAGE), offset == 0);
+
+            if (offset == 0) {
+                assertEquals(expectedIds.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + description);
+            }
+
+            offsetIds.addAll(ids(page));
+        }
+
+        assertEquals(expectedIds.subList(0, ORDERED_PAGES * ROWS_PER_PAGE), offsetIds, "Offset pages of " + description);
+
+        var secondPage = expectedIds.subList(ROWS_PER_PAGE, 2 * ROWS_PER_PAGE);
+        var lastOfFirstPage = orderingValues.apply(expectedEntities.get(ROWS_PER_PAGE - 1));
+        assertEquals(
+            secondPage, ids(getOrderedPage.apply(Page.with().range(ROWS_PER_PAGE, ROWS_PER_PAGE, lastOfFirstPage, false), false)),
+            "Second page from the ordering values of the last of the first page of " + description
+        );
+        assertEquals(
+            expectedIds.subList(2 * ROWS_PER_PAGE, 3 * ROWS_PER_PAGE),
+            ids(getOrderedPage.apply(Page.with().range(2 * ROWS_PER_PAGE, ROWS_PER_PAGE, lastOfFirstPage, ROWS_PER_PAGE, false), false)),
+            "Third page from the ordering values of the last of the first page plus a residual offset of " + description
+        );
+        var firstOfThirdPage = orderingValues.apply(expectedEntities.get(2 * ROWS_PER_PAGE));
+        assertEquals(
+            secondPage, ids(getOrderedPage.apply(Page.with().range(ROWS_PER_PAGE, ROWS_PER_PAGE, firstOfThirdPage, true), false)),
+            "Second page reversed from the ordering values of the first of the third page of " + description
+        );
+    }
+
+    private static Page.Builder criteriaOf(Page.Builder builder, Map<String, Object> required, Map<String, Object> optional) {
+        return builder.allMatch(required).anyMatch(optional);
+    }
+
+    private static Page.Builder orderingOf(Page.Builder builder, Map<String, Boolean> ordering) {
+        ordering.forEach(builder::orderBy);
+        return builder.orderBy(Page.ID, false);
+    }
+
     // Page with DTO mapping ------------------------------------------------------------------------------------------
 
     @Test
@@ -1146,6 +1713,50 @@ public abstract class OmniPersistenceIT {
         var page = personService().getPageOfPersonCards(Page.of(0, 5), true);
         assertEquals(5, page.size(), "Page returns 5 cards");
         assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+    }
+
+    @Test
+    void testPageOfPersonCardsWithCriteriaAndOrderingOnExpression() {
+        var all = personService().getAllPersonCards();
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, card -> likes("street1", card.getAddressString()), Map.of("addressString", Like.contains("street1")), ordering("addressString", ascending),
+                byKey(PersonCard::getAddressString, ascending), card -> orderingValues("addressString", card.getAddressString(), card),
+                personService()::getPageOfPersonCards
+            );
+        }
+    }
+
+    @Test
+    void testPageOfPersonCardsWithNegatedCriteriaOnExpressionAndAggregate() {
+        var all = personService().getAllPersonCards();
+        var notStreet1 = Not.value(Like.contains("street1"));
+        assertPage(
+            all, card -> notStreet1.applies(card.getAddressString()), Map.of("addressString", notStreet1), Map.of(), personService()::getPageOfPersonCards, true
+        );
+        var notTotalPhones = Not.value(TOTAL_PHONES);
+        assertPage(
+            all, card -> notTotalPhones.applies(card.getTotalPhones()), Map.of("totalPhones", notTotalPhones), Map.of(), personService()::getPageOfPersonCards,
+            true
+        );
+    }
+
+    @Test
+    void testPageOfPersonCardsWithCriteriaAndOrderingOnAggregate() {
+        var all = personService().getAllPersonCards();
+        assertPage(
+            all, card -> card.getTotalPhones() == TOTAL_PHONES, Map.of("totalPhones", String.valueOf(TOTAL_PHONES)), Map.of(),
+            personService()::getPageOfPersonCards, true
+        );
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
+                byKey(PersonCard::getTotalPhones, ascending),
+                card -> orderingValues("totalPhones", card.getTotalPhones(), card), personService()::getPageOfPersonCards
+            );
+        }
     }
 
     // Page with cursor-based paging ----------------------------------------------------------------------------------

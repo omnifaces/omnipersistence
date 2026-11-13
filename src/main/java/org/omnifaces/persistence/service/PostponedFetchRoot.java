@@ -19,8 +19,11 @@ import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElse;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
+import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
+import static org.omnifaces.persistence.service.BaseEntityService.isEmptyMultiValue;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
+import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -48,6 +51,7 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Criteria;
+import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.model.dto.Page;
 
 /**
@@ -288,7 +292,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     private static boolean matchesFetchFilters(Object item, Map<String, Object> filters) {
         for (var entry : filters.entrySet()) {
-            if (!appliesFetchFilter(entry.getValue(), invokeGetter(item, entry.getKey()))) {
+            if (!isEmptyMultiValue(entry.getValue()) && !appliesFetchFilter(entry.getValue(), invokeGetter(item, entry.getKey()))) {
                 return false;
             }
         }
@@ -296,16 +300,23 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return true;
     }
 
+    /**
+     * Returns whether given fetched element value applies to given criteria. A negated criteria, also as item of a multi-value, applies to every element,
+     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>.
+     */
     private static boolean appliesFetchFilter(Object criteria, Object fieldValue) {
-        if (criteria instanceof Criteria<?> c) {
+        if (criteria instanceof Not) {
+            return true;
+        }
+        else if (criteria instanceof Criteria<?> c) {
             return c.applies(fieldValue);
         }
-
-        if (criteria instanceof Set<?> set) {
-            return set.contains(fieldValue);
+        else if (isMultiValued(criteria)) {
+            return stream(criteria).anyMatch(item -> appliesFetchFilter(item, fieldValue));
         }
-
-        return Objects.equals(criteria, fieldValue);
+        else {
+            return Objects.equals(criteria, fieldValue);
+        }
     }
 
     private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {

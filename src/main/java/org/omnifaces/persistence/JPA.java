@@ -14,6 +14,7 @@ package org.omnifaces.persistence;
 
 import static java.util.Optional.ofNullable;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
+import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.service.BaseEntityService.getCurrentBaseEntityService;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
@@ -49,6 +50,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Bindable;
@@ -60,6 +62,7 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SetAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
+import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
 import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.service.BaseEntityService;
 
@@ -104,6 +107,20 @@ public final class JPA {
     public static final String QUERY_HINT_CACHE_RETRIEVE_MODE = "jakarta.persistence.cache.retrieveMode"; // USE | BYPASS
     /** Returns the Jakarta Persistence-specific "validation mode" persistence.xml property: {@value}. */
     public static final String PROPERTY_VALIDATION_MODE = "jakarta.persistence.validation.mode"; // AUTO | CALLBACK | NONE
+
+    /**
+     * The escape character of {@link #escapeLike(String)}, of {@link #escapeLikePattern(String)} and of <code>Like.pattern(String)</code>: {@value}.
+     *
+     * @since 2.0
+     */
+    public static final char LIKE_ESCAPE = '\\';
+
+    // Private constants ------------------------------------------------------------------------------------------------------------------
+
+    private static final String LIKE_SPECIAL_CHARACTERS = "%_" + LIKE_ESCAPE;
+    private static final String LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER = "[";
+    private static final String LIKE_SPECIAL_CHARACTERS_SQLSERVER = LIKE_SPECIAL_CHARACTERS + LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER;
+    private static final String ERROR_NO_CURRENT_BASE_ENTITY_SERVICE = "JPA#%s() must be invoked during a public method of a BaseEntityService.";
 
     // Constructors -----------------------------------------------------------------------------------------------------------------------
 
@@ -378,6 +395,69 @@ public final class JPA {
     }
 
     /**
+     * Returns given value with the characters which <code>LIKE</code> interprets as wildcard escaped by {@link #LIKE_ESCAPE}, so that it matches literally when
+     * passed with {@link #LIKE_ESCAPE} as escape character, e.g. to {@link CriteriaBuilder#like(Expression, Expression, char)} or to
+     * <code>LIKE ... ESCAPE</code> in JPQL. These are <code>%</code>, <code>_</code> and {@link #LIKE_ESCAPE} itself, and on SQL Server also <code>[</code>.
+     * The database is that of the {@link BaseEntityService#getCurrentBaseEntityService()}.
+     *
+     * @param value The value to be escaped.
+     * @return The escaped value.
+     * @throws IllegalStateException When not invoked during a public method of a {@link BaseEntityService}.
+     * @since 2.0
+     */
+    public static String escapeLike(String value) {
+        // DB2 rejects an escape before any other character than the wildcards and the escape itself, so [ is escaped on SQL Server only.
+        var database = requireCurrentBaseEntityService("escapeLike").getDatabase();
+        return escape(value, database == SQLSERVER ? LIKE_SPECIAL_CHARACTERS_SQLSERVER : LIKE_SPECIAL_CHARACTERS);
+    }
+
+    /**
+     * Returns given <code>LIKE</code> pattern escaped so that it means the same on every database when passed with {@link #LIKE_ESCAPE} as escape character:
+     * <code>%</code> and <code>_</code> are wildcards, {@link #LIKE_ESCAPE} escapes the next character, a trailing {@link #LIKE_ESCAPE} matches itself, and any
+     * other character matches itself, also <code>[</code> on SQL Server. The database is that of the {@link BaseEntityService#getCurrentBaseEntityService()}.
+     *
+     * @param pattern The pattern to be escaped.
+     * @return The escaped pattern.
+     * @throws IllegalStateException When not invoked during a public method of a {@link BaseEntityService}.
+     * @since 2.0
+     */
+    public static String escapeLikePattern(String pattern) {
+        var specialCharacters = requireCurrentBaseEntityService("escapeLikePattern").getDatabase() == SQLSERVER
+            ? LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER
+            : "";
+        var escaped = new StringBuilder(pattern.length());
+
+        for (var i = 0; i < pattern.length(); i++) {
+            var character = pattern.charAt(i);
+
+            if (character == LIKE_ESCAPE) {
+                escaped.append(LIKE_ESCAPE).append(i + 1 < pattern.length() ? pattern.charAt(++i) : LIKE_ESCAPE);
+            }
+            else {
+                if (specialCharacters.indexOf(character) >= 0) {
+                    escaped.append(LIKE_ESCAPE);
+                }
+
+                escaped.append(character);
+            }
+        }
+
+        return escaped.toString();
+    }
+
+    /**
+     * Returns a new predicate which matches nothing. It compares a literal with a parameter, so that every provider renders it in every clause.
+     *
+     * @param builder The involved criteria builder.
+     * @param parameterBuilder The involved parameter builder.
+     * @return A new predicate which matches nothing.
+     * @since 2.0
+     */
+    public static Predicate matchNothing(CriteriaBuilder builder, ParameterBuilder parameterBuilder) {
+        return builder.notEqual(builder.literal(1), parameterBuilder.create(1));
+    }
+
+    /**
      * Returns a new expression which applies the SQL <code>LOWER</code> function on given expression. This also works on an element of an
      * <code>@ElementCollection</code> in a correlated subquery on OpenJPA, which {@link CriteriaBuilder#lower(Expression)} does not.
      *
@@ -391,18 +471,22 @@ public final class JPA {
     }
 
     /**
-     * Returns a new expression wherein given expression is cast as String. This covers known problems with certain providers and/or databases.
+     * Returns a new expression wherein given expression is cast as String. This covers known problems with certain providers and/or databases, which are those
+     * of the {@link BaseEntityService#getCurrentBaseEntityService()}.
      *
      * @param builder The involved criteria builder.
      * @param expression Expression to be cast as String.
      * @return A new expression wherein given expression is cast as String.
+     * @throws IllegalStateException When not invoked during a public method of a {@link BaseEntityService}.
      */
     @SuppressWarnings("unchecked")
     public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
 
         // TODO: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
 
-        if (getCurrentBaseEntityService().getProvider() == HIBERNATE) {
+        var service = requireCurrentBaseEntityService("castAsString");
+
+        if (service.getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);
 
             if (cast.isPresent()) { // Hibernate 6.6.0.
@@ -416,7 +500,7 @@ public final class JPA {
         // EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
-        if (getCurrentBaseEntityService().getDatabase() == POSTGRESQL) {
+        if (service.getDatabase() == POSTGRESQL) {
             String pattern = null;
 
             if (Numeric.is(expression.getJavaType())) {
@@ -469,6 +553,32 @@ public final class JPA {
         }
 
         return false;
+    }
+
+    // Helpers ----------------------------------------------------------------------------------------------------------------------------
+
+    private static BaseEntityService<?, ?> requireCurrentBaseEntityService(String method) {
+        var service = getCurrentBaseEntityService();
+
+        if (service == null) {
+            throw new IllegalStateException(String.format(ERROR_NO_CURRENT_BASE_ENTITY_SERVICE, method));
+        }
+
+        return service;
+    }
+
+    private static String escape(String value, String specialCharacters) {
+        var escaped = new StringBuilder(value.length());
+
+        for (var character : value.toCharArray()) {
+            if (specialCharacters.indexOf(character) >= 0) {
+                escaped.append(LIKE_ESCAPE);
+            }
+
+            escaped.append(character);
+        }
+
+        return escaped.toString();
     }
 
 }
