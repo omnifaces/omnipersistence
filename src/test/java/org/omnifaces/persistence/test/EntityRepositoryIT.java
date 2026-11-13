@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA_COUNT;
@@ -72,7 +73,7 @@ public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
-    private static final String NO_LAZY_PROXY = "EclipseLink and OpenJPA return a loaded plain instance for a lazy @ManyToOne, not a proxy";
+    private static final String LOADED_REFERENCE = "EclipseLink returns an already loaded instance from EntityManager#getReference()";
 
     @Deployment
     public static WebArchive createDeployment() {
@@ -326,23 +327,22 @@ public class EntityRepositoryIT {
     }
 
     @Test
-    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = NO_LAZY_PROXY)
-    void testGetIdOfLazyAssociationKeepsProxyUninitialized() {
-        var category = newCategory("proxy", "Proxy");
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = LOADED_REFERENCE)
+    void testGetIdOfUnloadedReferenceKeepsItUnloaded() {
+        var category = newCategory("reference", "Reference");
         transactionServiceCDI.run(() -> categoryRepository.persist(category));
-        var article = persistArticle("proxy", category);
 
         try {
-            var proxyState = transactionServiceCDI.call(() -> {
-                var reference = articleRepository.getById(article.getCode()).getCategory();
-                var provider = categoryRepository.getProvider();
-                categoryRepository.getId(reference);
-                return List.of(provider.isProxy(reference), provider.isProxyUninitialized(reference));
+            var state = transactionServiceCDI.call(() -> {
+                var persistenceUnitUtil = categoryRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil();
+                var reference = categoryRepository.getEntityManager().getReference(Category.class, "reference");
+                var loadedBefore = persistenceUnitUtil.isLoaded(reference);
+                var id = categoryRepository.getId(reference);
+                return List.<Object>of(loadedBefore, id, persistenceUnitUtil.isLoaded(reference));
             });
-            assertEquals(List.of(true, true), proxyState, "Lazy category is a proxy which stays uninitialized");
+            assertEquals(List.of(false, "reference", false), state, "Reference is unloaded before getId(), has the ID, and is still unloaded after getId()");
         }
         finally {
-            deleteArticles(List.of(article));
             deleteCategories(List.of(category));
         }
     }

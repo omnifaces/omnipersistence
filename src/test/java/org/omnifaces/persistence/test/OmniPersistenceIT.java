@@ -57,6 +57,7 @@ import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.criteria.Between;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Enumerated;
@@ -91,31 +92,86 @@ import org.omnifaces.utils.collection.PartialResultList;
 public abstract class OmniPersistenceIT {
 
     static final String PROFILE_ID = "profile.id";
+    private static final String TEST_DATABASE_RESOURCE = "META-INF/test.database";
     static final String OPENJPA = ".*-openjpa";
+    static final String ECLIPSELINK = ".*-eclipselink";
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
     static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
         + " so this criteria is left out of the count query";
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
+        var database = Database.valueOf(getProperty("test.database").toUpperCase());
         var maven = Maven.resolver();
         return create(WebArchive.class)
             .addPackages(true, testClass.getPackage())
             .deleteClass(excludedStartupService)
             .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
             .addAsResource(new StringAsset(substitute("META-INF/persistence.xml", persistenceUnitName)), "META-INF/persistence.xml")
-            .addAsWebInfResource(new StringAsset(substitute("WEB-INF/web.xml", persistenceUnitName)), "web.xml")
+            .addAsWebInfResource(new StringAsset(substitute("WEB-INF/web.xml", persistenceUnitName, dataSourceOf(database, persistenceUnitName))), "web.xml")
+            .addAsResource(new StringAsset(database.name()), TEST_DATABASE_RESOURCE)
             .addAsResource("META-INF/sql/create-test.sql")
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
             .addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
             .addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
-            .addAsLibraries(maven.resolve("com.h2database:h2:" + getProperty("test.h2.version")).withTransitivity().asFile());
+            .addAsLibraries(
+                maven
+                    .resolve(
+                        "com.h2database:h2:" + getProperty("test.h2.version"), "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version")
+                    )
+                    .withTransitivity().asFile()
+            );
+    }
+
+    /**
+     * Returns the data source class name, URL and credentials of the given test database, substituted as <code>${dataSourceClassName}</code>,
+     * <code>${dataSourceUrl}</code> and <code>${dataSourceCredentials}</code> in <code>web.xml</code>.
+     */
+    private static Map<String, String> dataSourceOf(Database database, String persistenceUnitName) {
+        return switch (database) {
+            case H2 -> Map.of(
+                "${dataSourceClassName}", "org.h2.jdbcx.JdbcDataSource",
+                "${dataSourceUrl}", "jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY",
+                "${dataSourceCredentials}", ""
+            );
+            case POSTGRESQL -> Map.of(
+                "${dataSourceClassName}", "org.postgresql.ds.PGSimpleDataSource",
+                "${dataSourceUrl}", getProperty("test.postgresql.url") + persistenceUnitName,
+                "${dataSourceCredentials}",
+                "<user>test</user><password>test</password>"
+                    + "<property><name>user</name><value>test</value></property><property><name>password</name><value>test</value></property>"
+            );
+            default -> throw new UnsupportedOperationException(database.name());
+        };
     }
 
     private static String substitute(String resourceName, String persistenceUnitName) {
+        return substitute(resourceName, persistenceUnitName, Map.of());
+    }
+
+    private static String substitute(String resourceName, String persistenceUnitName, Map<String, String> substitutions) {
         try (var stream = OmniPersistenceIT.class.getClassLoader().getResourceAsStream(resourceName)) {
-            return new String(stream.readAllBytes(), UTF_8).replace("${persistenceUnitName}", persistenceUnitName);
+            var content = new String(stream.readAllBytes(), UTF_8).replace("${persistenceUnitName}", persistenceUnitName);
+
+            for (var substitution : substitutions.entrySet()) {
+                content = content.replace(substitution.getKey(), substitution.getValue());
+            }
+
+            return content;
+        }
+        catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Returns the test database as added to the deployment by {@link #createDeployment(Class, Class)}, because the test runs in the container, which does not
+     * have the system properties of the test run.
+     */
+    private static Database getTestDatabase() {
+        try (var stream = OmniPersistenceIT.class.getClassLoader().getResourceAsStream(TEST_DATABASE_RESOURCE)) {
+            return Database.valueOf(new String(stream.readAllBytes(), UTF_8));
         }
         catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -1612,7 +1668,7 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testDatabaseIs() {
-        assertTrue(configService().isDatabaseH2(), "Test database is H2");
+        assertEquals(getTestDatabase(), configService().getDatabase(), "Test database");
     }
 
     @Test
