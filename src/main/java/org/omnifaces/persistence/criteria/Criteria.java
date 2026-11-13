@@ -51,7 +51,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE'
  * criteria.put("created", Between.range(start, end)); // created BETWEEN start AND end
  * criteria.put("role", Enumerated.value(Role.ADMIN)); // role = 'ADMIN'
- * criteria.put("active", Bool.value(true)); // active IS TRUE
+ * criteria.put("active", Bool.value(true)); // active = TRUE
  * criteria.put("score", Numeric.value(42)); // score = 42
  * criteria.put("deleted", null); // deleted IS NULL
  * criteria.put("email", Not.value(null)); // email IS NOT NULL
@@ -137,6 +137,18 @@ public abstract class Criteria<T> implements Serializable {
      */
     public T getValue() {
         return value;
+    }
+
+    /**
+     * Returns whether given value holds multiple values, i.e. is an {@link Iterable} or an array of objects, <code>int</code>, <code>long</code> or
+     * <code>double</code>.
+     *
+     * @param value Any value.
+     * @return Whether given value holds multiple values.
+     * @since 2.0
+     */
+    public static boolean isMultiValued(@Nullable Object value) {
+        return value instanceof Iterable || value instanceof Object[] || value instanceof int[] || value instanceof long[] || value instanceof double[];
     }
 
     /**

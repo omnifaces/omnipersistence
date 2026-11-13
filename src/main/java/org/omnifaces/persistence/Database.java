@@ -32,6 +32,8 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <li>{@link #H2}
  * <li>{@link #MYSQL} (also matches MariaDB)
  * <li>{@link #POSTGRESQL}
+ * <li>{@link #SQLSERVER}
+ * <li>{@link #DB2}
  * </ul>
  *
  * @author Bauke Scholtz
@@ -44,43 +46,46 @@ public enum Database {
     /**
      * H2 database.
      */
-    H2,
+    H2(true),
 
     /**
      * MySQL database. Also matches MariaDB.
      */
-    MYSQL("MARIA"),
+    MYSQL(true, "MARIA"),
 
     /**
      * PostgreSQL database.
      */
-    POSTGRESQL("POSTGRES"),
+    POSTGRESQL(false, "POSTGRES"),
 
     /**
      * SQL Server database.
      */
-    SQLSERVER,
+    SQLSERVER(true),
 
     /**
      * DB2 database.
      */
-    DB2,
+    DB2(false),
 
     /**
-     * Database is unknown.
+     * Database is unknown. It is assumed to sort <code>NULL</code> as the smallest value.
      */
-    UNKNOWN;
+    UNKNOWN(true);
 
     private static final Logger logger = Logger.getLogger(Database.class.getName());
 
+    private final boolean sortsNullsLow;
     private final String[] names;
 
     /**
      * Internal constructor to define a database and its associated dialect name aliases.
      *
+     * @param sortsNullsLow Whether the database sorts <code>NULL</code> as the smallest value.
      * @param aliases Optional aliases that might appear in the Jakarta Persistence dialect name.
      */
-    Database(String... aliases) {
+    Database(boolean sortsNullsLow, String... aliases) {
+        this.sortsNullsLow = sortsNullsLow;
         this.names = concat(Stream.of(name()), stream(aliases)).toArray(String[]::new);
     }
 
@@ -109,6 +114,17 @@ public enum Database {
         }
 
         return UNKNOWN;
+    }
+
+    /**
+     * Returns whether this database sorts <code>NULL</code> as the smallest value, i.e. first in ascending order and last in descending order. Otherwise it
+     * sorts <code>NULL</code> as the largest value.
+     *
+     * @return Whether this database sorts <code>NULL</code> as the smallest value.
+     * @since 2.0
+     */
+    public boolean sortsNullsLow() {
+        return sortsNullsLow;
     }
 
 }

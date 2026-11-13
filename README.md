@@ -361,6 +361,10 @@ Pass them as a map whose keys are exactly the ordering fields, for example when 
 Page page2 = Page.with().range(10, 10, Map.of("id", lastSeenId), false).orderBy("id", true).build();
 ```
 
+An ordering value may be `null`.
+It is placed where the database sorts `NULL`: first in ascending order on H2, MySQL and SQL Server, and last on PostgreSQL and DB2, see `Database#sortsNullsLow()`.
+An unknown database is assumed to sort `NULL` first in ascending order.
+
 ---
 
 ## 5. Search criteria
@@ -370,19 +374,29 @@ Criteria objects are the values in the `requiredCriteria` / `optionalCriteria` m
 | Wrapper | SQL equivalent | Example |
 |---|---|---|
 | _(plain value)_ | `= ?` | `"active", true` |
+| `null` | `IS NULL` | `"nickname", null` |
 | `Like.contains(v)` | `LIKE '%v%'` | `"name", Like.contains("john")` |
 | `Like.startsWith(v)` | `LIKE 'v%'` | `"code", Like.startsWith("NL")` |
 | `Like.endsWith(v)` | `LIKE '%v'` | `"email", Like.endsWith("@example.com")` |
+| `Like.pattern(p)` | `LIKE 'p'` | `"code", Like.pattern("NL__-%")` |
 | `IgnoreCase.value(v)` | `LOWER(f) = LOWER(v)` | `"email", IgnoreCase.value("FOO@BAR.COM")` |
 | `Order.lessThan(v)` | `< v` | `"age", Order.lessThan(18)` |
 | `Order.greaterThan(v)` | `> v` | `"score", Order.greaterThan(50)` |
 | `Order.lessThanOrEqualTo(v)` | `<= v` | `"price", Order.lessThanOrEqualTo(99)` |
 | `Order.greaterThanOrEqualTo(v)` | `>= v` | `"price", Order.greaterThanOrEqualTo(10)` |
 | `Between.range(lo, hi)` | `BETWEEN lo AND hi` | `"age", Between.range(18, 65)` |
-| `Bool.value(v)` | `IS TRUE / IS NOT TRUE` | `"verified", Bool.value(true)` |
+| `Bool.value(v)` | `= TRUE / NOT (= TRUE)` | `"verified", Bool.value(true)` |
 | `Numeric.value(v)` | `= v` (parsed) | `"id", Numeric.value(42)` |
 | `Enumerated.value(v)` | `= 'ENUM_NAME'` | `"gender", Enumerated.value(MALE)` |
-| `Not.value(v)` | `NOT (…)` | `"status", Not.value("INACTIVE")` |
+| `Not.value(v)` | `NOT (…) OR f IS NULL` | `"status", Not.value("INACTIVE")` |
+| `Not.value(null)` | `IS NOT NULL` | `"nickname", Not.value(null)` |
+
+The value of `Like` matches literally: `%` and `_`, and `[` on SQL Server, are no wildcards in it, see `JPA#escapeLike(String)`.
+Only `Like.pattern(p)` matches by wildcards: `%` matches any characters, `_` matches any single character, and `\` escapes them, the same on every database.
+A value which cannot be parsed into the type of the field, such as `"abc"` on a numeric field, matches nothing, and `Not` of it matches everything.
+A value which is an empty collection or array, such as `Set.of()`, imposes no restriction, the same as when the criteria is absent.
+A `null` value is passed via e.g. `Collections.singletonMap()` or a `HashMap`, because `Map.of()` rejects it.
+`Not.value(v)` also matches when the property is `NULL`, including a property of an absent optional association, the same as `Not#applies()`, unless `v` is or contains `null`.
 
 ```java
 Map<String, Object> criteria = new LinkedHashMap<>();
@@ -563,7 +577,7 @@ Useful for writing provider- or database-specific query logic without hard-codin
 Optional<Person> p = JPA.findSingleResult(query);
 Optional<Person> p = JPA.findFirstResult(query);    // ignores duplicates
 
-// Portable string cast across providers and databases
+// Portable string cast across providers and databases, during a public BaseEntityService method only
 Expression<String> s = JPA.castAsString(builder, root.get("age"));
 
 // Multi-expression string concatenation in a criteria query
@@ -853,6 +867,16 @@ In the source, these changes need your attention:
 - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
 - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
 - `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
+
+These changes in behavior need your attention as well:
+
+- `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
+- An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
+- An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
+- `Not.value(v)` also matches when the property is `NULL`, the same as `Not#applies()`. `Not.value(null)` still matches only when it is not `NULL`.
+- A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
+- `Bool#applies()` does not match `null` anymore, the same as `Bool` does in SQL.
+- `Not#applies()` negates a wrapped `Criteria`, and matches a multi-value when none of its values matches, the same as `Not` does in SQL.
 
 OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 

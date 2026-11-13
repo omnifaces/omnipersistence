@@ -236,9 +236,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * residual offset towards the previous page; when the residual offset is 0, this is then the first record of the next page. This is empty when there is no
      * such record. Otherwise it has exactly the keys of {@link #getOrdering()}, in the same order, and map value represents the value of that property in the
      * record, which may be <code>null</code>. If not empty, then value based paging will be performed instead of offset based paging when applicable. Value
-     * based paging is not applicable when the query is fine-grained with a <code>QueryBuilder</code> of {@link BaseEntityService}, or on Hibernate when the
-     * query is fine-grained with a <code>MappedQueryBuilder</code> and the ordering contains an aggregated field, or when the ordering contains a field of a
-     * <code>@OneToMany</code> or <code>@ElementCollection</code>.
+     * based paging is not applicable when the query is fine-grained with a <code>QueryBuilder</code> of {@link BaseEntityService}, or when the query is
+     * fine-grained with a <code>MappedQueryBuilder</code> and the ordering contains an aggregated field, or when the ordering contains a field of a
+     * <code>@OneToMany</code> or <code>@ElementCollection</code>. A <code>null</code> value is placed where the database sorts <code>NULL</code>, see
+     * <code>Database#sortsNullsLow()</code>.
      *
      * @return The ordering values of the record bounding the page, or an empty map if there is none.
      * @since 1.2
@@ -519,7 +520,10 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         }
 
         /**
-         * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria.
+         * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria. A
+         * criteria whose value is an empty collection or array imposes no restriction, the same as when it is absent. A criteria whose value is
+         * <code>null</code> matches when the property is <code>NULL</code>, and <code>Not.value(null)</code> when it is not <code>NULL</code>. A property of an
+         * optional association is <code>NULL</code> when the association is absent.
          *
          * @param requiredCriteria Required criteria. May not be <code>null</code>.
          * @return This builder.
@@ -538,6 +542,9 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
         /**
          * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
+         * A criteria whose value is an empty collection or array imposes no restriction, the same as when it is absent. A criteria whose value is
+         * <code>null</code> matches when the property is <code>NULL</code>, and <code>Not.value(null)</code> when it is not <code>NULL</code>. A property of an
+         * optional association is <code>NULL</code> when the association is absent.
          *
          * @param optionalCriteria Optional criteria. May not be <code>null</code>.
          * @return This builder.

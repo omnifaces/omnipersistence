@@ -15,6 +15,8 @@ package org.omnifaces.persistence.test.model;
 import jakarta.persistence.Entity;
 import jakarta.validation.constraints.NotNull;
 
+import org.hibernate.annotations.Formula;
+
 @Entity
 public class Address extends LocalGeneratedIdEntity {
 
@@ -25,6 +27,9 @@ public class Address extends LocalGeneratedIdEntity {
     private @NotNull String postcode;
     private @NotNull String city;
     private @NotNull String country;
+
+    @Formula("CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(street, ' '), houseNumber), ', '), postcode), ' '), city), ', '), country)")
+    private String string;
 
     public String getStreet() {
         return street;
@@ -64,6 +69,10 @@ public class Address extends LocalGeneratedIdEntity {
 
     public void setCountry(String country) {
         this.country = country;
+    }
+
+    public String getString() {
+        return string;
     }
 
 }

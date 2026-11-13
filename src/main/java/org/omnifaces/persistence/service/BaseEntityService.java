@@ -29,18 +29,18 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.IntStream.range;
 import static org.omnifaces.persistence.Database.DB2;
-import static org.omnifaces.persistence.Database.POSTGRESQL;
-import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_LOAD_GRAPH;
 import static org.omnifaces.persistence.JPA.countForeignKeyReferences;
 import static org.omnifaces.persistence.JPA.findFirstResult;
 import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.JPA.lower;
+import static org.omnifaces.persistence.JPA.matchNothing;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.audit.AuditListener.copySnapshot;
+import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
 import static org.omnifaces.persistence.model.dto.Page.ID;
 import static org.omnifaces.utils.Lang.capitalize;
 import static org.omnifaces.utils.Lang.coalesce;
@@ -113,6 +113,7 @@ import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
+import jakarta.persistence.metamodel.SingularAttribute;
 import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -202,7 +203,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
     private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
     private static final String LOG_FINE_COMPUTED_TYPE_MAPPING = "Computed type mapping for %s: <%s, %s>";
-    private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), skipping!";
+    private static final String LOG_WARNING_ILLEGAL_CRITERIA_VALUE = "Cannot parse predicate for %s(%s) = %s(%s), matching nothing!";
     private static final String LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER = "Cannot order by %s in a distinct query which does not select it, skipping! The query is distinct because it joins a collection. Consider using DTO mapping or DB view instead.";
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults ignores this criteria. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
@@ -1818,7 +1819,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 FetchParent<?, ?> fetchParent = root;
 
                 for (var attribute : fetchField.split("\\.")) {
-                    fetchParent = fetchParent.fetch(attribute);
+                    fetchParent = fetchParent.fetch(attribute, JoinType.LEFT);
                 }
             }
 
@@ -2137,12 +2138,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping,
                                                         // we cannot reliably determine if custom criteria is used, so count subquery building cannot be
                                                         // reliably skipped.
-            pageBuilder.canBuildValueBasedPagingPredicate(provider != HIBERNATE || !orderingContainsAggregatedFields); // Value based paging cannot be used
-                                                                                                                       // in Hibernate if ordering contains
-                                                                                                                       // aggregated fields, because
-                                                                                                                       // Hibernate may return a cartesian
-                                                                                                                       // product and apply
-                                                                                                                       // firstResult/maxResults in memory.
+            pageBuilder.canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields); // A value based paging predicate is a WHERE clause, which
+                                                                                              // cannot compare an aggregate.
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
@@ -2355,6 +2352,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
             if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
                 var path = getElementPath(collection, collectionPath, field, joinType, joins);
+
+                try {
+                    parseElementCriteria(path.getJavaType(), criteria.getValue());
+                }
+                catch (IllegalArgumentException e) {
+                    continue; // An unparseable value restricts the page, not the elements.
+                }
+
                 var predicate = buildElementPredicate(
                     path, path.getJavaType(), criteria.getValue(), criteriaBuilder, new UncheckedParameterBuilder(field, criteriaBuilder, parameters)
                 );
@@ -2480,21 +2485,54 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var field = order.getKey();
             var value = lastOrderingValues.get(field);
             var path = (Expression<V>) pathResolver.get(field);
-            ParameterExpression<V> parameter = new UncheckedParameterBuilder(field, criteriaBuilder, parameters).create(value);
-            var predicate = order.getValue() ^ page.isReversed() ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
+            ParameterExpression<V> parameter = value == null ? null : new UncheckedParameterBuilder(field, criteriaBuilder, parameters).create(value);
+            var predicate = buildValueBasedPagingFieldPredicate(path, parameter, order.getValue() ^ page.isReversed(), criteriaBuilder);
 
-            for (var previousOrderByField : orderByFields.entrySet()) {
-                var previousPath = previousOrderByField.getKey();
-                var previousParameter = previousOrderByField.getValue();
-                predicate = criteriaBuilder
-                    .and(predicate, previousParameter == null ? criteriaBuilder.isNull(previousPath) : criteriaBuilder.equal(previousPath, previousParameter));
+            if (predicate != null) {
+                for (var previousOrderByField : orderByFields.entrySet()) {
+                    var previousPath = previousOrderByField.getKey();
+                    var previousParameter = previousOrderByField.getValue();
+                    predicate = criteriaBuilder
+                        .and(
+                            predicate, previousParameter == null ? criteriaBuilder.isNull(previousPath) : criteriaBuilder.equal(previousPath, previousParameter)
+                        );
+                }
+
+                predicates.add(predicate);
             }
 
-            orderByFields.put(path, value == null ? null : parameter);
-            predicates.add(predicate);
+            orderByFields.put(path, parameter);
         }
 
         return criteriaBuilder.or(toArray(predicates));
+    }
+
+    /**
+     * Returns the predicate matching the values of given path which come after given parameter, or <code>null</code> when no value comes after it. A
+     * <code>null</code> parameter stands for <code>NULL</code>, which comes where the database sorts it, see {@link Database#sortsNullsLow()}.
+     */
+    private <V extends Comparable<V>> Predicate buildValueBasedPagingFieldPredicate(
+        Expression<V> path, ParameterExpression<V> parameter, boolean greater, CriteriaBuilder criteriaBuilder
+    )
+    {
+        var nullsComeAfter = isNullable(path) && greater != database.sortsNullsLow();
+
+        if (parameter == null) {
+            return nullsComeAfter ? null : criteriaBuilder.isNotNull(path);
+        }
+
+        var comparison = greater ? criteriaBuilder.greaterThan(path, parameter) : criteriaBuilder.lessThan(path, parameter);
+        return nullsComeAfter ? criteriaBuilder.or(comparison, criteriaBuilder.isNull(path)) : comparison;
+    }
+
+    /**
+     * Returns whether given path may be <code>NULL</code>. Only a non-optional attribute and an ID of the root are not, so that their value based paging
+     * predicate needs no <code>IS NULL</code>, which would prevent the use of an index on some databases. Such an attribute of a joined entity may still be
+     * <code>NULL</code>, because the join may be a <code>LEFT JOIN</code>.
+     */
+    private static boolean isNullable(Expression<?> path) {
+        return !(path instanceof Path<?> attributePath && attributePath.getParentPath() instanceof Root<?>
+            && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute && (attribute.isId() || !attribute.isOptional()));
     }
 
     private List<Predicate> buildPredicates(
@@ -2513,6 +2551,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var field = parameter.getKey();
         var criteria = parameter.getValue();
+
+        if (isEmptyMultiValue(criteria)) {
+            return null;
+        }
+
         Expression<?> path;
         Class<?> type = null;
 
@@ -2557,10 +2600,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var value = unwrapNot(criteria);
         var negated = isNegated(criteria);
         var negationApplied = false;
+        var nullValue = isNullValue(value);
         Predicate predicate;
 
         try {
-            if (value == null || value instanceof Criteria<?> criteriaObject && criteriaObject.getValue() == null) {
+            if (nullValue) {
                 predicate = criteriaBuilder.isNull(path);
             }
             else if (elementCollections.test(field)) {
@@ -2589,12 +2633,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
         catch (IllegalArgumentException e) {
             logger.log(WARNING, e, () -> format(LOG_WARNING_ILLEGAL_CRITERIA_VALUE, field, type, criteria, criteria != null ? criteria.getClass() : null));
-            predicate = null;
+            predicate = matchNothing(criteriaBuilder, parameterBuilder);
         }
 
         if (predicate != null) {
             if (negated && !negationApplied) {
-                predicate = criteriaBuilder.not(predicate);
+                predicate = negate(predicate, nullValue, path, criteriaBuilder);
             }
 
             alias.set(predicate);
@@ -2603,55 +2647,45 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return predicate;
     }
 
+    /**
+     * Builds a predicate on an <code>@ElementCollection</code> as correlated subquery by {@link #buildArrayPredicate}. It must not be a plain <code>IN</code>
+     * on the joined elements: EclipseLink then returns a cartesian product, and Hibernate renders a <code>GROUP BY</code> which is invalid when the collection
+     * is also fetched and too lax for PostgreSQL and SQL Server. Where a nested subquery is not supported, it is built as plain <code>IN</code> by
+     * {@link #buildInPredicate} if possible, else it is skipped.
+     */
     private Predicate buildElementCollectionPredicate(
         Alias alias, Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
         PathResolver pathResolver, ParameterBuilder parameterBuilder
     )
     {
-        if (isElementCollectionSubqueried(query, value, negated)) {
+        if (isNestedSubquerySupported(query)) {
             return buildArrayPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
         }
         else if (isElementCollectionInPredicate(query, value, negated)) {
             return buildInPredicate(alias, path, type, value, criteriaBuilder, parameterBuilder);
         }
         else {
-            // Count query on OpenJPA, see isElementCollectionSubqueried; the count ignores this criteria.
+            // The count ignores this criteria, see isNestedSubquerySupported.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
     }
 
     /**
-     * Returns whether the predicate for an <code>@ElementCollection</code> is built as correlated subquery by {@link #buildArrayPredicate}, else as plain
-     * <code>IN</code> by {@link #buildInPredicate}.
-     * <ul>
-     * <li>EclipseLink: always, because a plain <code>IN</code> causes a cartesian product.
-     * <li>Hibernate with PostgreSQL or SQL Server: always, because these databases enforce a strict <code>GROUP BY</code> which Hibernate does not add for a
-     * plain <code>IN</code>.
-     * <li>OpenJPA: in the data query only, because in the count query OpenJPA correlates the nested subquery with an extra cross-joined entity instead of the
-     * counted one, as it incorrectly declares the root of the enclosing subquery once more when the nested subquery refers to it.
-     * <li>Hibernate with other databases: only when the value contains a {@link Criteria} or is negated, because a plain <code>IN</code> cannot express a
-     * {@link Criteria}, and a negated plain <code>IN</code> on the joined elements matches any other element instead of no element.
-     * </ul>
+     * Returns whether a nested correlated subquery is supported in given query. It is not in the count query of OpenJPA, which correlates a nested subquery
+     * with an extra cross-joined entity instead of the counted one, as it incorrectly declares the root of the enclosing subquery once more when the nested
+     * subquery refers to it.
      */
-    private boolean isElementCollectionSubqueried(AbstractQuery<?> query, Object value, boolean negated) {
-        if (provider == ECLIPSELINK || provider == HIBERNATE && (database == POSTGRESQL || database == SQLSERVER)) {
-            return true;
-        }
-        else if (provider == OPENJPA) {
-            return !(query instanceof Subquery);
-        }
-        else {
-            return negated || containsCriteria(value);
-        }
+    private boolean isNestedSubquerySupported(AbstractQuery<?> query) {
+        return provider != OPENJPA || !(query instanceof Subquery);
     }
 
     /**
-     * Returns whether the predicate for an <code>@ElementCollection</code> is built as plain <code>IN</code> by {@link #buildInPredicate}. When it is neither
-     * this nor {@link #isElementCollectionSubqueried}, it is skipped.
+     * Returns whether the predicate for an <code>@ElementCollection</code> is built as plain <code>IN</code> by {@link #buildInPredicate}, which is only so
+     * where a nested subquery is not supported, and which cannot express a negation or a {@link Criteria}.
      */
     private boolean isElementCollectionInPredicate(AbstractQuery<?> query, Object value, boolean negated) {
-        return !isElementCollectionSubqueried(query, value, negated) && !negated && !containsCriteria(value);
+        return !isNestedSubquerySupported(query) && !negated && !containsCriteria(value);
     }
 
     /**
@@ -2683,15 +2717,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     )
     {
         var ignoreCase = String.class.equals(type);
-        var in = stream(value)
-            .map(item -> createElementCollectionCriteria(type, item).getValue())
-            .filter(Objects::nonNull)
-            .map(item -> ignoreCase ? criteriaBuilder.lower(parameterBuilder.create(item)) : parameterBuilder.create(item))
-            .toList();
+        var values = stream(value).map(item -> createElementCollectionCriteria(type, item).getValue()).filter(Objects::nonNull).toList();
 
-        if (in.isEmpty()) {
+        if (values.isEmpty()) {
             return null;
         }
+
+        var in = values.stream().map(item -> ignoreCase ? criteriaBuilder.lower(parameterBuilder.create(item)) : parameterBuilder.create(item)).toList();
 
         alias.in(in.size());
         return (ignoreCase ? lower(criteriaBuilder, (Expression<String>) path) : path).in(in.toArray(Expression<?>[]::new));
@@ -2708,8 +2740,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var oneToManyField = oneToManys.test(field);
 
-        if (oneToManyField && provider == OPENJPA && query instanceof Subquery) {
-            // OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity; the count ignores this criteria.
+        if (oneToManyField && !isNestedSubquerySupported(query)) {
+            // The count ignores this criteria, see isNestedSubquerySupported.
             logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
             return null;
         }
@@ -2723,9 +2755,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 throw new IllegalArgumentException(value.toString());
             }
 
-            return negateIfNecessary(criteriaBuilder.or(toArray(predicates)), negated, criteriaBuilder);
+            var predicate = criteriaBuilder.or(toArray(predicates));
+            return negated ? negate(predicate, hasNullValue(value), path, criteriaBuilder) : predicate;
         }
 
+        var elementType = resolveElementType(type, field, query, pathResolver);
+        parseElementCriteria(elementType, value);
         var plainItems = new ArrayList<>();
         var criteriaItems = new ArrayList<Criteria<?>>();
 
@@ -2741,12 +2776,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var predicates = new ArrayList<Predicate>();
 
         if (!plainItems.isEmpty()) {
-            predicates.add(buildCollectionSubqueryPredicate(type, field, plainItems, false, negated, query, criteriaBuilder, pathResolver, parameterBuilder));
+            predicates.add(
+                buildCollectionSubqueryPredicate(elementType, field, plainItems, false, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
+            );
         }
 
         for (var criteria : criteriaItems) {
             predicates.add(
-                buildCollectionSubqueryPredicate(type, field, List.of(criteria), true, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
+                buildCollectionSubqueryPredicate(elementType, field, List.of(criteria), true, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
             );
         }
 
@@ -2777,10 +2814,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var subquery = query.subquery(Long.class);
         Root<E> subqueryRoot = subquery.from(entityType);
-        var fieldPath = new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
-        var resolvedType = (type == null) ? fieldPath.getJavaType() : type; // type is null when isBuiltAsArrayPredicate.
+        var fieldPath = getCollectionFieldPath(subqueryRoot, field, pathResolver);
         var predicates = items.stream()
-            .map(item -> buildElementPredicate(fieldPath, resolvedType, item, criteriaBuilder, parameterBuilder))
+            .map(item -> buildElementPredicate(fieldPath, type, item, criteriaBuilder, parameterBuilder))
             .filter(Objects::nonNull)
             .toList();
 
@@ -2800,6 +2836,36 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var allMatchCount = (long) predicates.size();
         return negated ? criteriaBuilder.notEqual(count, allMatchCount) : criteriaBuilder.equal(count, allMatchCount);
+    }
+
+    /**
+     * Returns given type, or when it is <code>null</code>, the type of the elements of given <code>@OneToMany</code> or <code>@ElementCollection</code> field.
+     */
+    private Class<?> resolveElementType(Class<?> type, String field, AbstractQuery<?> query, PathResolver pathResolver) {
+        if (type != null) {
+            return type;
+        }
+
+        return getCollectionFieldPath(query.subquery(Long.class).from(entityType), field, pathResolver).getJavaType();
+    }
+
+    private Expression<?> getCollectionFieldPath(Root<E> subqueryRoot, String field, PathResolver pathResolver) {
+        return new RootPathResolver(subqueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes).get(pathResolver.join(field));
+    }
+
+    /**
+     * Parses each plain value in given criteria on an element of a <code>@OneToMany</code> or <code>@ElementCollection</code>, so that an unparseable value
+     * throws {@link IllegalArgumentException} before any parameter of the criteria is created.
+     */
+    private void parseElementCriteria(Class<?> type, Object criteria) {
+        var value = unwrapNot(criteria);
+
+        if (isMultiValued(value)) {
+            stream(value).forEach(item -> parseElementCriteria(type, item));
+        }
+        else if (value != null && !isEntity(value)) {
+            createElementCollectionCriteria(type, value);
+        }
     }
 
     /**
@@ -2839,10 +2905,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether given value holds multiple values, which <code>Streams#stream(Object)</code> of OmniUtils streams one by one.
+     * Returns whether given value is <code>null</code> or a {@link Criteria} whose value is <code>null</code>.
      */
-    private static boolean isMultiValued(Object value) {
-        return value instanceof Iterable || value instanceof Object[] || value instanceof int[] || value instanceof long[] || value instanceof double[];
+    private static boolean isNullValue(Object value) {
+        return value == null || value instanceof Criteria<?> criteria && criteria.getValue() == null;
+    }
+
+    /**
+     * Returns whether given value is, or holds in its multiple values outside a nested negation, a <code>null</code> value, see {@link #isNullValue(Object)}.
+     */
+    private static boolean hasNullValue(Object value) {
+        return !(value instanceof Not) && (isNullValue(value) || isMultiValued(value) && stream(value).anyMatch(BaseEntityService::hasNullValue));
+    }
+
+    /**
+     * Returns whether given value holds multiple values but has none, also not in its nested multiple values. Such a criteria imposes no restriction, the same
+     * as an absent criteria.
+     */
+    static boolean isEmptyMultiValue(Object value) {
+        var unwrapped = Criteria.unwrap(value);
+        return isMultiValued(unwrapped) && stream(unwrapped).allMatch(BaseEntityService::isEmptyMultiValue);
     }
 
     private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
@@ -2876,8 +2958,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
-    private static Predicate negateIfNecessary(Predicate predicate, boolean negated, CriteriaBuilder criteriaBuilder) {
-        return predicate != null && negated ? criteriaBuilder.not(predicate) : predicate;
+    /**
+     * Negates given predicate on given path. The negation also matches when the path is <code>NULL</code>, the same as {@link Not#applies(Object)}, unless the
+     * value of the criteria is or contains <code>null</code> outside a nested negation, or the path is not nullable, see {@link #isNullable(Expression)}.
+     */
+    private static Predicate negate(Predicate predicate, boolean valueHasNull, Expression<?> path, CriteriaBuilder criteriaBuilder) {
+        var negation = criteriaBuilder.not(predicate);
+        return !valueHasNull && isNullable(path) ? criteriaBuilder.or(negation, criteriaBuilder.isNull(path)) : negation;
     }
 
     // Helpers --------------------------------------------------------------------------------------------------------

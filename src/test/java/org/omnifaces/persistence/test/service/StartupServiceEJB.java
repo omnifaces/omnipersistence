@@ -39,6 +39,8 @@ public class StartupServiceEJB {
     public static final int TOTAL_RECORDS = 200;
     public static final int ROWS_PER_PAGE = 10;
     public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
+    private static final int NICKNAMELESS_EVERY = 5;
+    private static final int NICKNAMELESS_REMAINDER = 2;
 
     @EJB
     private TextServiceEJB textServiceEJB;
@@ -65,7 +67,7 @@ public class StartupServiceEJB {
         for (var i = 0; i < TOTAL_RECORDS; i++) {
             var person = new Person();
             person.setEmail("name" + i + "@example.com");
-            person.setNickname("nick" + i);
+            person.setNickname(i % NICKNAMELESS_EVERY == NICKNAMELESS_REMAINDER ? null : "nick" + i);
             person.setGender(genders[random.nextInt(genders.length)]);
             person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
 
