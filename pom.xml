@@ -87,7 +87,8 @@
         <test.postgresql.url>jdbc:postgresql://localhost:5432/</test.postgresql.url> <!-- The persistence unit name is appended as database name. -->
         <test.sqlserver-driver.version>13.6.2.jre11</test.sqlserver-driver.version> <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc -->
         <test.sqlserver.url>jdbc:sqlserver://localhost:1433;trustServerCertificate=true;databaseName=</test.sqlserver.url> <!-- The persistence unit name is appended as database name. -->
-        <test.database>H2</test.database> <!-- H2, MySQL, PostgreSQL or SQLServer -->
+        <test.db2-driver.version>12.1.5.0</test.db2-driver.version> <!-- https://mvnrepository.com/artifact/com.ibm.db2/jcc -->
+        <test.database>H2</test.database> <!-- H2, MySQL, PostgreSQL, SQLServer or DB2 -->
     </properties>
 
     <dependencies>
@@ -363,6 +364,7 @@
                         <test.postgresql.url>${test.postgresql.url}</test.postgresql.url>
                         <test.sqlserver-driver.version>${test.sqlserver-driver.version}</test.sqlserver-driver.version>
                         <test.sqlserver.url>${test.sqlserver.url}</test.sqlserver.url>
+                        <test.db2-driver.version>${test.db2-driver.version}</test.db2-driver.version>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
@@ -422,6 +424,25 @@
                                             <artifactId>wildfly-dist</artifactId>
                                             <version>${test.wildfly.version}</version>
                                             <type>zip</type>
+                                        </artifactItem>
+                                    </artifactItems>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>install-db2-driver-in-wildfly</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>com.ibm.db2</groupId>
+                                            <artifactId>jcc</artifactId>
+                                            <version>${test.db2-driver.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/wildfly-${test.wildfly.version}/standalone/deployments</outputDirectory>
+                                            <destFileName>db2.jar</destFileName>
                                         </artifactItem>
                                     </artifactItems>
                                 </configuration>
@@ -511,6 +532,13 @@
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
+                                        <artifactItem>
+                                            <groupId>com.ibm.db2</groupId>
+                                            <artifactId>jcc</artifactId>
+                                            <version>${test.db2-driver.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
+                                        </artifactItem>
                                     </artifactItems>
                                 </configuration>
                             </execution>
@@ -597,6 +625,13 @@
                                             <groupId>com.microsoft.sqlserver</groupId>
                                             <artifactId>mssql-jdbc</artifactId>
                                             <version>${test.sqlserver-driver.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>com.ibm.db2</groupId>
+                                            <artifactId>jcc</artifactId>
+                                            <version>${test.db2-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>

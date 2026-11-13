@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.Database.DB2;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_RECORDS;
 
@@ -92,6 +93,9 @@ import org.omnifaces.utils.collection.PartialResultList;
 public abstract class OmniPersistenceIT {
 
     static final String PROFILE_ID = "profile.id";
+    private static final String READ_COMMITTED = "<isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>";
+    private static final String DB2_USER = "db2inst1";
+    private static final String DB2_PASSWORD = "PassW0rd!";
     private static final String TEST_DATABASE_RESOURCE = "META-INF/test.database";
     static final String OPENJPA = ".*-openjpa";
     static final String ECLIPSELINK = ".*-eclipselink";
@@ -102,13 +106,28 @@ public abstract class OmniPersistenceIT {
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
         var database = Database.valueOf(getProperty("test.database").toUpperCase());
+        var wildFlyDB2 = database == DB2 && getProperty(PROFILE_ID).startsWith("wildfly-");
+        var jtaDataSource = (wildFlyDB2 ? "java:jboss/datasources/" : "java:app/") + persistenceUnitName;
         var maven = Maven.resolver();
-        return create(WebArchive.class)
+        var archive = create(WebArchive.class)
             .addPackages(true, testClass.getPackage())
             .deleteClass(excludedStartupService)
             .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
-            .addAsResource(new StringAsset(substitute("META-INF/persistence.xml", persistenceUnitName)), "META-INF/persistence.xml")
-            .addAsWebInfResource(new StringAsset(substitute("WEB-INF/web.xml", persistenceUnitName, dataSourceOf(database, persistenceUnitName))), "web.xml")
+            .addAsResource(
+                new StringAsset(
+                    substitute(
+                        "META-INF/persistence.xml", persistenceUnitName,
+                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaSchema}", openJpaSchemaOf(database, persistenceUnitName))
+                    )
+                ),
+                "META-INF/persistence.xml"
+            )
+            .addAsWebInfResource(
+                new StringAsset(
+                    substitute("WEB-INF/web.xml", persistenceUnitName, Map.of("${dataSource}", wildFlyDB2 ? "" : dataSourceOf(database, persistenceUnitName)))
+                ),
+                "web.xml"
+            )
             .addAsResource(new StringAsset(database.name()), TEST_DATABASE_RESOURCE)
             .addAsResource("META-INF/sql/create-test.sql")
             .addAsResource("META-INF/sql/drop-test.sql")
@@ -121,52 +140,93 @@ public abstract class OmniPersistenceIT {
                         "com.h2database:h2:" + getProperty("test.h2.version"),
                         "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version"),
                         "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version"),
-                        "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version")
+                        "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version"),
+                        "com.ibm.db2:jcc:" + getProperty("test.db2-driver.version")
                     )
                     .withTransitivity().asFile()
             );
+
+        if (wildFlyDB2) {
+            archive.addAsWebInfResource(new StringAsset(wildFlyDB2DataSourceOf(jtaDataSource, persistenceUnitName)), "db2-ds.xml");
+        }
+
+        return archive;
     }
 
     /**
-     * Returns the data source class name, URL and credentials of the given test database, substituted as <code>${dataSourceClassName}</code>,
-     * <code>${dataSourceUrl}</code> and <code>${dataSourceCredentials}</code> in <code>web.xml</code>.
+     * Returns the <code>data-source</code> of the given test database, substituted as <code>${dataSource}</code> in <code>web.xml</code>.
      */
-    private static Map<String, String> dataSourceOf(Database database, String persistenceUnitName) {
+    private static String dataSourceOf(Database database, String persistenceUnitName) {
         return switch (database) {
-            case H2 -> Map.of(
-                "${dataSourceClassName}", "org.h2.jdbcx.JdbcDataSource",
-                "${dataSourceUrl}", "jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY",
-                "${dataSourceCredentials}", ""
+            case H2 -> dataSourceOf(
+                persistenceUnitName, "org.h2.jdbcx.JdbcDataSource", urlOf("jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY"),
+                READ_COMMITTED
             );
-            case MYSQL -> Map.of(
-                "${dataSourceClassName}", "com.mysql.cj.jdbc.MysqlDataSource",
-                "${dataSourceUrl}", getProperty("test.mysql.url") + persistenceUnitName + "?fallbackToSystemKeyStore=false", // Avoids GlassFish keystore.
-                "${dataSourceCredentials}", credentialsOf("test", "test")
+            case MYSQL -> dataSourceOf(
+                persistenceUnitName, "com.mysql.cj.jdbc.MysqlDataSource",
+                urlOf(getProperty("test.mysql.url") + persistenceUnitName + "?fallbackToSystemKeyStore=false") // Avoids GlassFish keystore.
+                    + credentialsOf("test", "test"),
+                READ_COMMITTED
             );
-            case POSTGRESQL -> Map.of(
-                "${dataSourceClassName}", "org.postgresql.ds.PGSimpleDataSource",
-                "${dataSourceUrl}", getProperty("test.postgresql.url") + persistenceUnitName,
-                "${dataSourceCredentials}", credentialsOf("test", "test")
+            case POSTGRESQL -> dataSourceOf(
+                persistenceUnitName, "org.postgresql.ds.PGSimpleDataSource",
+                urlOf(getProperty("test.postgresql.url") + persistenceUnitName) + credentialsOf("test", "test"), READ_COMMITTED
             );
-            case SQLSERVER -> Map.of(
-                "${dataSourceClassName}", "com.microsoft.sqlserver.jdbc.SQLServerDataSource",
-                "${dataSourceUrl}", getProperty("test.sqlserver.url") + persistenceUnitName,
-                "${dataSourceCredentials}", credentialsOf("test", "PassW0rd!")
+            case SQLSERVER -> dataSourceOf(
+                persistenceUnitName, "com.microsoft.sqlserver.jdbc.SQLServerDataSource",
+                urlOf(getProperty("test.sqlserver.url") + persistenceUnitName) + credentialsOf("test", "PassW0rd!"), READ_COMMITTED
+            );
+            case DB2 -> dataSourceOf(
+                // TomEE maps an isolation level onto the int defaultIsolationLevel of the DB2 driver.
+                persistenceUnitName, "com.ibm.db2.jcc.DB2Driver", urlOf(db2UrlOf(persistenceUnitName)) + credentialsOf(DB2_USER, DB2_PASSWORD), ""
             );
             default -> throw new UnsupportedOperationException(database.name());
         };
+    }
+
+    private static String dataSourceOf(String persistenceUnitName, String className, String settings, String isolationLevel) {
+        return "<data-source><name>java:app/" + persistenceUnitName + "</name><class-name>" + className + "</class-name>" + settings
+            + "<transactional>true</transactional>" + isolationLevel + "</data-source>";
+    }
+
+    /**
+     * Returns the DB2 data source as a WildFly <code>-ds.xml</code>, because WildFly cannot configure the DB2 driver via <code>web.xml</code>: it does not
+     * accept a driver class, and it ignores the URL and the <code>int</code> properties of a DB2 data source class.
+     */
+    private static String wildFlyDB2DataSourceOf(String jndiName, String persistenceUnitName) {
+        return "<datasources><datasource jndi-name=\"" + jndiName + "\" pool-name=\"" + persistenceUnitName + "\">"
+            + "<connection-url>" + db2UrlOf(persistenceUnitName) + "</connection-url><driver>db2.jar</driver>"
+            + "<security><user-name>" + DB2_USER + "</user-name><password>" + DB2_PASSWORD + "</password></security></datasource></datasources>";
+    }
+
+    /**
+     * Returns the DB2 URL with the persistence unit name as schema, because a DB2 database name has at most 8 characters.
+     */
+    private static String db2UrlOf(String persistenceUnitName) {
+        return "jdbc:db2://localhost:50000/test:currentSchema=" + persistenceUnitName.toUpperCase() + ";";
+    }
+
+    /**
+     * Returns the OpenJPA schema property for DB2, substituted as <code>${openJpaSchema}</code> in <code>persistence.xml</code>, because OpenJPA otherwise
+     * finds the tables of the other schemas of the same database.
+     */
+    private static String openJpaSchemaOf(Database database, String persistenceUnitName) {
+        return database == DB2 ? "<property name=\"openjpa.jdbc.Schema\" value=\"" + persistenceUnitName.toUpperCase() + "\" />" : "";
+    }
+
+    private static String urlOf(String url) {
+        return "<url>" + url + "</url>";
     }
 
     /**
      * Returns the given credentials as elements as well as properties of the data source, because TomEE ignores the elements.
      */
     private static String credentialsOf(String user, String password) {
-        return "<user>" + user + "</user><password>" + password + "</password>"
-            + "<property><name>user</name><value>" + user + "</value></property><property><name>password</name><value>" + password + "</value></property>";
+        return "<user>" + user + "</user><password>" + password + "</password>" + propertyOf("user", user) + propertyOf("password", password);
     }
 
-    private static String substitute(String resourceName, String persistenceUnitName) {
-        return substitute(resourceName, persistenceUnitName, Map.of());
+    private static String propertyOf(String name, String value) {
+        return "<property><name>" + name + "</name><value>" + value + "</value></property>";
     }
 
     private static String substitute(String resourceName, String persistenceUnitName, Map<String, String> substitutions) {

@@ -20,7 +20,7 @@
     version="3.0"
 >
     <persistence-unit name="${persistenceUnitName}">
-        <jta-data-source>java:app/${persistenceUnitName}</jta-data-source>
+        <jta-data-source>${jtaDataSource}</jta-data-source>
 
         <!-- Needed for OpenJPA only! -->
         <class>org.omnifaces.persistence.model.BaseEntity</class>
@@ -49,6 +49,7 @@
 
             <!-- OpenJPA -->
             <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=INFO, SQL=TRACE" />
+            ${openJpaSchema}
 
             <!-- WildFly -->
             <property name="wildfly.jpa.twophasebootstrap" value="false" /> <!-- https://issues.jboss.org/browse/WFLY-2727 -->
