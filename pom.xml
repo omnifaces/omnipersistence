@@ -83,7 +83,9 @@
         <test.h2.version>2.5.252</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
         <test.postgresql-driver.version>42.7.14</test.postgresql-driver.version> <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
         <test.postgresql.url>jdbc:postgresql://localhost:5432/</test.postgresql.url> <!-- The persistence unit name is appended as database name. -->
-        <test.database>H2</test.database> <!-- H2 or PostgreSQL -->
+        <test.sqlserver-driver.version>13.6.2.jre11</test.sqlserver-driver.version> <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc -->
+        <test.sqlserver.url>jdbc:sqlserver://localhost:1433;trustServerCertificate=true;databaseName=</test.sqlserver.url> <!-- The persistence unit name is appended as database name. -->
+        <test.database>H2</test.database> <!-- H2, PostgreSQL or SQLServer -->
     </properties>
 
     <dependencies>
@@ -355,6 +357,8 @@
                         <test.postgresql-driver.version>${test.postgresql-driver.version}</test.postgresql-driver.version>
                         <test.database>${test.database}</test.database>
                         <test.postgresql.url>${test.postgresql.url}</test.postgresql.url>
+                        <test.sqlserver-driver.version>${test.sqlserver-driver.version}</test.sqlserver-driver.version>
+                        <test.sqlserver.url>${test.sqlserver.url}</test.sqlserver.url>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
@@ -489,6 +493,13 @@
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
+                                        <artifactItem>
+                                            <groupId>com.microsoft.sqlserver</groupId>
+                                            <artifactId>mssql-jdbc</artifactId>
+                                            <version>${test.sqlserver-driver.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
+                                        </artifactItem>
                                     </artifactItems>
                                 </configuration>
                             </execution>
@@ -561,6 +572,13 @@
                                             <groupId>org.postgresql</groupId>
                                             <artifactId>postgresql</artifactId>
                                             <version>${test.postgresql-driver.version}</version>
+                                            <type>jar</type>
+                                            <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>com.microsoft.sqlserver</groupId>
+                                            <artifactId>mssql-jdbc</artifactId>
+                                            <version>${test.sqlserver-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>
