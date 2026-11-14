@@ -414,6 +414,8 @@ PartialResultList<Person> result = personRepository.getPage(
 ```
 
 `Like` is case-insensitive and also works on enum fields (matches `name().contains(pattern)`) and boolean fields (delegates to `Bool`).
+On a `java.time` field, `Like` and `IgnoreCase` match the date as `yyyy-MM-dd` and the time as `HH:mm:ss`, with a space in between.
+Whether the offset and fractional seconds follow depends on the database.
 
 ---
 

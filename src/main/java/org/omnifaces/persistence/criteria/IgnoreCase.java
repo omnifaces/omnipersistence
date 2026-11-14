@@ -66,7 +66,7 @@ public final class IgnoreCase extends Criteria<String> {
 
     @Override
     public boolean applies(@Nullable Object modelValue) {
-        return modelValue != null && modelValue.toString().equalsIgnoreCase(getValue());
+        return modelValue != null && asString(modelValue).equalsIgnoreCase(getValue());
     }
 
 }
