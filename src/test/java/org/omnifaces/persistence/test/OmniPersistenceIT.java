@@ -79,6 +79,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
@@ -118,6 +119,8 @@ public abstract class OmniPersistenceIT {
     private static final long MAX_ID = 190;
     private static final LocalDate MAX_DATE_OF_BIRTH = LocalDate.of(1970, 1, 1);
     private static final long TOTAL_PHONES = 3;
+    private static final String MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT = ":14:15";
+    private static final String MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE = "-11-14 ";
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
@@ -280,6 +283,8 @@ public abstract class OmniPersistenceIT {
     protected abstract BaseEntityService<Long, Text> textService();
 
     protected abstract BaseEntityService<Long, Comment> commentService();
+
+    protected abstract BaseEntityService<Long, Appointment> appointmentService();
 
     protected abstract BaseEntityService<String, Lookup> lookupService();
 
@@ -1164,6 +1169,26 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPageWithLikeOnLocalTime() {
+        assertPageWithLikeOnAppointment("startLocalTime", Appointment::getStartLocalTime, MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT);
+    }
+
+    @Test
+    void testPageWithLikeOnLocalDateTimeBySpaceSeparatedDate() {
+        assertPageWithLikeOnAppointment("startLocalDateTime", Appointment::getStartLocalDateTime, MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE);
+    }
+
+    @Test
+    void testPageWithLikeOnOffsetTime() {
+        assertPageWithLikeOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT);
+    }
+
+    @Test
+    void testPageWithLikeOnOffsetDateTimeBySpaceSeparatedDate() {
+        assertPageWithLikeOnAppointment("startOffsetDateTime", Appointment::getStartOffsetDateTime, MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE);
+    }
+
+    @Test
     void testPageWithLikeOnStringEnum() {
         assertPage(
             phoneService().getAllWithOwners(), phone -> likes("mob", phone.getType()), Map.of("type", Like.contains("mob")), Map.of(),
@@ -1577,6 +1602,13 @@ public abstract class OmniPersistenceIT {
 
     private static boolean likes(String term, Object value) {
         return Like.contains(term).applies(value);
+    }
+
+    private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
+        assertPage(
+            appointmentService().list(), appointment -> likes(term, getter.apply(appointment)), Map.of(field, Like.contains(term)), Map.of(),
+            appointmentService()::getPage, true
+        );
     }
 
     private static Map<String, Object> likeOnAll(String term, String... fields) {

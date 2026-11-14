@@ -23,6 +23,11 @@ import static org.omnifaces.persistence.test.Serializations.serializeAndDeserial
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +56,9 @@ import org.omnifaces.persistence.criteria.Order;
  * The {@code build()} method is generally not tested here as it requires a JPA CriteriaBuilder and is covered by integration tests.
  */
 public class CriteriaTest {
+
+    private static final LocalDateTime LOCAL_DATE_TIME = LocalDateTime.of(2026, 11, 14, 13, 14, 0, 123_000_000);
+    private static final OffsetDateTime OFFSET_DATE_TIME = OffsetDateTime.of(LOCAL_DATE_TIME, ZoneOffset.ofHours(2));
 
     // ----------------------------------------------------------------------------------------------------------------
     // Criteria (base class)
@@ -173,6 +181,17 @@ public class CriteriaTest {
             var like = Like.contains("mob");
             assertTrue(like.applies(TestEnum.MOBILE));
             assertFalse(like.applies(TestEnum.HOME));
+        }
+
+        @Test
+        void appliesMatchesTemporalValuesBySpaceSeparatedSecondsPrecision() {
+            assertTrue(Like.contains("2026-11-14 13:14:00").applies(LOCAL_DATE_TIME));
+            assertTrue(Like.contains("13:14:00").applies(LOCAL_DATE_TIME.toLocalTime()));
+            assertTrue(Like.contains("2026-11-14 13:14:00+02").applies(OFFSET_DATE_TIME));
+            assertTrue(Like.contains("13:14:00+02").applies(OFFSET_DATE_TIME.toOffsetTime()));
+            assertTrue(Like.contains("13:14:00+05:30").applies(OffsetTime.of(LocalTime.of(13, 14), ZoneOffset.ofHoursMinutes(5, 30))));
+            assertTrue(Like.contains("13:14:00+00").applies(OffsetTime.of(LocalTime.of(13, 14), ZoneOffset.UTC)));
+            assertFalse(Like.contains("T").applies(LOCAL_DATE_TIME));
         }
 
         @Test
@@ -732,6 +751,14 @@ public class CriteriaTest {
         @Test
         void appliesWorksWithNonStringToString() {
             assertTrue(IgnoreCase.value("42").applies(42));
+        }
+
+        @Test
+        void appliesMatchesTemporalValuesBySpaceSeparatedSecondsPrecision() {
+            assertTrue(IgnoreCase.value("2026-11-14 13:14:00").applies(LOCAL_DATE_TIME));
+            assertTrue(IgnoreCase.value("13:14:00").applies(LocalTime.of(13, 14)));
+            assertTrue(IgnoreCase.value("2026-11-14 13:14:00+02").applies(OFFSET_DATE_TIME));
+            assertTrue(IgnoreCase.value("13:14:00+02").applies(OffsetTime.of(LocalTime.of(13, 14), ZoneOffset.ofHours(2))));
         }
 
         @Test

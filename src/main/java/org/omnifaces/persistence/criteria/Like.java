@@ -215,7 +215,7 @@ public final class Like extends Criteria<String> {
         }
 
         String lowerCasedValue = getValue().toLowerCase(Locale.ROOT);
-        String lowerCasedModelValue = modelValue.toString().toLowerCase(Locale.ROOT);
+        String lowerCasedModelValue = asString(modelValue).toLowerCase(Locale.ROOT);
 
         if (pattern()) {
             return matches(lowerCasedValue, lowerCasedModelValue);
