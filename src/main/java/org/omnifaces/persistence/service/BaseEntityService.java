@@ -1045,7 +1045,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         var criteriaBuilder = getEntityManager().getCriteriaBuilder();
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
-        var root = buildRoot(criteriaQuery, null);
+        var root = criteriaQuery.from(entityType);
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
         var query = getEntityManager().createQuery(criteriaQuery);

@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test;
 
+import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -57,6 +58,8 @@ import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
+import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Category;
@@ -187,6 +190,20 @@ public class EntityRepositoryIT {
     /**
      * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
      */
+    /**
+     * A fetch in the {@link QueryBuilder} of a page does not restrict the entities of the page, so the count includes the entities without the fetched
+     * association as well.
+     */
+    @Test
+    void testGetPageWithQueryBuilderFetchCountsArticlesWithoutFetchedAssociation() {
+        withArticlesInOptionalCategories(articles -> {
+            var page = Page.with().range(0, ROWS_PER_PAGE).allMatch(TITLED).build();
+            var result = articleRepository.getPage(page, true, (builder, query, article) -> article.fetch("category"));
+            assertEquals(Set.copyOf(codesOf(articles)), Set.copyOf(codesOf(result)), "Articles with and without category");
+            assertEquals(articles.size(), result.getEstimatedTotalNumberOfResults(), "Count of articles with and without category");
+        });
+    }
+
     private void withArticlesInOptionalCategories(Consumer<List<Article>> test) {
         var first = newCategory("first", "First");
         var second = newCategory("second", "Second");
@@ -256,6 +273,30 @@ public class EntityRepositoryIT {
         var person = personRepository.getByIdWithLoadGraph(1L, Person.WITH_PHONES);
         assertTrue(personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil().isLoaded(person, "phones"), "Phones are loaded");
         assertEquals(TOTAL_PHONES_PER_PERSON_0, person.getPhones().size(), "Phones loaded by entity graph");
+    }
+
+    /**
+     * A fetch in a {@link CriteriaQueryBuilder} of <code>list()</code>, <code>find()</code> and <code>findFirst()</code> loads the fetched association, on
+     * every provider.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA reports a fetched collection of a detached entity as not loaded")
+    void testListAndFindByCriteriaQueryBuilderLoadFetchedPhones() {
+        CriteriaQueryBuilder<Person> withPhonesOfFirstPerson = (builder, query, person) -> {
+            person.fetch("phones", LEFT);
+            query.distinct(true).where(builder.equal(person.get("id"), 1L));
+        };
+        var persons = List.of(
+            personRepository.list(withPhonesOfFirstPerson, Map.of()).get(0),
+            personRepository.find(withPhonesOfFirstPerson, Map.of()).orElseThrow(),
+            personRepository.findFirst(withPhonesOfFirstPerson, Map.of()).orElseThrow()
+        );
+        var persistenceUnitUtil = personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil();
+
+        for (var person : persons) {
+            assertTrue(persistenceUnitUtil.isLoaded(person, "phones"), "Phones are loaded");
+            assertEquals(TOTAL_PHONES_PER_PERSON_0, person.getPhones().size(), "Phones fetched by criteria query builder");
+        }
     }
 
     @Test

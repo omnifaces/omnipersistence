@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.persistence.criteria.JoinType.LEFT;
+
 import java.util.Set;
 
 import jakarta.persistence.criteria.Fetch;
@@ -23,7 +25,7 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 /**
- * This class adapts from {@link Join} to {@link Fetch}.
+ * This class adapts from {@link Join} to {@link Fetch}. A nested fetch is a left join whatever the requested join type, see {@link SubqueryRoot}.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -59,12 +61,12 @@ class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {
 
     @Override
     public <Z> Fetch<Y, Z> fetch(SingularAttribute<? super Y, Z> attribute) {
-        return new JoinFetchAdapter<>(join.join(attribute));
+        return new JoinFetchAdapter<>(join.join(attribute, LEFT));
     }
 
     @Override
     public <Z> Fetch<Y, Z> fetch(SingularAttribute<? super Y, Z> attribute, JoinType jt) {
-        return new JoinFetchAdapter<>(join.join(attribute, jt));
+        return fetch(attribute);
     }
 
     @Override
@@ -80,13 +82,13 @@ class JoinFetchAdapter<X, Y> implements Fetch<X, Y> {
     @Override
     @SuppressWarnings("hiding")
     public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-        return new JoinFetchAdapter<>(join.join(attributeName));
+        return new JoinFetchAdapter<>(join.join(attributeName, LEFT));
     }
 
     @Override
     @SuppressWarnings("hiding")
     public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType jt) {
-        return new JoinFetchAdapter<>(join.join(attributeName, jt));
+        return fetch(attributeName);
     }
 
 }

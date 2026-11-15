@@ -12,6 +12,8 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.persistence.criteria.JoinType.LEFT;
+
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -24,7 +26,8 @@ import jakarta.persistence.metamodel.SetAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 /**
- * Fetch joins are not supported in subqueries, so delegate to normal joins.
+ * Fetch joins are not supported in subqueries, so delegate to normal joins. These are left joins whatever the requested join type, because a fetch does not
+ * restrict the entities of a page, see {@link PostponedFetchRoot}.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -39,23 +42,23 @@ class SubqueryRoot<X> extends RootWrapper<X> {
     @Override
     @SuppressWarnings({ "hiding" })
     public <X, Y> Fetch<X, Y> fetch(String attributeName) {
-        return new JoinFetchAdapter<>(join(attributeName));
+        return new JoinFetchAdapter<>(join(attributeName, LEFT));
     }
 
     @Override
     @SuppressWarnings({ "hiding" })
     public <X, Y> Fetch<X, Y> fetch(String attributeName, JoinType joinType) {
-        return new JoinFetchAdapter<>(join(attributeName, joinType));
+        return fetch(attributeName);
     }
 
     @Override
     public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute) {
-        return new JoinFetchAdapter<>(join(attribute));
+        return new JoinFetchAdapter<>(join(attribute, LEFT));
     }
 
     @Override
     public <Y> Fetch<X, Y> fetch(SingularAttribute<? super X, Y> attribute, JoinType joinType) {
-        return new JoinFetchAdapter<>(join(attribute, joinType));
+        return fetch(attribute);
     }
 
     @Override
@@ -65,16 +68,16 @@ class SubqueryRoot<X> extends RootWrapper<X> {
 
         // Explicit casts: javac rejects a generic type pattern here as unsafe, and a raw type pattern loses the type arguments.
         if (attribute instanceof ListAttribute) {
-            join = join((ListAttribute<X, Y>) attribute);
+            join = join((ListAttribute<X, Y>) attribute, LEFT);
         }
         else if (attribute instanceof SetAttribute) {
-            join = join((SetAttribute<X, Y>) attribute);
+            join = join((SetAttribute<X, Y>) attribute, LEFT);
         }
         else if (attribute instanceof MapAttribute) {
-            join = join((MapAttribute<X, ?, Y>) attribute);
+            join = join((MapAttribute<X, ?, Y>) attribute, LEFT);
         }
         else if (attribute instanceof CollectionAttribute) {
-            join = join((CollectionAttribute<X, Y>) attribute);
+            join = join((CollectionAttribute<X, Y>) attribute, LEFT);
         }
         else {
             throw new UnsupportedOperationException();
@@ -84,27 +87,8 @@ class SubqueryRoot<X> extends RootWrapper<X> {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <Y> Fetch<X, Y> fetch(PluralAttribute<? super X, ?, Y> attribute, JoinType joinType) {
-        Join<X, Y> join;
-
-        if (attribute instanceof ListAttribute) {
-            join = join((ListAttribute<X, Y>) attribute, joinType);
-        }
-        else if (attribute instanceof SetAttribute) {
-            join = join((SetAttribute<X, Y>) attribute, joinType);
-        }
-        else if (attribute instanceof MapAttribute) {
-            join = join((MapAttribute<X, ?, Y>) attribute, joinType);
-        }
-        else if (attribute instanceof CollectionAttribute) {
-            join = join((CollectionAttribute<X, Y>) attribute, joinType);
-        }
-        else {
-            throw new UnsupportedOperationException();
-        }
-
-        return new JoinFetchAdapter<>(join);
+        return fetch(attribute);
     }
 
 }
