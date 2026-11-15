@@ -838,7 +838,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
-     * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
         var copyOfIds = StreamSupport.stream(ids.spliterator(), false).toList();
@@ -897,7 +896,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return List of all entities, optionally including soft deleted ones.
-     * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     protected List<E> list(boolean includeSoftDeleted) {
         return list(
@@ -918,7 +916,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             softDeleteData.checkSoftDeletable();
             return list(
                 select("")
-                    + softDeleteData.getWhereClause(true)
+                    + softDeleteData.getWhereClauseOfSoftDeleted()
                     + orderByIdDescending()
             );
         });

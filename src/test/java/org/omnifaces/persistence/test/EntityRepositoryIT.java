@@ -488,6 +488,44 @@ public class EntityRepositoryIT {
         }
     }
 
+    /**
+     * <code>list(true)</code> and <code>getByIds(ids, true)</code> return the active entities as well as the soft deleted ones, like
+     * <code>getById(id, true)</code>, on an <code>ACTIVE</code> as well as on a <code>DELETED</code> soft deletable field.
+     */
+    @Test
+    void testListAndGetByIdsIncludingSoftDeletedReturnActiveAndSoftDeleted() {
+        var activeText = new Text();
+        var deletedText = new Text();
+        var activeTextId = transactionServiceCDI.call(() -> textRepository.persist(activeText));
+        var deletedTextId = transactionServiceCDI.call(() -> textRepository.persist(deletedText));
+        var activeArticle = persistArticle("active", null);
+        var deletedArticle = persistArticle("deleted", null);
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(deletedTextId)));
+            transactionServiceCDI.run(() -> articleRepository.softDelete(deletedArticle));
+
+            var textIds = List.of(activeTextId, deletedTextId);
+            assertEquals(List.of(deletedTextId, activeTextId), idsOf(textRepository.getByIds(textIds, true)), "Texts by IDs including soft deleted");
+            assertEquals(List.of(activeTextId), idsOf(textRepository.getByIds(textIds, false)), "Texts by IDs excluding soft deleted");
+            assertTrue(idsOf(textRepository.list(true)).containsAll(textIds), "Texts including soft deleted");
+            assertFalse(idsOf(textRepository.list(false)).contains(deletedTextId), "Texts excluding soft deleted");
+
+            var articleCodes = codesOf(List.of(activeArticle, deletedArticle));
+            assertEquals(
+                List.of(deletedArticle.getCode(), activeArticle.getCode()), codesOf(articleRepository.getByIds(articleCodes, true)),
+                "Articles by IDs including soft deleted"
+            );
+            assertEquals(List.of(activeArticle.getCode()), codesOf(articleRepository.getByIds(articleCodes, false)), "Articles by IDs excluding soft deleted");
+            assertTrue(codesOf(articleRepository.list(true)).containsAll(articleCodes), "Articles including soft deleted");
+            assertFalse(codesOf(articleRepository.list(false)).contains(deletedArticle.getCode()), "Articles excluding soft deleted");
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeTextId, deletedTextId), true).forEach(textRepository::delete));
+            deleteArticles(List.of(activeArticle, deletedArticle));
+        }
+    }
+
     @Test
     void testEntityWithoutBaseEntitySoftDelete() {
         var article = persistArticle("soft", null);
@@ -695,6 +733,10 @@ public class EntityRepositoryIT {
 
     private static List<Long> codesOf(List<Article> articles) {
         return articles.stream().map(Article::getCode).toList();
+    }
+
+    private static List<Long> idsOf(List<Text> texts) {
+        return texts.stream().map(Text::getId).toList();
     }
 
 }
