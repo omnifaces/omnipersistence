@@ -496,7 +496,8 @@ public final class JPA {
             var pattern = getDB2TemporalPattern(type);
 
             if (pattern != null) {
-                return builder.function("VARCHAR_FORMAT", String.class, expression, builder.literal(pattern));
+                var timestamp = isTimeType(type) ? asDB2Timestamp(builder, expression) : expression;
+                return builder.function("VARCHAR_FORMAT", String.class, timestamp, builder.literal(pattern));
             }
         }
 
@@ -535,9 +536,22 @@ public final class JPA {
         return (Expression<String>) expression;
     }
 
+    /**
+     * Returns given time expression as a DB2 timestamp on the current date, because DB2 has no <code>VARCHAR_FORMAT(TIME)</code>. DB2 resolves
+     * <code>TIMESTAMP(DATE, TIME)</code> only with typed arguments, so the date is <code>CURRENT_DATE</code>. The <code>TIME</code> function also accepts a
+     * <code>TIMESTAMP</code> column, as mapped for <code>OffsetTime</code> by some providers.
+     *
+     * @param builder The involved criteria builder.
+     * @param expression Time expression to be converted.
+     * @return Given time expression as a DB2 timestamp on the current date.
+     */
+    private static Expression<?> asDB2Timestamp(CriteriaBuilder builder, Expression<?> expression) {
+        return builder.function("TIMESTAMP", LocalDateTime.class, builder.currentDate(), builder.function("TIME", LocalTime.class, expression));
+    }
+
     @Nullable
     private static String getDB2TemporalPattern(Class<?> type) {
-        if (LocalTime.class.isAssignableFrom(type) || OffsetTime.class.isAssignableFrom(type)) {
+        if (isTimeType(type)) {
             return TIME_PATTERN;
         }
         else if (LocalDateTime.class.isAssignableFrom(type) || OffsetDateTime.class.isAssignableFrom(type)) {
@@ -546,6 +560,10 @@ public final class JPA {
         else {
             return null;
         }
+    }
+
+    private static boolean isTimeType(Class<?> type) {
+        return LocalTime.class.isAssignableFrom(type) || OffsetTime.class.isAssignableFrom(type);
     }
 
     @Nullable

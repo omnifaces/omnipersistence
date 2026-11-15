@@ -136,7 +136,7 @@ public abstract class OmniPersistenceIT {
                 new StringAsset(
                     substitute(
                         "META-INF/persistence.xml", persistenceUnitName,
-                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaSchema}", openJpaSchemaOf(database, persistenceUnitName))
+                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaProperties}", openJpaPropertiesOf(database, persistenceUnitName))
                     )
                 ),
                 "META-INF/persistence.xml"
@@ -226,11 +226,15 @@ public abstract class OmniPersistenceIT {
     }
 
     /**
-     * Returns the OpenJPA schema property for DB2, substituted as <code>${openJpaSchema}</code> in <code>persistence.xml</code>, because OpenJPA otherwise
-     * finds the tables of the other schemas of the same database.
+     * Returns the OpenJPA properties for DB2, substituted as <code>${openJpaProperties}</code> in <code>persistence.xml</code>. The schema property scopes
+     * OpenJPA to the own schema of the persistence unit. The dictionary property maps the <code>WITH TIME ZONE</code> types to plain <code>TIME</code> and
+     * <code>TIMESTAMP</code>, because DB2 does not support time zone types.
      */
-    private static String openJpaSchemaOf(Database database, String persistenceUnitName) {
-        return database == DB2 ? "<property name=\"openjpa.jdbc.Schema\" value=\"" + persistenceUnitName.toUpperCase() + "\" />" : "";
+    private static String openJpaPropertiesOf(Database database, String persistenceUnitName) {
+        return database == DB2
+            ? "<property name=\"openjpa.jdbc.Schema\" value=\"" + persistenceUnitName.toUpperCase() + "\" />"
+                + "<property name=\"openjpa.jdbc.DBDictionary\" value=\"db2(TimeWithZoneTypeName=TIME, TimestampWithZoneTypeName=TIMESTAMP)\" />"
+            : "";
     }
 
     private static String urlOf(String url) {

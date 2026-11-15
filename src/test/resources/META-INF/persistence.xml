@@ -49,7 +49,7 @@
 
             <!-- OpenJPA -->
             <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=INFO, SQL=TRACE" />
-            ${openJpaSchema}
+            ${openJpaProperties}
 
             <!-- WildFly -->
             <property name="wildfly.jpa.twophasebootstrap" value="false" /> <!-- https://issues.jboss.org/browse/WFLY-2727 -->
