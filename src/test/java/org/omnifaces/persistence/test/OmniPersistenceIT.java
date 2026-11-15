@@ -19,6 +19,7 @@ import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,6 +34,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_REC
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -662,6 +664,23 @@ public abstract class OmniPersistenceIT {
         }
     }
 
+    /**
+     * {@link Order} and {@link Between} on each temporal type include their bounds. An offset based value matches the same instant at another offset.
+     */
+    @Test
+    void testPageWithOrderAndBetweenOnEachTemporalTypeOfAppointment() {
+        var latest = appointmentService().list().stream().max(Comparator.comparing(Appointment::getStartLocalDateTime)).orElseThrow();
+        assertAll(
+            () -> assertOrderAndBetweenOnAppointment("startLocalTime", Appointment::getStartLocalTime, latest.getStartLocalTime()),
+            () -> assertOrderAndBetweenOnAppointment("startLocalDateTime", Appointment::getStartLocalDateTime, latest.getStartLocalDateTime()),
+            () -> assertOrderAndBetweenOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, latest.getStartOffsetTime()),
+            () -> assertOrderAndBetweenOnAppointment("startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime()),
+            () -> assertOrderAndBetweenOnAppointment(
+                "startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime().withOffsetSameInstant(ZoneOffset.ofHours(2))
+            )
+        );
+    }
+
     @Test
     void testPageWithBetweenOfHalfOpenRangeAgreesWithApplies() {
         for (var range : List.of(Range.of(10L, 20L), Range.of(10L, 20L).withMinInclusive(false).withMaxInclusive(true))) {
@@ -672,13 +691,10 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithBetweenDates() {
-        var start = LocalDate.of(1950, 1, 1);
-        var end = LocalDate.of(1960, 12, 31);
-        var result = personService().getPage(Page.with().allMatch(Map.of("dateOfBirth", Between.range(start, end))).build(), true);
-        result.forEach(p -> {
-            assertFalse(p.getDateOfBirth().isBefore(start), "Date of birth is not before start");
-            assertFalse(p.getDateOfBirth().isAfter(end), "Date of birth is not after end");
-        });
+        var persons = personService().list();
+        var datesOfBirth = persons.stream().map(Person::getDateOfBirth).sorted().toList();
+        var between = Between.range(datesOfBirth.get(datesOfBirth.size() / 4), datesOfBirth.get(datesOfBirth.size() / 2));
+        assertPage(persons, person -> between.applies(person.getDateOfBirth()), Map.of("dateOfBirth", between), Map.of(), personService()::getPage, true);
     }
 
     @Test
@@ -1712,6 +1728,29 @@ public abstract class OmniPersistenceIT {
         assertPage(
             personService().list(), person -> ignoreCase.applies(getter.apply(person)), Map.of(field, ignoreCase), Map.of(), personService()::getPage, true
         );
+    }
+
+    /**
+     * Asserts that {@link Order} and {@link Between} on given field of the appointments include their bounds, and that given value equals the value of the
+     * latest appointment, as stored by the database.
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private void assertOrderAndBetweenOnAppointment(String field, Function<Appointment, Comparable> getter, Comparable value) {
+        var appointments = appointmentService().list().stream().sorted(Comparator.comparing(Appointment::getStartLocalDateTime)).toList();
+        var earliest = List.of(appointments.get(0).getId());
+        var latest = List.of(appointments.get(appointments.size() - 1).getId());
+        assertAll(
+            () -> assertEquals(latest, appointmentIds(field, Between.range(value, value)), field + " between value and value"),
+            () -> assertEquals(latest, appointmentIds(field, Order.greaterThanOrEqualTo(value)), field + " greater than or equal to value"),
+            () -> assertEquals(earliest, appointmentIds(field, Order.lessThan(value)), field + " less than value"),
+            () -> assertEquals(
+                earliest, appointmentIds(field, Order.lessThanOrEqualTo(getter.apply(appointments.get(0)))), field + " less than or equal to earliest"
+            )
+        );
+    }
+
+    private List<Long> appointmentIds(String field, Object criteria) {
+        return ids(appointmentService().getPage(Page.with().allMatch(Map.of(field, criteria)).build(), false));
     }
 
     private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
