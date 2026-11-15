@@ -606,7 +606,7 @@ ValidationMode mode = JPA.getValidationMode(em);
     <class-name>org.omnifaces.persistence.datasource.SwitchableCommonDataSource</class-name>
     <property>
         <name>configFile</name>
-        <value>META-INF/database.properties</value>
+        <value>database.properties</value>
     </property>
 </data-source>
 ```

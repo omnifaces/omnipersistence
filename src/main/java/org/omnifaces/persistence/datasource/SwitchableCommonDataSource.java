@@ -28,7 +28,8 @@ import java.util.ServiceLoader;
  * The properties file must contain at least a <code>className</code> property specifying the fully qualified class name of the actual data source to
  * instantiate. All other properties are set on the instantiated data source.
  * <p>
- * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to <code>META-INF/{configFile}</code> on the classpath.
+ * The properties file is loaded via {@link PropertiesFileLoader} SPI, falling back to <code>META-INF/{configFile}</code> on the classpath. The
+ * <code>.properties</code> extension of the config file is optional there.
  * <p>
  * Usage example in <code>web.xml</code> or <code>@DataSourceDefinition</code>:
  *
@@ -57,6 +58,8 @@ import java.util.ServiceLoader;
  * @see PropertiesFileLoader
  */
 public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
+
+    private static final String PROPERTIES_EXTENSION = ".properties";
 
     private boolean init;
     private String configFile;
@@ -131,7 +134,7 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
         if (!loader.iterator().hasNext()) {
             // No service loader was specified for loading the configfile.
             // Try the fallback default location of META-INF on the classpath
-            properties.putAll(loadPropertiesFromClasspath("META-INF/" + configFile));
+            properties.putAll(loadPropertiesFromClasspath("META-INF/" + baseNameOf(configFile)));
 
         }
         else {
@@ -163,6 +166,10 @@ public class SwitchableCommonDataSource extends CommonDataSourceWrapper {
 
         // After this properties will be set directly on the wrapped data source instance.
         init = true;
+    }
+
+    private static String baseNameOf(String configFile) {
+        return configFile.endsWith(PROPERTIES_EXTENSION) ? configFile.substring(0, configFile.length() - PROPERTIES_EXTENSION.length()) : configFile;
     }
 
 }
