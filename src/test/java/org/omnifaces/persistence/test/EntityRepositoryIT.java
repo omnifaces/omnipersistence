@@ -84,6 +84,7 @@ import org.omnifaces.utils.collection.PartialResultList;
 public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
+    private static final String ECLIPSELINK_ENUM_COLLECTION = "EclipseLink maps an enum element collection without @Enumerated to a VARCHAR column, which PostgreSQL does not compare to the bound ordinal";
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
     private static final String LOADED_REFERENCE = "EclipseLink returns an already loaded instance from EntityManager#getReference()";
@@ -572,26 +573,31 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * An enum field or enum element collection without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it
-     * by constant name.
+     * An enum field without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant name.
      */
     @Test
     void testLikeOnEnumWithoutEnumeratedMatchesConstantName() {
         withFemaleAndMaleAudienceArticles(femaleArticle -> {
-            for (var field : List.of("audience", "audiences")) {
-                assertEquals(List.of(femaleArticle.getCode()), codesOf(pageOfArticlesWithFemAudience(field)), "Articles whose " + field + " contains fem");
-            }
+            var result = pageOfArticlesWithFemAudience("audience");
+            assertEquals(List.of(femaleArticle.getCode()), codesOf(result), "Articles whose audience contains fem");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose audience contains fem");
         });
     }
 
+    /**
+     * An enum element collection without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant
+     * name.
+     */
     @Test
-    void testLikeOnEnumWithoutEnumeratedCountsMatchingArticles() {
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
+    void testLikeOnEnumElementCollectionWithoutEnumeratedMatchesConstantName() {
         withFemaleAndMaleAudienceArticles(
-            femaleArticle -> assertEquals(1, pageOfArticlesWithFemAudience("audience").getEstimatedTotalNumberOfResults(), "Count of articles")
+            femaleArticle -> assertEquals(List.of(femaleArticle.getCode()), codesOf(pageOfArticlesWithFemAudience("audiences")), "Articles")
         );
     }
 
     @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
     @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
     void testLikeOnEnumElementCollectionWithoutEnumeratedCountsMatchingArticles() {
         withFemaleAndMaleAudienceArticles(

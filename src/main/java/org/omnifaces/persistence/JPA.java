@@ -590,7 +590,8 @@ public final class JPA {
     /**
      * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}. This is also the case for an enum attribute, or a collection of enums,
      * without {@link Enumerated} and without {@link Convert}, because {@link EnumType#ORDINAL} is the default of {@link Enumerated}. An enum attribute
-     * converted by an auto applied {@link Converter} is not detected as such, so it needs an explicit {@link Convert}.
+     * converted by an auto applied {@link Converter} is not detected as such, so it needs an explicit {@link Convert}. EclipseLink maps a collection of enums
+     * without {@link Enumerated} to a <code>VARCHAR</code> column while it binds the ordinal, so it needs an explicit {@link Enumerated} there.
      *
      * @param path Path of interest.
      * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
