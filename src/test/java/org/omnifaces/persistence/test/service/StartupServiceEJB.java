@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test.service;
 import static java.lang.Math.abs;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
@@ -25,6 +26,7 @@ import jakarta.ejb.Singleton;
 import jakarta.ejb.Startup;
 
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
@@ -49,6 +51,9 @@ public class StartupServiceEJB {
     private CommentServiceEJB commentServiceEJB;
 
     @EJB
+    private AppointmentServiceEJB appointmentServiceEJB;
+
+    @EJB
     private PersonServiceEJB personServiceEJB;
 
     @PostConstruct
@@ -56,6 +61,7 @@ public class StartupServiceEJB {
         createTestPersons();
         createTestTexts();
         createTestComments();
+        createTestAppointments();
     }
 
     private void createTestPersons() {
@@ -103,6 +109,11 @@ public class StartupServiceEJB {
     private void createTestComments() {
         commentServiceEJB.persist(new Comment());
         commentServiceEJB.persist(new Comment());
+    }
+
+    private void createTestAppointments() {
+        appointmentServiceEJB.persist(Appointment.startingAt(LocalDateTime.of(2026, 11, 14, 13, 14, 15)));
+        appointmentServiceEJB.persist(Appointment.startingAt(LocalDateTime.of(2025, 6, 1, 8, 9, 10)));
     }
 
 }

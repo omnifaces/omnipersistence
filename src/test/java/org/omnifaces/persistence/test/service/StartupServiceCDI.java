@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test.service;
 import static java.lang.Math.abs;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
@@ -25,6 +26,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Group;
@@ -48,6 +50,9 @@ public class StartupServiceCDI {
     private CommentServiceCDI commentServiceCDI;
 
     @Inject
+    private AppointmentServiceCDI appointmentServiceCDI;
+
+    @Inject
     private PersonServiceCDI personServiceCDI;
 
     @SuppressWarnings("unused")
@@ -55,6 +60,7 @@ public class StartupServiceCDI {
         createTestPersons();
         createTestTexts();
         createTestComments();
+        createTestAppointments();
     }
 
     private void createTestPersons() {
@@ -102,6 +108,11 @@ public class StartupServiceCDI {
     private void createTestComments() {
         commentServiceCDI.persist(new Comment());
         commentServiceCDI.persist(new Comment());
+    }
+
+    private void createTestAppointments() {
+        appointmentServiceCDI.persist(Appointment.startingAt(LocalDateTime.of(2026, 11, 14, 13, 14, 15)));
+        appointmentServiceCDI.persist(Appointment.startingAt(LocalDateTime.of(2025, 6, 1, 8, 9, 10)));
     }
 
 }

@@ -12,7 +12,15 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import static java.time.format.DateTimeFormatter.ofPattern;
+
 import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.util.Objects;
 
 import jakarta.annotation.Nullable;
@@ -76,6 +84,13 @@ public abstract class Criteria<T> implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    private static final String DATE_PATTERN = "yyyy-MM-dd";
+    private static final String TIME_PATTERN = "HH:mm:ss";
+    private static final DateTimeFormatter LOCAL_TIME = ofPattern(TIME_PATTERN);
+    private static final DateTimeFormatter LOCAL_DATE_TIME = ofPattern(DATE_PATTERN + " " + TIME_PATTERN);
+    private static final DateTimeFormatter OFFSET_TIME = withOffset(LOCAL_TIME);
+    private static final DateTimeFormatter OFFSET_DATE_TIME = withOffset(LOCAL_DATE_TIME);
+
     /** The criteria value. */
     private final T value;
 
@@ -128,6 +143,33 @@ public abstract class Criteria<T> implements Serializable {
      */
     public boolean applies(@Nullable Object modelValue) {
         throw new UnsupportedOperationException("This method is not implemented yet.");
+    }
+
+    private static DateTimeFormatter withOffset(DateTimeFormatter formatter) {
+        return new DateTimeFormatterBuilder().append(formatter).appendOffset("+HH:mm", "+00").toFormatter();
+    }
+
+    /**
+     * Returns the string form of the given model value as matched by a string based predicate. A temporal value has the date as <code>yyyy-MM-dd</code> and the
+     * time as <code>HH:mm:ss</code>, with a space in between, followed by the offset, if any, as <code>+01</code> or <code>+05:30</code>. Whether the database
+     * includes the offset and fractional seconds depends on the database.
+     */
+    static String asString(Object modelValue) {
+        if (modelValue instanceof LocalTime localTime) {
+            return LOCAL_TIME.format(localTime);
+        }
+        else if (modelValue instanceof LocalDateTime localDateTime) {
+            return LOCAL_DATE_TIME.format(localDateTime);
+        }
+        else if (modelValue instanceof OffsetTime offsetTime) {
+            return OFFSET_TIME.format(offsetTime);
+        }
+        else if (modelValue instanceof OffsetDateTime offsetDateTime) {
+            return OFFSET_DATE_TIME.format(offsetDateTime);
+        }
+        else {
+            return modelValue.toString();
+        }
     }
 
     /**

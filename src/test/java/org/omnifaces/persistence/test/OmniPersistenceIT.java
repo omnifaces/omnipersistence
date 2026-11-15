@@ -79,6 +79,7 @@ import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Gender;
@@ -118,6 +119,8 @@ public abstract class OmniPersistenceIT {
     private static final long MAX_ID = 190;
     private static final LocalDate MAX_DATE_OF_BIRTH = LocalDate.of(1970, 1, 1);
     private static final long TOTAL_PHONES = 3;
+    private static final String MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT = ":14:15";
+    private static final String MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE = "-11-14 ";
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
@@ -133,7 +136,7 @@ public abstract class OmniPersistenceIT {
                 new StringAsset(
                     substitute(
                         "META-INF/persistence.xml", persistenceUnitName,
-                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaSchema}", openJpaSchemaOf(database, persistenceUnitName))
+                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaProperties}", openJpaPropertiesOf(database, persistenceUnitName))
                     )
                 ),
                 "META-INF/persistence.xml"
@@ -223,11 +226,15 @@ public abstract class OmniPersistenceIT {
     }
 
     /**
-     * Returns the OpenJPA schema property for DB2, substituted as <code>${openJpaSchema}</code> in <code>persistence.xml</code>, because OpenJPA otherwise
-     * finds the tables of the other schemas of the same database.
+     * Returns the OpenJPA properties for DB2, substituted as <code>${openJpaProperties}</code> in <code>persistence.xml</code>. The schema property scopes
+     * OpenJPA to the own schema of the persistence unit. The dictionary property maps the <code>WITH TIME ZONE</code> types to plain <code>TIME</code> and
+     * <code>TIMESTAMP</code>, because DB2 does not support time zone types.
      */
-    private static String openJpaSchemaOf(Database database, String persistenceUnitName) {
-        return database == DB2 ? "<property name=\"openjpa.jdbc.Schema\" value=\"" + persistenceUnitName.toUpperCase() + "\" />" : "";
+    private static String openJpaPropertiesOf(Database database, String persistenceUnitName) {
+        return database == DB2
+            ? "<property name=\"openjpa.jdbc.Schema\" value=\"" + persistenceUnitName.toUpperCase() + "\" />"
+                + "<property name=\"openjpa.jdbc.DBDictionary\" value=\"db2(TimeWithZoneTypeName=TIME, TimestampWithZoneTypeName=TIMESTAMP)\" />"
+            : "";
     }
 
     private static String urlOf(String url) {
@@ -280,6 +287,8 @@ public abstract class OmniPersistenceIT {
     protected abstract BaseEntityService<Long, Text> textService();
 
     protected abstract BaseEntityService<Long, Comment> commentService();
+
+    protected abstract BaseEntityService<Long, Appointment> appointmentService();
 
     protected abstract BaseEntityService<String, Lookup> lookupService();
 
@@ -1164,6 +1173,26 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPageWithLikeOnLocalTime() {
+        assertPageWithLikeOnAppointment("startLocalTime", Appointment::getStartLocalTime, MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT);
+    }
+
+    @Test
+    void testPageWithLikeOnLocalDateTimeBySpaceSeparatedDate() {
+        assertPageWithLikeOnAppointment("startLocalDateTime", Appointment::getStartLocalDateTime, MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE);
+    }
+
+    @Test
+    void testPageWithLikeOnOffsetTime() {
+        assertPageWithLikeOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT);
+    }
+
+    @Test
+    void testPageWithLikeOnOffsetDateTimeBySpaceSeparatedDate() {
+        assertPageWithLikeOnAppointment("startOffsetDateTime", Appointment::getStartOffsetDateTime, MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE);
+    }
+
+    @Test
     void testPageWithLikeOnStringEnum() {
         assertPage(
             phoneService().getAllWithOwners(), phone -> likes("mob", phone.getType()), Map.of("type", Like.contains("mob")), Map.of(),
@@ -1577,6 +1606,13 @@ public abstract class OmniPersistenceIT {
 
     private static boolean likes(String term, Object value) {
         return Like.contains(term).applies(value);
+    }
+
+    private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
+        assertPage(
+            appointmentService().list(), appointment -> likes(term, getter.apply(appointment)), Map.of(field, Like.contains(term)), Map.of(),
+            appointmentService()::getPage, true
+        );
     }
 
     private static Map<String, Object> likeOnAll(String term, String... fields) {

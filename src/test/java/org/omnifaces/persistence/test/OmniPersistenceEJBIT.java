@@ -17,10 +17,12 @@ import jakarta.ejb.EJB;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.InventoryItem;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.service.AppointmentServiceEJB;
 import org.omnifaces.persistence.test.service.CommentServiceEJB;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.ConfigServiceEJB;
@@ -51,6 +53,8 @@ public class OmniPersistenceEJBIT extends OmniPersistenceIT {
     @EJB
     private CommentServiceEJB commentService;
     @EJB
+    private AppointmentServiceEJB appointmentService;
+    @EJB
     private LookupServiceEJB lookupService;
     @EJB
     private ConfigServiceEJB configService;
@@ -77,6 +81,11 @@ public class OmniPersistenceEJBIT extends OmniPersistenceIT {
     @Override
     protected BaseEntityService<Long, Comment> commentService() {
         return commentService;
+    }
+
+    @Override
+    protected BaseEntityService<Long, Appointment> appointmentService() {
+        return appointmentService;
     }
 
     @Override

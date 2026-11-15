@@ -13,6 +13,7 @@
 package org.omnifaces.persistence;
 
 import static java.util.Optional.ofNullable;
+import static org.omnifaces.persistence.Database.DB2;
 import static org.omnifaces.persistence.Database.POSTGRESQL;
 import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
@@ -120,6 +121,9 @@ public final class JPA {
     private static final String LIKE_SPECIAL_CHARACTERS = "%_" + LIKE_ESCAPE;
     private static final String LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER = "[";
     private static final String LIKE_SPECIAL_CHARACTERS_SQLSERVER = LIKE_SPECIAL_CHARACTERS + LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER;
+    private static final String DATE_PATTERN = "YYYY-MM-DD";
+    private static final String TIME_PATTERN = "HH24:MI:SS";
+    private static final String DATE_TIME_PATTERN = DATE_PATTERN + " " + TIME_PATTERN;
     private static final String ERROR_NO_CURRENT_BASE_ENTITY_SERVICE = "JPA#%s() must be invoked during a public method of a BaseEntityService.";
 
     // Constructors -----------------------------------------------------------------------------------------------------------------------
@@ -485,6 +489,17 @@ public final class JPA {
         // TODO: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
 
         var service = requireCurrentBaseEntityService("castAsString");
+        var type = expression.getJavaType();
+
+        // DB2 casts a temporal value as "2026-11-14-13.14.15.000000", whatever the provider.
+        if (service.getDatabase() == DB2) {
+            var pattern = getDB2TemporalPattern(type);
+
+            if (pattern != null) {
+                var timestamp = isTimeType(type) ? asDB2Timestamp(builder, expression) : expression;
+                return builder.function("VARCHAR_FORMAT", String.class, timestamp, builder.literal(pattern));
+            }
+        }
 
         if (service.getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);
@@ -501,34 +516,76 @@ public final class JPA {
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
         if (service.getDatabase() == POSTGRESQL) {
-            String pattern = null;
+            if (OffsetTime.class.isAssignableFrom(type)) {
+                return builder.function("TEXT", String.class, expression); // PostgreSQL has no TO_CHAR(timetz).
+            }
 
-            if (Numeric.is(expression.getJavaType())) {
-                pattern = "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
-            }
-            else if (LocalDate.class.isAssignableFrom(expression.getJavaType())) {
-                pattern = "YYYY-MM-DD";
-            }
-            else if (LocalTime.class.isAssignableFrom(expression.getJavaType())) {
-                pattern = "HH24:MI:SS";
-            }
-            else if (LocalDateTime.class.isAssignableFrom(expression.getJavaType())) {
-                pattern = "YYYY-MM-DD'T'HH24:MI:SS'Z'"; // NOTE: PostgreSQL uses ISO_INSTANT instead of ISO_LOCAL_DATE_TIME.
-            }
-            else if (OffsetTime.class.isAssignableFrom(expression.getJavaType())) {
-                pattern = "HH24:MI:SS-OF"; // TODO: PostgreSQL doc says it's not supported?
-            }
-            else if (OffsetDateTime.class.isAssignableFrom(expression.getJavaType())) {
-                pattern = "YYYY-MM-DD'T'HH24:MI:SS-OF";
-            }
+            var pattern = getPostgreSQLPattern(type);
 
             if (pattern != null) {
                 return builder.function("TO_CHAR", String.class, expression, builder.literal(pattern));
             }
         }
 
+        // SQL Server casts a DATETIME as "Nov 14 2026 1:14PM".
+        if (service.getDatabase() == SQLSERVER && LocalDateTime.class.isAssignableFrom(type)) {
+            return builder.function("FORMAT", String.class, expression, builder.literal("yyyy-MM-dd HH:mm:ss"));
+        }
+
         // H2 and MySQL are more lenient in this, they can do implicit casting with sane defaults, so no custom function call necessary.
         return (Expression<String>) expression;
+    }
+
+    /**
+     * Returns given time expression as a DB2 timestamp on the current date, because DB2 has no <code>VARCHAR_FORMAT(TIME)</code>. DB2 resolves
+     * <code>TIMESTAMP(DATE, TIME)</code> only with typed arguments, so the date is <code>CURRENT_DATE</code>. The <code>TIME</code> function also accepts a
+     * <code>TIMESTAMP</code> column, as mapped for <code>OffsetTime</code> by some providers.
+     *
+     * @param builder The involved criteria builder.
+     * @param expression Time expression to be converted.
+     * @return Given time expression as a DB2 timestamp on the current date.
+     */
+    private static Expression<?> asDB2Timestamp(CriteriaBuilder builder, Expression<?> expression) {
+        return builder.function("TIMESTAMP", LocalDateTime.class, builder.currentDate(), builder.function("TIME", LocalTime.class, expression));
+    }
+
+    @Nullable
+    private static String getDB2TemporalPattern(Class<?> type) {
+        if (isTimeType(type)) {
+            return TIME_PATTERN;
+        }
+        else if (LocalDateTime.class.isAssignableFrom(type) || OffsetDateTime.class.isAssignableFrom(type)) {
+            return DATE_TIME_PATTERN;
+        }
+        else {
+            return null;
+        }
+    }
+
+    private static boolean isTimeType(Class<?> type) {
+        return LocalTime.class.isAssignableFrom(type) || OffsetTime.class.isAssignableFrom(type);
+    }
+
+    @Nullable
+    private static String getPostgreSQLPattern(Class<?> type) {
+        if (Numeric.is(type)) {
+            return "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
+        }
+        else if (LocalDate.class.isAssignableFrom(type)) {
+            return DATE_PATTERN;
+        }
+        else if (LocalTime.class.isAssignableFrom(type)) {
+            return TIME_PATTERN;
+        }
+        else if (LocalDateTime.class.isAssignableFrom(type)) {
+            return DATE_TIME_PATTERN;
+        }
+        else if (OffsetDateTime.class.isAssignableFrom(type)) {
+            return DATE_TIME_PATTERN + "OF";
+        }
+        else {
+            return null;
+        }
     }
 
     /**
