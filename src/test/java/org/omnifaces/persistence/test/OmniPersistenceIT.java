@@ -97,6 +97,7 @@ import org.omnifaces.persistence.test.service.PlainConfigUpdater;
 import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TrackingTextService;
 import org.omnifaces.utils.collection.PartialResultList;
+import org.omnifaces.utils.data.Range;
 
 @ExtendWith(ArquillianExtension.class)
 public abstract class OmniPersistenceIT {
@@ -640,6 +641,14 @@ public abstract class OmniPersistenceIT {
             assertTrue(p.getId() >= 10L, "ID >= 10");
             assertTrue(p.getId() <= 19L, "ID <= 19");
         });
+    }
+
+    @Test
+    void testPageWithBetweenOfHalfOpenRangeAgreesWithApplies() {
+        for (var range : List.of(Range.of(10L, 20L), Range.of(10L, 20L).withMinInclusive(false).withMaxInclusive(true))) {
+            var between = Between.value(range);
+            assertPage(personService().list(), person -> between.applies(person.getId()), Map.of("id", between), Map.of(), personService()::getPage, true);
+        }
     }
 
     @Test

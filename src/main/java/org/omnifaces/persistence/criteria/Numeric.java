@@ -12,11 +12,14 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import static java.util.Map.entry;
 import static org.omnifaces.utils.Lang.isOneOf;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -26,8 +29,9 @@ import jakarta.persistence.criteria.Predicate;
 /**
  * Creates <code>path = number</code>.
  * <p>
- * Supports parsing from string values. The target number type is determined by the entity field type and supports {@link java.math.BigDecimal},
- * {@link java.math.BigInteger}, {@link Integer} and {@link Long}.
+ * Supports parsing from string values. The target number type is determined by the entity field type and supports {@link BigDecimal}, {@link BigInteger},
+ * {@link Double}, {@link Float}, {@link Long}, {@link Integer}, {@link Short} and {@link Byte}, as well as their primitives. Any other target number type is
+ * parsed as {@link Long}.
  * <p>
  * Usage examples:
  *
@@ -43,6 +47,21 @@ import jakarta.persistence.criteria.Predicate;
 public final class Numeric extends Criteria<Number> {
 
     private static final long serialVersionUID = 1L;
+
+    private static final Map<Class<?>, Function<String, Number>> PARSERS = Map.ofEntries(
+        entry(BigDecimal.class, BigDecimal::new),
+        entry(BigInteger.class, BigInteger::new),
+        entry(Double.class, Double::valueOf),
+        entry(double.class, Double::valueOf),
+        entry(Float.class, Float::valueOf),
+        entry(float.class, Float::valueOf),
+        entry(Integer.class, Integer::valueOf),
+        entry(int.class, Integer::valueOf),
+        entry(Short.class, Short::valueOf),
+        entry(short.class, Short::valueOf),
+        entry(Byte.class, Byte::valueOf),
+        entry(byte.class, Byte::valueOf)
+    );
 
     private Numeric(Number value) {
         super(value);
@@ -92,23 +111,13 @@ public final class Numeric extends Criteria<Number> {
         return modelValue != null && Objects.equals(parseNumber(modelValue, getValue().getClass()), getValue());
     }
 
-    private static Number parseNumber(Object searchValue, Class<?> targetType) throws NumberFormatException {
+    private static Number parseNumber(Object searchValue, Class<?> targetType) {
+        if (targetType.isInstance(searchValue)) {
+            return (Number) searchValue;
+        }
+
         try {
-            if (targetType.isInstance(searchValue)) {
-                return (Number) searchValue;
-            }
-            else if (BigDecimal.class.isAssignableFrom(targetType)) {
-                return searchValue instanceof BigDecimal n ? n : new BigDecimal(searchValue.toString());
-            }
-            else if (BigInteger.class.isAssignableFrom(targetType)) {
-                return searchValue instanceof BigInteger n ? n : new BigInteger(searchValue.toString());
-            }
-            else if (Integer.class.isAssignableFrom(targetType) || int.class == targetType) {
-                return searchValue instanceof Integer n ? n : Integer.valueOf(searchValue.toString());
-            }
-            else {
-                return searchValue instanceof Long n ? n : Long.valueOf(searchValue.toString());
-            }
+            return PARSERS.getOrDefault(targetType, Long::valueOf).apply(searchValue.toString());
         }
         catch (NumberFormatException e) {
             throw new IllegalArgumentException(searchValue.toString(), e);
