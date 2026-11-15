@@ -15,9 +15,11 @@ package org.omnifaces.persistence.test.model;
 import static jakarta.persistence.FetchType.LAZY;
 import static jakarta.persistence.GenerationType.IDENTITY;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -37,6 +39,9 @@ import org.omnifaces.persistence.model.SoftDeletable;
 @Entity
 @EntityListeners({ BaseEntityListener.class, AuditListener.class })
 public class Article {
+
+    private static final int PRICE_PRECISION = 10;
+    private static final int PRICE_SCALE = 2;
 
     @Id
     @GeneratedValue(strategy = IDENTITY)
@@ -61,6 +66,9 @@ public class Article {
     private boolean deleted;
 
     private Gender audience;
+
+    @Column(precision = PRICE_PRECISION, scale = PRICE_SCALE)
+    private BigDecimal price;
 
     public Long getCode() {
         return code;
@@ -124,6 +132,14 @@ public class Article {
 
     public void setAudience(Gender audience) {
         this.audience = audience;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
     }
 
 }

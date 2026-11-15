@@ -517,8 +517,8 @@ public final class JPA {
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
         if (service.getDatabase() == POSTGRESQL) {
-            if (OffsetTime.class.isAssignableFrom(type)) {
-                return builder.function("TEXT", String.class, expression); // PostgreSQL has no TO_CHAR(timetz).
+            if (Numeric.is(type) || OffsetTime.class.isAssignableFrom(type)) {
+                return builder.function("TEXT", String.class, expression); // PostgreSQL has no TO_CHAR(timetz), and TO_CHAR(numeric) needs a fixed scale.
             }
 
             var pattern = getPostgreSQLPattern(type);
@@ -569,10 +569,7 @@ public final class JPA {
 
     @Nullable
     private static String getPostgreSQLPattern(Class<?> type) {
-        if (Numeric.is(type)) {
-            return "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
-        }
-        else if (LocalDate.class.isAssignableFrom(type)) {
+        if (LocalDate.class.isAssignableFrom(type)) {
             return DATE_PATTERN;
         }
         else if (LocalTime.class.isAssignableFrom(type)) {

@@ -30,6 +30,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_PHO
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_RECORDS;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -545,6 +546,29 @@ public class EntityRepositoryIT {
         }
         finally {
             deleteArticles(List.of(femaleArticle, maleArticle));
+        }
+    }
+
+    /**
+     * {@link Like} on a decimal matches its fraction as well, the same as {@link Like#applies(Object)}.
+     */
+    @Test
+    void testLikeOnDecimalMatchesFraction() {
+        var expensiveArticle = newArticle("expensive", null);
+        expensiveArticle.setPrice(new BigDecimal("12.50"));
+        var cheapArticle = newArticle("cheap", null);
+        cheapArticle.setPrice(new BigDecimal("3.00"));
+        transactionServiceCDI.run(() -> List.of(expensiveArticle, cheapArticle).forEach(articleRepository::persist));
+
+        try {
+            var like = Like.contains("2.5");
+            assertTrue(like.applies(expensiveArticle.getPrice()), "Price 12.50 contains 2.5");
+            var result = articleRepository.getPage(Page.with().allMatch(Map.of("price", like)).build(), true);
+            assertEquals(List.of(expensiveArticle.getCode()), codesOf(result), "Articles whose price contains 2.5");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose price contains 2.5");
+        }
+        finally {
+            deleteArticles(List.of(expensiveArticle, cheapArticle));
         }
     }
 
