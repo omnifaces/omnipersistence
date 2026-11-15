@@ -59,6 +59,7 @@ import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Note;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
@@ -523,6 +524,27 @@ public class EntityRepositoryIT {
         finally {
             transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeTextId, deletedTextId), true).forEach(textRepository::delete));
             deleteArticles(List.of(activeArticle, deletedArticle));
+        }
+    }
+
+    /**
+     * An enum field without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant name.
+     */
+    @Test
+    void testLikeOnEnumWithoutEnumeratedMatchesConstantName() {
+        var femaleArticle = newArticle("female", null);
+        femaleArticle.setAudience(Gender.FEMALE);
+        var maleArticle = newArticle("male", null);
+        maleArticle.setAudience(Gender.MALE);
+        transactionServiceCDI.run(() -> List.of(femaleArticle, maleArticle).forEach(articleRepository::persist));
+
+        try {
+            var result = articleRepository.getPage(Page.with().allMatch(Map.of("audience", Like.contains("fem"))).build(), true);
+            assertEquals(List.of(femaleArticle.getCode()), codesOf(result), "Articles whose audience contains fem");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose audience contains fem");
+        }
+        finally {
+            deleteArticles(List.of(femaleArticle, maleArticle));
         }
     }
 

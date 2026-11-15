@@ -13,6 +13,10 @@
 package org.omnifaces.persistence.criteria;
 
 import static java.time.format.DateTimeFormatter.ofPattern;
+import static java.util.stream.Collectors.toSet;
+import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
+import static org.omnifaces.persistence.JPA.matchNothing;
+import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -22,11 +26,13 @@ import java.time.OffsetTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.Objects;
+import java.util.Set;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.ParameterExpression;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.model.dto.Page;
@@ -147,6 +153,23 @@ public abstract class Criteria<T> implements Serializable {
 
     private static DateTimeFormatter withOffset(DateTimeFormatter formatter) {
         return new DateTimeFormatterBuilder().append(formatter).appendOffset("+HH:mm", "+00").toFormatter();
+    }
+
+    /**
+     * Returns whether given path is an enum which is mapped by ordinal, as determined by <code>JPA#isEnumeratedByOrdinal(Path)</code>. A string based predicate
+     * cannot match such a path by constant name in SQL, so it has to be built by
+     * {@link #buildByMatchingEnumConstants(Expression, CriteriaBuilder, ParameterBuilder)}.
+     */
+    static boolean isOrdinalEnum(Expression<?> path) {
+        return path.getJavaType().isEnum() && path instanceof Path<?> p && isEnumeratedByOrdinal(p);
+    }
+
+    /**
+     * Returns <code>path IN (constants)</code> where the constants are those enum constants of the type of given path which this criteria applies to.
+     */
+    Predicate buildByMatchingEnumConstants(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        Set<?> matches = stream(path.getJavaType().getEnumConstants()).filter(this::applies).collect(toSet());
+        return matches.isEmpty() ? matchNothing(criteriaBuilder, parameterBuilder) : path.in(parameterBuilder.create(matches));
     }
 
     /**

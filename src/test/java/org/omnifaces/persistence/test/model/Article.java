@@ -60,6 +60,8 @@ public class Article {
     @SoftDeletable
     private boolean deleted;
 
+    private Gender audience;
+
     public Long getCode() {
         return code;
     }
@@ -114,6 +116,14 @@ public class Article {
 
     public void setDeleted(boolean deleted) {
         this.deleted = deleted;
+    }
+
+    public Gender getAudience() {
+        return audience;
+    }
+
+    public void setAudience(Gender audience) {
+        this.audience = audience;
     }
 
 }

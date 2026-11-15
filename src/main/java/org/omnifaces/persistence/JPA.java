@@ -38,6 +38,7 @@ import java.util.stream.Stream;
 
 import jakarta.annotation.Nullable;
 import jakarta.enterprise.inject.Typed;
+import jakarta.persistence.Convert;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -589,7 +590,8 @@ public final class JPA {
     }
 
     /**
-     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
+     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}. This is also the case for an enum attribute without {@link Enumerated} and
+     * without {@link Convert}, because {@link EnumType#ORDINAL} is the default of {@link Enumerated}.
      *
      * @param path Path of interest.
      * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
@@ -597,16 +599,14 @@ public final class JPA {
     public static boolean isEnumeratedByOrdinal(Path<?> path) {
         Bindable<?> model = path.getModel();
 
-        if (model instanceof Attribute<?, ?> attribute) {
-            var member = attribute.getJavaMember();
+        if (model instanceof Attribute<?, ?> attribute && attribute.getJavaMember() instanceof AnnotatedElement member) {
+            var enumerated = member.getAnnotation(Enumerated.class);
 
-            if (member instanceof AnnotatedElement annotatedElement) {
-                var enumerated = annotatedElement.getAnnotation(Enumerated.class);
-
-                if (enumerated != null) {
-                    return enumerated.value() == EnumType.ORDINAL;
-                }
+            if (enumerated != null) {
+                return enumerated.value() == EnumType.ORDINAL;
             }
+
+            return attribute.getJavaType().isEnum() && member.getAnnotation(Convert.class) == null;
         }
 
         return false;

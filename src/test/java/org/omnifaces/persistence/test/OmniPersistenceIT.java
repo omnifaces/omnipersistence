@@ -1209,6 +1209,23 @@ public abstract class OmniPersistenceIT {
         );
     }
 
+    /**
+     * {@link IgnoreCase} selects the same entities in SQL as {@link IgnoreCase#applies(Object)} does in memory, on an ordinal enum, a string enum, a number and
+     * a date.
+     */
+    @Test
+    void testPageWithIgnoreCaseAgreesWithAppliesOnEachType() {
+        var person = personService().list().get(0);
+        assertPageWithIgnoreCaseOnPerson("gender", Person::getGender, "fEmAlE");
+        assertPageWithIgnoreCaseOnPerson("id", Person::getId, String.valueOf(person.getId()));
+        assertPageWithIgnoreCaseOnPerson("dateOfBirth", Person::getDateOfBirth, person.getDateOfBirth().toString());
+
+        var ignoreCase = IgnoreCase.value("MoBiLe");
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> ignoreCase.applies(phone.getType()), Map.of("type", ignoreCase), Map.of(), phoneService()::getPage, true
+        );
+    }
+
     @Test
     void testPageWithLikeOnOrdinalEnumOfManyToOne() {
         assertPage(
@@ -1615,6 +1632,13 @@ public abstract class OmniPersistenceIT {
 
     private static boolean likes(String term, Object value) {
         return Like.contains(term).applies(value);
+    }
+
+    private void assertPageWithIgnoreCaseOnPerson(String field, Function<Person, Object> getter, String term) {
+        var ignoreCase = IgnoreCase.value(term);
+        assertPage(
+            personService().list(), person -> ignoreCase.applies(getter.apply(person)), Map.of(field, ignoreCase), Map.of(), personService()::getPage, true
+        );
     }
 
     private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
