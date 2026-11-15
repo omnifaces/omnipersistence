@@ -290,7 +290,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
 
     /**
      * Returns the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
-     * The iteration order is the one of the map given to the builder.
+     * The iteration order is the one of the map given to the builder. An optional criteria on an aggregate of a DTO mapping, such as a count, is not supported,
+     * because the optional criteria end up in the SQL <code>WHERE</code> clause.
      *
      * @return The optional criteria.
      */

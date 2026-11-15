@@ -21,7 +21,8 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>, or <code>path &gt;=</code> a given value.
+ * Creates comparison predicates: <code>path &lt;</code>, <code>path &lt;=</code>, <code>path &gt;</code>, or <code>path &gt;=</code> a given value. An enum
+ * compares by the declaration order of its constants, also when it is mapped by name.
  * <p>
  * Usage examples:
  *
@@ -140,6 +141,10 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
     @Override
     @SuppressWarnings("unchecked")
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        if (path.getJavaType().isEnum()) {
+            return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
+        }
+
         Expression<T> typedPath = (Expression<T>) path;
         ParameterExpression<T> parameter = parameterBuilder.create(getValue());
 

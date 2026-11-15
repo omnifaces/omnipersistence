@@ -40,9 +40,6 @@ import org.omnifaces.persistence.model.SoftDeletable;
 @EntityListeners({ BaseEntityListener.class, AuditListener.class })
 public class Article {
 
-    private static final int PRICE_PRECISION = 10;
-    private static final int PRICE_SCALE = 2;
-
     @Id
     @GeneratedValue(strategy = IDENTITY)
     private Long code;
@@ -67,7 +64,10 @@ public class Article {
 
     private Gender audience;
 
-    @Column(precision = PRICE_PRECISION, scale = PRICE_SCALE)
+    @ElementCollection
+    private Set<Gender> audiences = new HashSet<>();
+
+    @Column(columnDefinition = "DECIMAL(10,2)") // OpenJPA ignores precision and scale on H2.
     private BigDecimal price;
 
     public Long getCode() {
@@ -132,6 +132,14 @@ public class Article {
 
     public void setAudience(Gender audience) {
         this.audience = audience;
+    }
+
+    public Set<Gender> getAudiences() {
+        return audiences;
+    }
+
+    public void setAudiences(Set<Gender> audiences) {
+        this.audiences = audiences;
     }
 
     public BigDecimal getPrice() {

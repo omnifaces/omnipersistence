@@ -643,6 +643,25 @@ public abstract class OmniPersistenceIT {
         });
     }
 
+    /**
+     * {@link Order} and {@link Between} on an enum compare by the declaration order of its constants in SQL as well as in memory, whether the enum is mapped by
+     * name or by ordinal.
+     */
+    @Test
+    void testPageWithOrderAndBetweenOnEnumAgreeWithApplies() {
+        var phones = phoneService().getAllWithOwners();
+
+        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Phone.Type.MOBILE), Between.range(Phone.Type.MOBILE, Phone.Type.HOME))) {
+            assertPage(phones, phone -> criteria.applies(phone.getType()), Map.of("type", criteria), Map.of(), phoneService()::getPage, true);
+        }
+
+        var persons = personService().list();
+
+        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Gender.MALE), Between.range(Gender.FEMALE, Gender.TRANS))) {
+            assertPage(persons, person -> criteria.applies(person.getGender()), Map.of("gender", criteria), Map.of(), personService()::getPage, true);
+        }
+    }
+
     @Test
     void testPageWithBetweenOfHalfOpenRangeAgreesWithApplies() {
         for (var range : List.of(Range.of(10L, 20L), Range.of(10L, 20L).withMinInclusive(false).withMaxInclusive(true))) {
@@ -887,12 +906,41 @@ public abstract class OmniPersistenceIT {
         assertEquals(phoneIdsOf(expected), phoneIdsOf(result), "MOBILE phones of persons");
     }
 
+    /**
+     * The fetched phones of each person are sorted by the name of their <code>@Enumerated(STRING)</code> type, the same as the database sorts the persons by
+     * it.
+     */
+    @Test
+    void testPageWithPhonesOrderedByStringEnumSortsFetchedPhonesByName() {
+        for (var ascending : List.of(true, false)) {
+            var persons = personService().getPageWithPhones(Page.with().range(0, ROWS_PER_PAGE).orderBy("phones.type", ascending).build(), false);
+            var ordering = ascending ? Comparator.<String>naturalOrder() : Comparator.<String>reverseOrder();
+
+            for (var person : persons) {
+                var typeNames = person.getPhones().stream().map(phone -> phone.getType().name()).toList();
+                assertEquals(typeNames.stream().sorted(ordering).toList(), typeNames, "Phone types of person " + person.getId() + " sorted by name");
+            }
+        }
+    }
+
     private static List<List<Long>> phoneIdsOf(List<Person> persons) {
         return persons.stream().map(person -> person.getPhones().stream().map(Phone::getId).sorted().toList()).toList();
     }
 
     private PartialResultList<Person> pageWithMobilePhones() {
         return personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
+    }
+
+    /**
+     * The required criteria on a fetched collection filter the fetched elements of a page without limit as well.
+     */
+    @Test
+    void testAllWithPhonesFilteredByNumberLikeKeepsOnlyMatchingPhones() {
+        var result = personService().getPageWithPhones(Page.with().allMatch(Map.of("phones.number", Like.contains("11"))).build(), false);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(
+            person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain"))
+        );
     }
 
     @Test

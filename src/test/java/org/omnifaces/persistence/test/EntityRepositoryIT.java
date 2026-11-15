@@ -74,6 +74,7 @@ import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TransactionService;
 import org.omnifaces.persistence.test.service.TransactionServiceCDI;
 import org.omnifaces.persistence.test.service.TransactionServiceEJB;
+import org.omnifaces.utils.collection.PartialResultList;
 
 /**
  * Integration tests for an injected {@link EntityRepository}. Reading actions run without a transaction, modifying actions run within a transaction of
@@ -188,22 +189,23 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
-     */
-    /**
-     * A fetch in the {@link QueryBuilder} of a page does not restrict the entities of the page, so the count includes the entities without the fetched
-     * association as well.
+     * A fetch in the {@link QueryBuilder} of a page, with or without limit, does not restrict the entities of the page, so the page and its count include the
+     * entities without the fetched association as well.
      */
     @Test
-    void testGetPageWithQueryBuilderFetchCountsArticlesWithoutFetchedAssociation() {
+    void testGetPageWithQueryBuilderFetchListsAndCountsArticlesWithoutFetchedAssociation() {
         withArticlesInOptionalCategories(articles -> {
-            var page = Page.with().range(0, ROWS_PER_PAGE).allMatch(TITLED).build();
-            var result = articleRepository.getPage(page, true, (builder, query, article) -> article.fetch("category"));
-            assertEquals(Set.copyOf(codesOf(articles)), Set.copyOf(codesOf(result)), "Articles with and without category");
-            assertEquals(articles.size(), result.getEstimatedTotalNumberOfResults(), "Count of articles with and without category");
+            for (var page : List.of(Page.with().range(0, ROWS_PER_PAGE).allMatch(TITLED).build(), Page.with().allMatch(TITLED).build())) {
+                var result = articleRepository.getPage(page, true, (builder, query, article) -> article.fetch("category"));
+                assertEquals(Set.copyOf(codesOf(articles)), Set.copyOf(codesOf(result)), "Articles with and without category on " + page);
+                assertEquals(articles.size(), result.getEstimatedTotalNumberOfResults(), "Count of articles with and without category on " + page);
+            }
         });
     }
 
+    /**
+     * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
+     */
     private void withArticlesInOptionalCategories(Consumer<List<Article>> test) {
         var first = newCategory("first", "First");
         var second = newCategory("second", "Second");
@@ -570,20 +572,51 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * An enum field without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant name.
+     * An enum field or enum element collection without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it
+     * by constant name.
      */
     @Test
     void testLikeOnEnumWithoutEnumeratedMatchesConstantName() {
+        withFemaleAndMaleAudienceArticles(femaleArticle -> {
+            for (var field : List.of("audience", "audiences")) {
+                assertEquals(List.of(femaleArticle.getCode()), codesOf(pageOfArticlesWithFemAudience(field)), "Articles whose " + field + " contains fem");
+            }
+        });
+    }
+
+    @Test
+    void testLikeOnEnumWithoutEnumeratedCountsMatchingArticles() {
+        withFemaleAndMaleAudienceArticles(
+            femaleArticle -> assertEquals(1, pageOfArticlesWithFemAudience("audience").getEstimatedTotalNumberOfResults(), "Count of articles")
+        );
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testLikeOnEnumElementCollectionWithoutEnumeratedCountsMatchingArticles() {
+        withFemaleAndMaleAudienceArticles(
+            femaleArticle -> assertEquals(1, pageOfArticlesWithFemAudience("audiences").getEstimatedTotalNumberOfResults(), "Count of articles")
+        );
+    }
+
+    private PartialResultList<Article> pageOfArticlesWithFemAudience(String field) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of(field, Like.contains("fem"))).build(), true);
+    }
+
+    /**
+     * Runs given test with two persisted articles, one with a female audience, which is passed to the test, and one with a male audience.
+     */
+    private void withFemaleAndMaleAudienceArticles(Consumer<Article> test) {
         var femaleArticle = newArticle("female", null);
         femaleArticle.setAudience(Gender.FEMALE);
+        femaleArticle.getAudiences().add(Gender.FEMALE);
         var maleArticle = newArticle("male", null);
         maleArticle.setAudience(Gender.MALE);
+        maleArticle.getAudiences().add(Gender.MALE);
         transactionServiceCDI.run(() -> List.of(femaleArticle, maleArticle).forEach(articleRepository::persist));
 
         try {
-            var result = articleRepository.getPage(Page.with().allMatch(Map.of("audience", Like.contains("fem"))).build(), true);
-            assertEquals(List.of(femaleArticle.getCode()), codesOf(result), "Articles whose audience contains fem");
-            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose audience contains fem");
+            test.accept(femaleArticle);
         }
         finally {
             deleteArticles(List.of(femaleArticle, maleArticle));

@@ -39,6 +39,7 @@ import java.util.stream.Stream;
 import jakarta.annotation.Nullable;
 import jakarta.enterprise.inject.Typed;
 import jakarta.persistence.Convert;
+import jakarta.persistence.Converter;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -587,8 +588,9 @@ public final class JPA {
     }
 
     /**
-     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}. This is also the case for an enum attribute without {@link Enumerated} and
-     * without {@link Convert}, because {@link EnumType#ORDINAL} is the default of {@link Enumerated}.
+     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}. This is also the case for an enum attribute, or a collection of enums,
+     * without {@link Enumerated} and without {@link Convert}, because {@link EnumType#ORDINAL} is the default of {@link Enumerated}. An enum attribute
+     * converted by an auto applied {@link Converter} is not detected as such, so it needs an explicit {@link Convert}.
      *
      * @param path Path of interest.
      * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
@@ -603,7 +605,8 @@ public final class JPA {
                 return enumerated.value() == EnumType.ORDINAL;
             }
 
-            return attribute.getJavaType().isEnum() && member.getAnnotation(Convert.class) == null;
+            var type = attribute instanceof PluralAttribute<?, ?, ?> plural ? plural.getElementType().getJavaType() : attribute.getJavaType();
+            return type.isEnum() && member.getAnnotation(Convert.class) == null;
         }
 
         return false;

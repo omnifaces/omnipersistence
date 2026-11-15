@@ -21,7 +21,8 @@ import org.omnifaces.utils.data.Range;
 
 /**
  * Creates <code>path BETWEEN range.min AND range.max</code>. When the {@link Range} has an exclusive bound, as {@link Range#of(Comparable, Comparable)} has on
- * its max, the predicate excludes that bound, the same as {@link #applies(Object)} does.
+ * its max, the predicate excludes that bound, the same as {@link #applies(Object)} does. An enum compares by the declaration order of its constants, also when
+ * it is mapped by name.
  * <p>
  * Usage examples:
  *
@@ -69,6 +70,10 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
     @Override
     @SuppressWarnings("unchecked")
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        if (path.getJavaType().isEnum()) {
+            return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
+        }
+
         var range = getValue();
         var expression = (Expression<T>) path;
         Expression<T> min = parameterBuilder.create(range.getMin());
