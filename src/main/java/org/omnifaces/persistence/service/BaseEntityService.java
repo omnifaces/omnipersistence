@@ -299,25 +299,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private <T> T runWithCurrentInstance(Supplier<T> action) {
+        var previousInstance = CURRENT_INSTANCE.get();
         CURRENT_INSTANCE.set(this);
 
         try {
             return action.get();
         }
         finally {
-            CURRENT_INSTANCE.remove();
+            if (previousInstance == null) {
+                CURRENT_INSTANCE.remove();
+            }
+            else {
+                CURRENT_INSTANCE.set(previousInstance);
+            }
         }
     }
 
     private void runWithCurrentInstance(Runnable action) {
-        CURRENT_INSTANCE.set(this);
-
-        try {
+        runWithCurrentInstance(() -> {
             action.run();
-        }
-        finally {
-            CURRENT_INSTANCE.remove();
-        }
+            return null;
+        });
     }
 
     @SuppressWarnings("rawtypes")

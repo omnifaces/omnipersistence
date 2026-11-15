@@ -848,6 +848,15 @@ public abstract class OmniPersistenceIT {
         );
     }
 
+    /**
+     * A service method invoked during the build of a page leaves the service of that page current, which {@link Like} needs to build its predicate.
+     */
+    @Test
+    void testPageWithServiceInvocationInQueryBuilderBuildsLikeCriteria() {
+        var page = Page.with().allMatch(Map.of("email", Like.contains("name1"))).build();
+        assertEquals(ids(personService().getPageViaQueryBuilder(page)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
+    }
+
     @Test
     void testPageWithPhonesFilteredByTypeSet() {
         var result = pageWithMobilePhones();

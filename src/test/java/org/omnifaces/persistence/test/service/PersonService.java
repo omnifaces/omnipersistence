@@ -73,6 +73,12 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         });
     }
 
+    public PartialResultList<Person> getPageViaQueryBuilderInvokingService(Page page) {
+        return getPage(page, false, (builder, query, person) -> {
+            getById(1L);
+        });
+    }
+
     public PartialResultList<PersonCard> getPageOfPersonCards(Page page, boolean count) {
         return getPage(page, count, PersonCard.class, (builder, query, person) -> {
             Join<Person, Address> personAddress = person.join("address");
