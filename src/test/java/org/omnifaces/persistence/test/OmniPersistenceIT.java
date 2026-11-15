@@ -866,6 +866,22 @@ public abstract class OmniPersistenceIT {
         assertTrue(pageWithMobilePhones().getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones");
     }
 
+    /**
+     * A plain value criteria on a fetched element filters the fetched elements the same as its typed criteria, which is here {@link Enumerated} parsed from the
+     * string.
+     */
+    @Test
+    void testPageWithPhonesFilteredByStringValueOfEnumKeepsMatchingPhones() {
+        var expected = pageWithMobilePhones();
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", "MOBILE")).build(), false);
+        assertEquals(ids(expected), ids(result), "Persons with MOBILE phones");
+        assertEquals(phoneIdsOf(expected), phoneIdsOf(result), "MOBILE phones of persons");
+    }
+
+    private static List<List<Long>> phoneIdsOf(List<Person> persons) {
+        return persons.stream().map(person -> person.getPhones().stream().map(Phone::getId).sorted().toList()).toList();
+    }
+
     private PartialResultList<Person> pageWithMobilePhones() {
         return personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
     }

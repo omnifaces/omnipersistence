@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNullElse;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
 import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
+import static org.omnifaces.persistence.service.BaseEntityService.createTypedCriteria;
 import static org.omnifaces.persistence.service.BaseEntityService.isEmptyMultiValue;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
@@ -302,7 +303,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     /**
      * Returns whether given fetched element value applies to given criteria. A negated criteria, also as item of a multi-value, applies to every element,
-     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>.
+     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>. A plain value
+     * applies as the typed criteria which {@link BaseEntityService} builds the SQL predicate from.
      */
     private static boolean appliesFetchFilter(Object criteria, Object fieldValue) {
         if (criteria instanceof Not) {
@@ -315,8 +317,13 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             return stream(criteria).anyMatch(item -> appliesFetchFilter(item, fieldValue));
         }
         else {
-            return Objects.equals(criteria, fieldValue);
+            var typedCriteria = fieldValue == null ? null : createTypedCriteria(typeOf(fieldValue), criteria);
+            return typedCriteria != null ? typedCriteria.applies(fieldValue) : Objects.equals(criteria, fieldValue);
         }
+    }
+
+    private static Class<?> typeOf(Object value) {
+        return value instanceof Enum<?> enumValue ? enumValue.getDeclaringClass() : value.getClass();
     }
 
     private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {

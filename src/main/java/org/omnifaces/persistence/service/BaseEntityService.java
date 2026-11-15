@@ -2938,7 +2938,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported.
      */
     @SuppressWarnings("unchecked")
-    private static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
+    static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
         if (type.isEnum()) {
             return Enumerated.parse(value, (Class<Enum<?>>) type);
         }
