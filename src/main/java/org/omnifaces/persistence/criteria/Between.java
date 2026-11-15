@@ -20,7 +20,9 @@ import jakarta.persistence.criteria.Predicate;
 import org.omnifaces.utils.data.Range;
 
 /**
- * Creates <code>path BETWEEN range.min AND range.max</code>.
+ * Creates <code>path BETWEEN range.min AND range.max</code>. When the {@link Range} has an exclusive bound, as {@link Range#of(Comparable, Comparable)} has on
+ * its max, the predicate excludes that bound, the same as {@link #applies(Object)} does. An enum compares by the declaration order of its constants, also when
+ * it is mapped by name.
  * <p>
  * Usage examples:
  *
@@ -68,7 +70,22 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
     @Override
     @SuppressWarnings("unchecked")
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        return criteriaBuilder.between((Expression<T>) path, parameterBuilder.create(getValue().getMin()), parameterBuilder.create(getValue().getMax()));
+        if (path.getJavaType().isEnum()) {
+            return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
+        }
+
+        var range = getValue();
+        var expression = (Expression<T>) path;
+        Expression<T> min = parameterBuilder.create(range.getMin());
+        Expression<T> max = parameterBuilder.create(range.getMax());
+
+        if (range.isMinInclusive() && range.isMaxInclusive()) {
+            return criteriaBuilder.between(expression, min, max);
+        }
+
+        var lower = range.isMinInclusive() ? criteriaBuilder.greaterThanOrEqualTo(expression, min) : criteriaBuilder.greaterThan(expression, min);
+        var upper = range.isMaxInclusive() ? criteriaBuilder.lessThanOrEqualTo(expression, max) : criteriaBuilder.lessThan(expression, max);
+        return criteriaBuilder.and(lower, upper);
     }
 
     @Override

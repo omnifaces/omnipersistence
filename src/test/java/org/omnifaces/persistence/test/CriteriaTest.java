@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
 import java.math.BigDecimal;
@@ -36,6 +37,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.omnifaces.persistence.criteria.Between;
 import org.omnifaces.persistence.criteria.Bool;
@@ -582,6 +584,30 @@ public class CriteriaTest {
         @Test
         void parseInvalidThrowsException() {
             assertThrows(IllegalArgumentException.class, () -> Numeric.parse("abc", (Class<Number>) (Class<?>) Integer.class));
+        }
+
+        static Stream<Arguments> numericTargetTypes() {
+            return Stream.of(
+                arguments(Double.class, "1.5", 1.5d),
+                arguments(double.class, "1.5", 1.5d),
+                arguments(Float.class, "1.5", 1.5f),
+                arguments(float.class, "1.5", 1.5f),
+                arguments(Integer.class, "7", 7),
+                arguments(int.class, "7", 7),
+                arguments(Long.class, "7", 7L),
+                arguments(long.class, "7", 7L),
+                arguments(Short.class, "7", (short) 7),
+                arguments(short.class, "7", (short) 7),
+                arguments(Byte.class, "7", (byte) 7),
+                arguments(byte.class, "7", (byte) 7)
+            );
+        }
+
+        @SuppressWarnings("unchecked")
+        @ParameterizedTest
+        @MethodSource("numericTargetTypes")
+        void parseYieldsValueOfEachNumericTargetType(Class<?> targetType, String searchValue, Number expected) {
+            assertEquals(expected, Numeric.parse(searchValue, (Class<Number>) targetType).getValue());
         }
 
         @Test

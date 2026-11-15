@@ -48,7 +48,7 @@ public class SwitchableXADataSource extends SwitchableCommonDataSource implement
 
     @Override
     public XAConnection getXAConnection(String user, String password) throws SQLException {
-        return getWrapped().getXAConnection();
+        return getWrapped().getXAConnection(user, password);
     }
 
 }

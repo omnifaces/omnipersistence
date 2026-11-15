@@ -299,25 +299,27 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private <T> T runWithCurrentInstance(Supplier<T> action) {
+        var previousInstance = CURRENT_INSTANCE.get();
         CURRENT_INSTANCE.set(this);
 
         try {
             return action.get();
         }
         finally {
-            CURRENT_INSTANCE.remove();
+            if (previousInstance == null) {
+                CURRENT_INSTANCE.remove();
+            }
+            else {
+                CURRENT_INSTANCE.set(previousInstance);
+            }
         }
     }
 
     private void runWithCurrentInstance(Runnable action) {
-        CURRENT_INSTANCE.set(this);
-
-        try {
+        runWithCurrentInstance(() -> {
             action.run();
-        }
-        finally {
-            CURRENT_INSTANCE.remove();
-        }
+            return null;
+        });
     }
 
     @SuppressWarnings("rawtypes")
@@ -838,7 +840,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
-     * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
         var copyOfIds = StreamSupport.stream(ids.spliterator(), false).toList();
@@ -897,7 +898,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return List of all entities, optionally including soft deleted ones.
-     * @throws NonSoftDeletableEntityException When entity doesn't have {@link SoftDeletable} annotation set on any of its fields.
      */
     protected List<E> list(boolean includeSoftDeleted) {
         return list(
@@ -918,7 +918,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             softDeleteData.checkSoftDeletable();
             return list(
                 select("")
-                    + softDeleteData.getWhereClause(true)
+                    + softDeleteData.getWhereClauseOfSoftDeleted()
                     + orderByIdDescending()
             );
         });
@@ -1045,7 +1045,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         var criteriaBuilder = getEntityManager().getCriteriaBuilder();
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
-        var root = buildRoot(criteriaQuery, null);
+        var root = criteriaQuery.from(entityType);
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
 
         var query = getEntityManager().createQuery(criteriaQuery);
@@ -1777,9 +1777,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * PartialResultList&lt;Foo&gt; foosWithBars = getPage(first10RecordsMatchingCriteriaOrderedByBar, true, "bar");
      * </pre>
      * <p>
-     * When the page has a limit, or when the provider is EclipseLink, the fetch fields are fetched by a second query on the returned entities, if any. The
-     * persistence context is cleared afterwards. All entities which were managed by the {@link EntityManager}, including the returned ones, are then detached.
-     * Changes which are not flushed yet are lost, so call {@link EntityManager#flush()} before when there are any.
+     * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
+     * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
+     * call {@link EntityManager#flush()} before when there are any.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1799,9 +1799,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * Usage example: see {@link #getPage(Page, boolean)} and {@link #getPage(Page, boolean, String...)}.
      * <p>
-     * When the page has a limit, or when the provider is EclipseLink, the fetch fields are fetched by a second query on the returned entities, if any. The
-     * persistence context is cleared afterwards. All entities which were managed by the {@link EntityManager}, including the returned ones, are then detached.
-     * Changes which are not flushed yet are lost, so call {@link EntityManager#flush()} before when there are any.
+     * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
+     * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
+     * call {@link EntityManager#flush()} before when there are any.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1928,7 +1928,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private <T extends E> TypedQuery<T> buildEntityQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
         var entityQuery = criteriaBuilder.createQuery(pageBuilder.getResultType());
-        var entityQueryRoot = buildRoot(entityQuery, pageBuilder.getPage());
+        var entityQueryRoot = buildRoot(entityQuery);
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
         var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver, new HashMap<>());
@@ -1951,7 +1951,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     )
     {
         var countSubquery = countQuery.subquery(pageBuilder.getResultType());
-        var countSubqueryRoot = buildRoot(countSubquery, null);
+        var countSubqueryRoot = buildRoot(countSubquery);
         var subqueryPathResolver = buildSelection(pageBuilder, countSubquery, countSubqueryRoot, criteriaBuilder);
         buildRestrictions(pageBuilder, countSubquery, criteriaBuilder, subqueryPathResolver, parameters);
 
@@ -2104,13 +2104,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     // Selection actions ----------------------------------------------------------------------------------------------
 
-    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query, Page page) {
+    private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
         var root = query.from(entityType);
-        return query instanceof Subquery
-            ? new SubqueryRoot<>(root)
-            : (provider == ECLIPSELINK || (page != null && page.getLimit() < MAX_VALUE))
-                ? new PostponedFetchRoot<>(root)
-                : root;
+        return query instanceof Subquery ? new SubqueryRoot<>(root) : new PostponedFetchRoot<>(root);
     }
 
     private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
@@ -2200,11 +2196,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
             lastCollectionOrder = order;
 
-            if (!(root instanceof PostponedFetchRoot) && isFetched((From<?, ?>) root, collectionPath)) {
-                // The fetched elements are selected, also in a distinct query.
-                orders.add(buildOrder(order, criteriaBuilder, pathResolver, reversed));
-            }
-            else if (criteriaQuery.isDistinct()) {
+            if (criteriaQuery.isDistinct()) {
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
             else if (database == DB2) {
@@ -2254,22 +2246,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         return null;
-    }
-
-    private static boolean isFetched(From<?, ?> root, String collectionPath) {
-        FetchParent<?, ?> parent = root;
-
-        for (var attribute : collectionPath.split("\\.")) {
-            var fetch = getFetches(parent).stream().filter(f -> f.getAttribute() != null && f.getAttribute().getName().equals(attribute)).findFirst();
-
-            if (fetch.isEmpty()) {
-                return false;
-            }
-
-            parent = fetch.get();
-        }
-
-        return true;
     }
 
     /**
@@ -2937,10 +2913,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported.
+     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported. {@link PostponedFetchRoot}
+     * filters the fetched elements by the same criteria, so that they agree with the SQL predicate.
      */
     @SuppressWarnings("unchecked")
-    private static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
+    static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
         if (type.isEnum()) {
             return Enumerated.parse(value, (Class<Enum<?>>) type);
         }

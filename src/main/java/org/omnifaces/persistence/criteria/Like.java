@@ -12,25 +12,20 @@
  */
 package org.omnifaces.persistence.criteria;
 
-import static java.util.stream.Collectors.toSet;
 import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
 import static org.omnifaces.persistence.JPA.castAsString;
 import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.JPA.escapeLikePattern;
-import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
 import static org.omnifaces.persistence.JPA.lower;
 import static org.omnifaces.persistence.JPA.matchNothing;
-import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.JPA;
@@ -174,9 +169,8 @@ public final class Like extends Criteria<String> {
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         Class<?> type = path.getJavaType();
 
-        if (type.isEnum() && path instanceof Path<?> p && isEnumeratedByOrdinal(p)) {
-            Set<?> matches = stream(type.getEnumConstants()).filter(this::applies).collect(toSet());
-            return matches.isEmpty() ? matchNothing(criteriaBuilder, parameterBuilder) : path.in(parameterBuilder.create(matches));
+        if (isOrdinalEnum(path)) {
+            return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
         }
         else if (Bool.is(type)) {
             return buildBooleanPredicate((Expression<Boolean>) path, criteriaBuilder, parameterBuilder);

@@ -97,6 +97,7 @@ import org.omnifaces.persistence.test.service.PlainConfigUpdater;
 import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TrackingTextService;
 import org.omnifaces.utils.collection.PartialResultList;
+import org.omnifaces.utils.data.Range;
 
 @ExtendWith(ArquillianExtension.class)
 public abstract class OmniPersistenceIT {
@@ -642,6 +643,33 @@ public abstract class OmniPersistenceIT {
         });
     }
 
+    /**
+     * {@link Order} and {@link Between} on an enum compare by the declaration order of its constants in SQL as well as in memory, whether the enum is mapped by
+     * name or by ordinal.
+     */
+    @Test
+    void testPageWithOrderAndBetweenOnEnumAgreeWithApplies() {
+        var phones = phoneService().getAllWithOwners();
+
+        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Phone.Type.MOBILE), Between.range(Phone.Type.MOBILE, Phone.Type.HOME))) {
+            assertPage(phones, phone -> criteria.applies(phone.getType()), Map.of("type", criteria), Map.of(), phoneService()::getPage, true);
+        }
+
+        var persons = personService().list();
+
+        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Gender.MALE), Between.range(Gender.FEMALE, Gender.TRANS))) {
+            assertPage(persons, person -> criteria.applies(person.getGender()), Map.of("gender", criteria), Map.of(), personService()::getPage, true);
+        }
+    }
+
+    @Test
+    void testPageWithBetweenOfHalfOpenRangeAgreesWithApplies() {
+        for (var range : List.of(Range.of(10L, 20L), Range.of(10L, 20L).withMinInclusive(false).withMaxInclusive(true))) {
+            var between = Between.value(range);
+            assertPage(personService().list(), person -> between.applies(person.getId()), Map.of("id", between), Map.of(), personService()::getPage, true);
+        }
+    }
+
     @Test
     void testPageWithBetweenDates() {
         var start = LocalDate.of(1950, 1, 1);
@@ -839,6 +867,15 @@ public abstract class OmniPersistenceIT {
         );
     }
 
+    /**
+     * A service method invoked during the build of a page leaves the service of that page current, which {@link Like} needs to build its predicate.
+     */
+    @Test
+    void testPageWithServiceInvocationInQueryBuilderBuildsLikeCriteria() {
+        var page = Page.with().allMatch(Map.of("email", Like.contains("name1"))).build();
+        assertEquals(ids(personService().getPageViaQueryBuilder(page)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
+    }
+
     @Test
     void testPageWithPhonesFilteredByTypeSet() {
         var result = pageWithMobilePhones();
@@ -857,8 +894,53 @@ public abstract class OmniPersistenceIT {
         assertTrue(pageWithMobilePhones().getEstimatedTotalNumberOfResults() < TOTAL_RECORDS, "Not all persons have MOBILE phones");
     }
 
+    /**
+     * A plain value criteria on a fetched element filters the fetched elements the same as its typed criteria, which is here {@link Enumerated} parsed from the
+     * string.
+     */
+    @Test
+    void testPageWithPhonesFilteredByStringValueOfEnumKeepsMatchingPhones() {
+        var expected = pageWithMobilePhones();
+        var result = personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", "MOBILE")).build(), false);
+        assertEquals(ids(expected), ids(result), "Persons with MOBILE phones");
+        assertEquals(phoneIdsOf(expected), phoneIdsOf(result), "MOBILE phones of persons");
+    }
+
+    /**
+     * The fetched phones of each person are sorted by the name of their <code>@Enumerated(STRING)</code> type, the same as the database sorts the persons by
+     * it.
+     */
+    @Test
+    void testPageWithPhonesOrderedByStringEnumSortsFetchedPhonesByName() {
+        for (var ascending : List.of(true, false)) {
+            var persons = personService().getPageWithPhones(Page.with().range(0, ROWS_PER_PAGE).orderBy("phones.type", ascending).build(), false);
+            var ordering = ascending ? Comparator.<String>naturalOrder() : Comparator.<String>reverseOrder();
+
+            for (var person : persons) {
+                var typeNames = person.getPhones().stream().map(phone -> phone.getType().name()).toList();
+                assertEquals(typeNames.stream().sorted(ordering).toList(), typeNames, "Phone types of person " + person.getId() + " sorted by name");
+            }
+        }
+    }
+
+    private static List<List<Long>> phoneIdsOf(List<Person> persons) {
+        return persons.stream().map(person -> person.getPhones().stream().map(Phone::getId).sorted().toList()).toList();
+    }
+
     private PartialResultList<Person> pageWithMobilePhones() {
         return personService().getPageWithPhones(Page.with().range(0, 10).allMatch(Map.of("phones.type", Set.of(Phone.Type.MOBILE))).build(), true);
+    }
+
+    /**
+     * The required criteria on a fetched collection filter the fetched elements of a page without limit as well.
+     */
+    @Test
+    void testAllWithPhonesFilteredByNumberLikeKeepsOnlyMatchingPhones() {
+        var result = personService().getPageWithPhones(Page.with().allMatch(Map.of("phones.number", Like.contains("11"))).build(), false);
+        assertFalse(result.isEmpty(), "Some persons have phones with number containing 11");
+        result.forEach(
+            person -> person.getPhones().forEach(phone -> assertTrue(phone.getNumber().contains("11"), "Only phones with 11 in number remain"))
+        );
     }
 
     @Test
@@ -1197,6 +1279,23 @@ public abstract class OmniPersistenceIT {
         assertPage(
             phoneService().getAllWithOwners(), phone -> likes("mob", phone.getType()), Map.of("type", Like.contains("mob")), Map.of(),
             phoneService()::getPageWithOwners, true
+        );
+    }
+
+    /**
+     * {@link IgnoreCase} selects the same entities in SQL as {@link IgnoreCase#applies(Object)} does in memory, on an ordinal enum, a string enum, a number and
+     * a date.
+     */
+    @Test
+    void testPageWithIgnoreCaseAgreesWithAppliesOnEachType() {
+        var person = personService().list().get(0);
+        assertPageWithIgnoreCaseOnPerson("gender", Person::getGender, "fEmAlE");
+        assertPageWithIgnoreCaseOnPerson("id", Person::getId, String.valueOf(person.getId()));
+        assertPageWithIgnoreCaseOnPerson("dateOfBirth", Person::getDateOfBirth, person.getDateOfBirth().toString());
+
+        var ignoreCase = IgnoreCase.value("MoBiLe");
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> ignoreCase.applies(phone.getType()), Map.of("type", ignoreCase), Map.of(), phoneService()::getPage, true
         );
     }
 
@@ -1606,6 +1705,13 @@ public abstract class OmniPersistenceIT {
 
     private static boolean likes(String term, Object value) {
         return Like.contains(term).applies(value);
+    }
+
+    private void assertPageWithIgnoreCaseOnPerson(String field, Function<Person, Object> getter, String term) {
+        var ignoreCase = IgnoreCase.value(term);
+        assertPage(
+            personService().list(), person -> ignoreCase.applies(getter.apply(person)), Map.of(field, ignoreCase), Map.of(), personService()::getPage, true
+        );
     }
 
     private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {

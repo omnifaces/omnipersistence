@@ -38,6 +38,8 @@ import java.util.stream.Stream;
 
 import jakarta.annotation.Nullable;
 import jakarta.enterprise.inject.Typed;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Converter;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -516,8 +518,8 @@ public final class JPA {
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
         if (service.getDatabase() == POSTGRESQL) {
-            if (OffsetTime.class.isAssignableFrom(type)) {
-                return builder.function("TEXT", String.class, expression); // PostgreSQL has no TO_CHAR(timetz).
+            if (Numeric.is(type) || OffsetTime.class.isAssignableFrom(type)) {
+                return builder.function("TEXT", String.class, expression); // PostgreSQL has no TO_CHAR(timetz), and TO_CHAR(numeric) needs a fixed scale.
             }
 
             var pattern = getPostgreSQLPattern(type);
@@ -568,10 +570,7 @@ public final class JPA {
 
     @Nullable
     private static String getPostgreSQLPattern(Class<?> type) {
-        if (Numeric.is(type)) {
-            return "FM999999999999999999"; // NOTE: Amount of digits matches amount of Long.MAX_VALUE digits minus one.
-        }
-        else if (LocalDate.class.isAssignableFrom(type)) {
+        if (LocalDate.class.isAssignableFrom(type)) {
             return DATE_PATTERN;
         }
         else if (LocalTime.class.isAssignableFrom(type)) {
@@ -589,7 +588,10 @@ public final class JPA {
     }
 
     /**
-     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
+     * Returns whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}. This is also the case for an enum attribute, or a collection of enums,
+     * without {@link Enumerated} and without {@link Convert}, because {@link EnumType#ORDINAL} is the default of {@link Enumerated}. An enum attribute
+     * converted by an auto applied {@link Converter} is not detected as such, so it needs an explicit {@link Convert}. EclipseLink maps a collection of enums
+     * without {@link Enumerated} to a <code>VARCHAR</code> column while it binds the ordinal, so it needs an explicit {@link Enumerated} there.
      *
      * @param path Path of interest.
      * @return Whether given path is {@link Enumerated} by {@link EnumType#ORDINAL}.
@@ -597,16 +599,15 @@ public final class JPA {
     public static boolean isEnumeratedByOrdinal(Path<?> path) {
         Bindable<?> model = path.getModel();
 
-        if (model instanceof Attribute<?, ?> attribute) {
-            var member = attribute.getJavaMember();
+        if (model instanceof Attribute<?, ?> attribute && attribute.getJavaMember() instanceof AnnotatedElement member) {
+            var enumerated = member.getAnnotation(Enumerated.class);
 
-            if (member instanceof AnnotatedElement annotatedElement) {
-                var enumerated = annotatedElement.getAnnotation(Enumerated.class);
-
-                if (enumerated != null) {
-                    return enumerated.value() == EnumType.ORDINAL;
-                }
+            if (enumerated != null) {
+                return enumerated.value() == EnumType.ORDINAL;
             }
+
+            var type = attribute instanceof PluralAttribute<?, ?, ?> plural ? plural.getElementType().getJavaType() : attribute.getJavaType();
+            return type.isEnum() && member.getAnnotation(Convert.class) == null;
         }
 
         return false;

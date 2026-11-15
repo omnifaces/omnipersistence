@@ -138,6 +138,15 @@ public class CommonDataSourceWrapper implements CommonDataSource {
         }
     }
 
+    private int getInt(String name) {
+        Integer value = get(name);
+        return value != null ? value : 0;
+    }
+
+    private boolean getBoolean(String name) {
+        return Boolean.TRUE.equals(get(name));
+    }
+
     /**
      * Sets a property on the wrapped data source by converting the given String value to the target property type.
      *
@@ -172,12 +181,12 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     @Override
     public java.io.PrintWriter getLogWriter() throws SQLException {
-        return get("loginWriter");
+        return get("logWriter");
     }
 
     @Override
     public void setLogWriter(java.io.PrintWriter out) throws SQLException {
-        set("loginWriter", out);
+        set("logWriter", out);
     }
 
     @Override
@@ -187,7 +196,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
 
     @Override
     public int getLoginTimeout() throws SQLException {
-        return get("loginTimeout");
+        return getInt("loginTimeout");
     }
 
     // ------------------------- CommonDataSource JDBC 4.1 -----------------------------------
@@ -241,7 +250,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The port number.
      */
     public int getPortNumber() {
-        return get("portNumber");
+        return getInt("portNumber");
     }
 
     /**
@@ -322,7 +331,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The log level.
      */
     public int getLogLevel() {
-        return get("logLevel");
+        return getInt("logLevel");
     }
 
     /**
@@ -340,7 +349,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The protocol version.
      */
     public int getProtocolVersion() {
-        return get("protocolVersion");
+        return getInt("protocolVersion");
     }
 
     /**
@@ -358,7 +367,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The prepare threshold.
      */
     public int getPrepareThreshold() {
-        return get("prepareThreshold");
+        return getInt("prepareThreshold");
     }
 
     /**
@@ -403,7 +412,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The unknown length.
      */
     public int getUnknownLength() {
-        return get("unknownLength");
+        return getInt("unknownLength");
     }
 
     /**
@@ -421,7 +430,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return The socket timeout.
      */
     public int getSocketTimeout() {
-        return get("socketTimeout");
+        return getInt("socketTimeout");
     }
 
     /**
@@ -439,7 +448,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return True if enabled, false otherwise.
      */
     public boolean getSsl() {
-        return get("ssl");
+        return getBoolean("ssl");
     }
 
     /**
@@ -493,7 +502,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return True if enabled, false otherwise.
      */
     public boolean getTcpKeepAlive() {
-        return get("tcpKeepAlive");
+        return getBoolean("tcpKeepAlive");
     }
 
     /**
@@ -511,7 +520,7 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      * @return True if enabled, false otherwise.
      */
     public boolean getBinaryTransfer() {
-        return get("binaryTransfer");
+        return getBoolean("binaryTransfer");
     }
 
     /**

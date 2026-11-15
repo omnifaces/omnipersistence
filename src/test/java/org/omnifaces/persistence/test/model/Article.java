@@ -15,9 +15,11 @@ package org.omnifaces.persistence.test.model;
 import static jakarta.persistence.FetchType.LAZY;
 import static jakarta.persistence.GenerationType.IDENTITY;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -59,6 +61,14 @@ public class Article {
 
     @SoftDeletable
     private boolean deleted;
+
+    private Gender audience;
+
+    @ElementCollection
+    private Set<Gender> audiences = new HashSet<>();
+
+    @Column(columnDefinition = "DECIMAL(10,2)") // OpenJPA ignores precision and scale on H2.
+    private BigDecimal price;
 
     public Long getCode() {
         return code;
@@ -114,6 +124,30 @@ public class Article {
 
     public void setDeleted(boolean deleted) {
         this.deleted = deleted;
+    }
+
+    public Gender getAudience() {
+        return audience;
+    }
+
+    public void setAudience(Gender audience) {
+        this.audience = audience;
+    }
+
+    public Set<Gender> getAudiences() {
+        return audiences;
+    }
+
+    public void setAudiences(Set<Gender> audiences) {
+        this.audiences = audiences;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
     }
 
 }

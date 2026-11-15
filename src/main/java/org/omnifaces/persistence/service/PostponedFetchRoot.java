@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
@@ -20,6 +21,7 @@ import static java.util.Objects.requireNonNullElse;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
 import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
+import static org.omnifaces.persistence.service.BaseEntityService.createTypedCriteria;
 import static org.omnifaces.persistence.service.BaseEntityService.isEmptyMultiValue;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
@@ -36,10 +38,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Fetch;
@@ -71,14 +77,24 @@ import org.omnifaces.persistence.model.dto.Page;
  * <p>
  * The join type of a fetch is ignored. An actual fetch and the secondary query always use a left fetch join.
  * <p>
- * On EclipseLink, BaseEntityService uses this root also when the page has no limit. EclipseLink returns a cartesian product for a fetch join whenever the query
- * has a range, and BaseEntityService always sets a range when the query has joins.
+ * BaseEntityService uses this root also when the page has no limit, so that a fetch has the same effect on every page and provider: it never restricts the
+ * entities of the page, and the required criteria of the page filter the fetched collections. EclipseLink returns a cartesian product for a fetch join whenever
+ * the query has a range, and BaseEntityService always sets a range when the query has joins.
  *
  * @author Bauke Scholtz
  * @since 1.0
  * @see PostponedFetch
  */
 class PostponedFetchRoot<X> extends RootWrapper<X> {
+
+    private static final ClassValue<Map<String, Boolean>> ENUMERATED_BY_STRING = new ClassValue<>() {
+
+        @Override
+        protected Map<String, Boolean> computeValue(Class<?> type) {
+            return new ConcurrentHashMap<>();
+        }
+
+    };
 
     private final Set<String> postponedFetches;
 
@@ -271,11 +287,57 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             .map(entry -> {
                 var subField = entry.getKey().substring(fetchPath.length() + 1);
                 var ascending = entry.getValue();
-                var fieldComp = comparing(obj -> (Comparable<Object>) invokeGetter(obj, subField), nullsLast(naturalOrder()));
+                var fieldComp = comparing(obj -> sortKeyOf(obj, subField), nullsLast(naturalOrder()));
                 return ascending ? fieldComp : fieldComp.reversed();
             })
             .reduce(Comparator::thenComparing)
             .orElse(null);
+    }
+
+    /**
+     * Returns the value of given field of given fetched element to sort it by. This is the name of an enum which is {@link Enumerated} by name, because the
+     * database sorts such an enum by name.
+     */
+    @SuppressWarnings("unchecked")
+    private static Comparable<Object> sortKeyOf(Object element, String field) {
+        var value = invokeGetter(element, field);
+
+        if (value instanceof Enum<?> enumValue) {
+            var lastDot = field.lastIndexOf('.');
+            Object owner = lastDot < 0 ? element : invokeGetter(element, field.substring(0, lastDot));
+
+            if (isEnumeratedByString(owner.getClass(), field.substring(lastDot + 1))) {
+                return (Comparable<Object>) (Comparable<?>) enumValue.name();
+            }
+        }
+
+        return (Comparable<Object>) value;
+    }
+
+    private static boolean isEnumeratedByString(Class<?> type, String property) {
+        return ENUMERATED_BY_STRING.get(type).computeIfAbsent(property, key -> findEnumerated(type, property).map(e -> e.value() == STRING).orElse(false));
+    }
+
+    /**
+     * Returns the {@link Enumerated} of given property of given type or of its superclasses, on the field as well as on the getter.
+     */
+    private static Optional<Enumerated> findEnumerated(Class<?> type, String property) {
+        var capitalized = Character.toUpperCase(property.charAt(0)) + property.substring(1);
+        var getterNames = Set.of("get" + capitalized, "is" + capitalized);
+
+        for (var cls = type; cls != null; cls = cls.getSuperclass()) {
+            var members = Stream.concat(
+                Stream.of(cls.getDeclaredFields()).filter(field -> field.getName().equals(property)),
+                Stream.of(cls.getDeclaredMethods()).filter(method -> method.getParameterCount() == 0 && getterNames.contains(method.getName()))
+            );
+            var enumerated = members.map(member -> member.getAnnotation(Enumerated.class)).filter(Objects::nonNull).findFirst();
+
+            if (enumerated.isPresent()) {
+                return enumerated;
+            }
+        }
+
+        return Optional.empty();
     }
 
     private static Map<String, Object> collectFiltersForFetch(String fetchPath, Map<String, Object> requiredCriteria) {
@@ -302,7 +364,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     /**
      * Returns whether given fetched element value applies to given criteria. A negated criteria, also as item of a multi-value, applies to every element,
-     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>.
+     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>. A plain value
+     * applies as the typed criteria which {@link BaseEntityService} builds the SQL predicate from.
      */
     private static boolean appliesFetchFilter(Object criteria, Object fieldValue) {
         if (criteria instanceof Not) {
@@ -315,8 +378,13 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             return stream(criteria).anyMatch(item -> appliesFetchFilter(item, fieldValue));
         }
         else {
-            return Objects.equals(criteria, fieldValue);
+            var typedCriteria = fieldValue == null ? null : createTypedCriteria(typeOf(fieldValue), criteria);
+            return typedCriteria != null ? typedCriteria.applies(fieldValue) : Objects.equals(criteria, fieldValue);
         }
+    }
+
+    private static Class<?> typeOf(Object value) {
+        return value instanceof Enum<?> enumValue ? enumValue.getDeclaringClass() : value.getClass();
     }
 
     private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {

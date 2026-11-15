@@ -83,11 +83,19 @@ class SoftDeleteData {
     }
 
     public String getWhereClause(boolean includeSoftDeleted) {
+        return includeSoftDeleted ? "" : getWhereClauseOf(false);
+    }
+
+    public String getWhereClauseOfSoftDeleted() {
+        return getWhereClauseOf(true);
+    }
+
+    private String getWhereClauseOf(boolean softDeleted) {
         if (!softDeletable) {
             return "";
         }
 
-        return (" WHERE e." + fieldName + "=" + (typeActive ^ includeSoftDeleted));
+        return (" WHERE e." + fieldName + "=" + (typeActive ^ softDeleted));
     }
 
     @Override

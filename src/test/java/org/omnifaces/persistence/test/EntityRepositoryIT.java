@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test;
 
+import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,6 +31,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_PHO
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_RECORDS;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -56,9 +58,12 @@ import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
+import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Note;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
@@ -69,6 +74,7 @@ import org.omnifaces.persistence.test.service.TestAuditListener;
 import org.omnifaces.persistence.test.service.TransactionService;
 import org.omnifaces.persistence.test.service.TransactionServiceCDI;
 import org.omnifaces.persistence.test.service.TransactionServiceEJB;
+import org.omnifaces.utils.collection.PartialResultList;
 
 /**
  * Integration tests for an injected {@link EntityRepository}. Reading actions run without a transaction, modifying actions run within a transaction of
@@ -78,6 +84,7 @@ import org.omnifaces.persistence.test.service.TransactionServiceEJB;
 public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
+    private static final String ECLIPSELINK_ENUM_COLLECTION = "EclipseLink maps an enum element collection without @Enumerated to a VARCHAR column, which PostgreSQL does not compare to the bound ordinal";
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
     private static final String LOADED_REFERENCE = "EclipseLink returns an already loaded instance from EntityManager#getReference()";
@@ -183,6 +190,21 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * A fetch in the {@link QueryBuilder} of a page, with or without limit, does not restrict the entities of the page, so the page and its count include the
+     * entities without the fetched association as well.
+     */
+    @Test
+    void testGetPageWithQueryBuilderFetchListsAndCountsArticlesWithoutFetchedAssociation() {
+        withArticlesInOptionalCategories(articles -> {
+            for (var page : List.of(Page.with().range(0, ROWS_PER_PAGE).allMatch(TITLED).build(), Page.with().allMatch(TITLED).build())) {
+                var result = articleRepository.getPage(page, true, (builder, query, article) -> article.fetch("category"));
+                assertEquals(Set.copyOf(codesOf(articles)), Set.copyOf(codesOf(result)), "Articles with and without category on " + page);
+                assertEquals(articles.size(), result.getEstimatedTotalNumberOfResults(), "Count of articles with and without category on " + page);
+            }
+        });
+    }
+
+    /**
      * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
      */
     private void withArticlesInOptionalCategories(Consumer<List<Article>> test) {
@@ -254,6 +276,30 @@ public class EntityRepositoryIT {
         var person = personRepository.getByIdWithLoadGraph(1L, Person.WITH_PHONES);
         assertTrue(personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil().isLoaded(person, "phones"), "Phones are loaded");
         assertEquals(TOTAL_PHONES_PER_PERSON_0, person.getPhones().size(), "Phones loaded by entity graph");
+    }
+
+    /**
+     * A fetch in a {@link CriteriaQueryBuilder} of <code>list()</code>, <code>find()</code> and <code>findFirst()</code> loads the fetched association, on
+     * every provider.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA reports a fetched collection of a detached entity as not loaded")
+    void testListAndFindByCriteriaQueryBuilderLoadFetchedPhones() {
+        CriteriaQueryBuilder<Person> withPhonesOfFirstPerson = (builder, query, person) -> {
+            person.fetch("phones", LEFT);
+            query.distinct(true).where(builder.equal(person.get("id"), 1L));
+        };
+        var persons = List.of(
+            personRepository.list(withPhonesOfFirstPerson, Map.of()).get(0),
+            personRepository.find(withPhonesOfFirstPerson, Map.of()).orElseThrow(),
+            personRepository.findFirst(withPhonesOfFirstPerson, Map.of()).orElseThrow()
+        );
+        var persistenceUnitUtil = personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil();
+
+        for (var person : persons) {
+            assertTrue(persistenceUnitUtil.isLoaded(person, "phones"), "Phones are loaded");
+            assertEquals(TOTAL_PHONES_PER_PERSON_0, person.getPhones().size(), "Phones fetched by criteria query builder");
+        }
     }
 
     @Test
@@ -488,6 +534,124 @@ public class EntityRepositoryIT {
         }
     }
 
+    /**
+     * <code>list(true)</code> and <code>getByIds(ids, true)</code> return the active entities as well as the soft deleted ones, like
+     * <code>getById(id, true)</code>, on an <code>ACTIVE</code> as well as on a <code>DELETED</code> soft deletable field.
+     */
+    @Test
+    void testListAndGetByIdsIncludingSoftDeletedReturnActiveAndSoftDeleted() {
+        var activeText = new Text();
+        var deletedText = new Text();
+        var activeTextId = transactionServiceCDI.call(() -> textRepository.persist(activeText));
+        var deletedTextId = transactionServiceCDI.call(() -> textRepository.persist(deletedText));
+        var activeArticle = persistArticle("active", null);
+        var deletedArticle = persistArticle("deleted", null);
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(deletedTextId)));
+            transactionServiceCDI.run(() -> articleRepository.softDelete(deletedArticle));
+
+            var textIds = List.of(activeTextId, deletedTextId);
+            assertEquals(List.of(deletedTextId, activeTextId), idsOf(textRepository.getByIds(textIds, true)), "Texts by IDs including soft deleted");
+            assertEquals(List.of(activeTextId), idsOf(textRepository.getByIds(textIds, false)), "Texts by IDs excluding soft deleted");
+            assertTrue(idsOf(textRepository.list(true)).containsAll(textIds), "Texts including soft deleted");
+            assertFalse(idsOf(textRepository.list(false)).contains(deletedTextId), "Texts excluding soft deleted");
+
+            var articleCodes = codesOf(List.of(activeArticle, deletedArticle));
+            assertEquals(
+                List.of(deletedArticle.getCode(), activeArticle.getCode()), codesOf(articleRepository.getByIds(articleCodes, true)),
+                "Articles by IDs including soft deleted"
+            );
+            assertEquals(List.of(activeArticle.getCode()), codesOf(articleRepository.getByIds(articleCodes, false)), "Articles by IDs excluding soft deleted");
+            assertTrue(codesOf(articleRepository.list(true)).containsAll(articleCodes), "Articles including soft deleted");
+            assertFalse(codesOf(articleRepository.list(false)).contains(deletedArticle.getCode()), "Articles excluding soft deleted");
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeTextId, deletedTextId), true).forEach(textRepository::delete));
+            deleteArticles(List.of(activeArticle, deletedArticle));
+        }
+    }
+
+    /**
+     * An enum field without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant name.
+     */
+    @Test
+    void testLikeOnEnumWithoutEnumeratedMatchesConstantName() {
+        withFemaleAndMaleAudienceArticles(femaleArticle -> {
+            var result = pageOfArticlesWithFemAudience("audience");
+            assertEquals(List.of(femaleArticle.getCode()), codesOf(result), "Articles whose audience contains fem");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose audience contains fem");
+        });
+    }
+
+    /**
+     * An enum element collection without <code>@Enumerated</code> is mapped by <code>ORDINAL</code>, the JPA default, so {@link Like} matches it by constant
+     * name.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
+    void testLikeOnEnumElementCollectionWithoutEnumeratedMatchesConstantName() {
+        withFemaleAndMaleAudienceArticles(
+            femaleArticle -> assertEquals(List.of(femaleArticle.getCode()), codesOf(pageOfArticlesWithFemAudience("audiences")), "Articles")
+        );
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testLikeOnEnumElementCollectionWithoutEnumeratedCountsMatchingArticles() {
+        withFemaleAndMaleAudienceArticles(
+            femaleArticle -> assertEquals(1, pageOfArticlesWithFemAudience("audiences").getEstimatedTotalNumberOfResults(), "Count of articles")
+        );
+    }
+
+    private PartialResultList<Article> pageOfArticlesWithFemAudience(String field) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of(field, Like.contains("fem"))).build(), true);
+    }
+
+    /**
+     * Runs given test with two persisted articles, one with a female audience, which is passed to the test, and one with a male audience.
+     */
+    private void withFemaleAndMaleAudienceArticles(Consumer<Article> test) {
+        var femaleArticle = newArticle("female", null);
+        femaleArticle.setAudience(Gender.FEMALE);
+        femaleArticle.getAudiences().add(Gender.FEMALE);
+        var maleArticle = newArticle("male", null);
+        maleArticle.setAudience(Gender.MALE);
+        maleArticle.getAudiences().add(Gender.MALE);
+        transactionServiceCDI.run(() -> List.of(femaleArticle, maleArticle).forEach(articleRepository::persist));
+
+        try {
+            test.accept(femaleArticle);
+        }
+        finally {
+            deleteArticles(List.of(femaleArticle, maleArticle));
+        }
+    }
+
+    /**
+     * {@link Like} on a decimal matches its fraction as well, the same as {@link Like#applies(Object)}.
+     */
+    @Test
+    void testLikeOnDecimalMatchesFraction() {
+        var expensiveArticle = newArticle("expensive", null);
+        expensiveArticle.setPrice(new BigDecimal("12.50"));
+        var cheapArticle = newArticle("cheap", null);
+        cheapArticle.setPrice(new BigDecimal("3.00"));
+        transactionServiceCDI.run(() -> List.of(expensiveArticle, cheapArticle).forEach(articleRepository::persist));
+
+        try {
+            var like = Like.contains("2.5");
+            assertTrue(like.applies(expensiveArticle.getPrice()), "Price 12.50 contains 2.5");
+            var result = articleRepository.getPage(Page.with().allMatch(Map.of("price", like)).build(), true);
+            assertEquals(List.of(expensiveArticle.getCode()), codesOf(result), "Articles whose price contains 2.5");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose price contains 2.5");
+        }
+        finally {
+            deleteArticles(List.of(expensiveArticle, cheapArticle));
+        }
+    }
+
     @Test
     void testEntityWithoutBaseEntitySoftDelete() {
         var article = persistArticle("soft", null);
@@ -695,6 +859,10 @@ public class EntityRepositoryIT {
 
     private static List<Long> codesOf(List<Article> articles) {
         return articles.stream().map(Article::getCode).toList();
+    }
+
+    private static List<Long> idsOf(List<Text> texts) {
+        return texts.stream().map(Text::getId).toList();
     }
 
 }
