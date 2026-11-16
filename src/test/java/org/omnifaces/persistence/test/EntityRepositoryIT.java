@@ -32,6 +32,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_REC
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,10 +54,12 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.VersionedBaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
@@ -67,6 +70,7 @@ import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Note;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Remark;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.service.EntityEvents;
 import org.omnifaces.persistence.test.service.StartupServiceEJB;
@@ -84,6 +88,7 @@ import org.omnifaces.utils.collection.PartialResultList;
 public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
+    private static final Instant PAST_LAST_MODIFIED = Instant.parse("2000-01-01T00:00:00Z");
     private static final String ECLIPSELINK_ENUM_COLLECTION = "EclipseLink maps an enum element collection without @Enumerated to a VARCHAR column, which PostgreSQL does not compare to the bound ordinal";
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
@@ -102,6 +107,10 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Article> articleRepository;
     @Inject
     private EntityRepository<String, Category> categoryRepository;
+    @Inject
+    private EntityRepository<Long, Phone> phoneRepository;
+    @Inject
+    private EntityRepository<Long, Remark> remarkRepository;
     @Inject
     private EntityRepository<String, Note> noteRepository;
     @Inject
@@ -160,6 +169,40 @@ public class EntityRepositoryIT {
         });
     }
 
+    /**
+     * An ordering on an <code>@ElementCollection</code> places the entities without elements where the database sorts <code>NULL</code>, see
+     * {@link Database#sortsNullsLow()}, also with a fetch of the collection.
+     */
+    @Test
+    void testGetPageOrderedByElementCollectionPlacesArticlesWithoutTagsAsNulls() {
+        var articles = new ArrayList<Article>();
+
+        try {
+            articles.add(persistArticle("b", null, "tag-b"));
+            articles.add(persistArticle("a", null, "tag-a"));
+            articles.add(persistArticle("untagged", null));
+            var tagged = List.of(articles.get(1).getCode(), articles.get(0).getCode());
+            var untagged = List.of(articles.get(2).getCode());
+            var nullsLow = articleRepository.getDatabase().sortsNullsLow();
+            var ascending = new ArrayList<>(nullsLow ? untagged : tagged);
+            ascending.addAll(nullsLow ? tagged : untagged);
+            var descending = new ArrayList<>(ascending);
+            Collections.reverse(descending);
+
+            for (var fetchFields : List.of(new String[] { "tags" }, new String[0])) {
+                assertEquals(ascending, codesOf(articlesOrderedByTags(true, fetchFields)), "Ascending with fetch fields " + List.of(fetchFields));
+                assertEquals(descending, codesOf(articlesOrderedByTags(false, fetchFields)), "Descending with fetch fields " + List.of(fetchFields));
+            }
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    private PartialResultList<Article> articlesOrderedByTags(boolean ascending, String... fetchFields) {
+        return articleRepository.getPage(Page.with().allMatch(TITLED).orderBy("tags", ascending).build(), false, fetchFields);
+    }
+
     @Test
     void testGetPageWithCriteriaOnPropertyOfOptionalManyToOne() {
         withArticlesInOptionalCategories(articles -> {
@@ -205,6 +248,36 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * {@link EntityRepository#countForeignKeyReferencesTo(Object)} counts the rows referencing given entity via a <code>@ManyToOne</code> as well as via a
+     * <code>@OneToMany</code> list, the same as a JPQL count of them.
+     */
+    @Test
+    void testCountForeignKeyReferencesToCountsEachReferencingRow() {
+        var person = personRepository.getById(1L);
+        var phonesOfPerson = selectLong("SELECT COUNT(phone) FROM Phone phone WHERE phone.owner.id = ?1", person.getId());
+        assertTrue(phonesOfPerson > 0, "Person has phones");
+        assertEquals(phonesOfPerson, personRepository.countForeignKeyReferencesTo(person), "References to person");
+
+        var phone = phoneRepository.getById(selectLong("SELECT MIN(phone.id) FROM Phone phone WHERE phone.owner.id = ?1", person.getId()));
+        var personsOfPhone = selectLong("SELECT COUNT(person) FROM Person person JOIN person.phones phone WHERE phone.id = ?1", phone.getId());
+        assertEquals(1, personsOfPhone, "Phone is in phones of one person");
+        assertEquals(personsOfPhone, phoneRepository.countForeignKeyReferencesTo(phone), "References to phone");
+
+        withArticlesInOptionalCategories(articles -> {
+            assertEquals(1, categoryRepository.countForeignKeyReferencesTo(categoryRepository.getById("first")), "References to category First");
+            var unreferenced = newCategory("unreferenced", "Unreferenced");
+
+            try {
+                transactionServiceCDI.run(() -> categoryRepository.persist(unreferenced));
+                assertEquals(0, categoryRepository.countForeignKeyReferencesTo(unreferenced), "References to unreferenced category");
+            }
+            finally {
+                deleteCategories(List.of(unreferenced));
+            }
+        });
+    }
+
+    /**
      * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
      */
     private void withArticlesInOptionalCategories(Consumer<List<Article>> test) {
@@ -240,6 +313,36 @@ public class EntityRepositoryIT {
         finally {
             deleteArticles(articles);
         }
+    }
+
+    /**
+     * {@link Like#contains(String)} matches the LIKE wildcards, the SQL Server bracket and the escape character literally, and {@link Like#pattern(String)}
+     * matches an escaped wildcard and an escaped escape character literally, on every database.
+     */
+    @Test
+    void testLikeMatchesSpecialCharactersLiterally() {
+        var specialTitles = List.of("a_b", "a%b", "a[b]", "a\\b");
+        var articles = new ArrayList<Article>();
+
+        try {
+            specialTitles.forEach(title -> articles.add(persistArticle(title, null)));
+            articles.add(persistArticle("axb", null));
+
+            for (var i = 0; i < specialTitles.size(); i++) {
+                var title = specialTitles.get(i);
+                assertEquals(List.of(articles.get(i).getCode()), codesOf(articlesTitled(Like.contains(title))), "Articles containing " + title);
+            }
+
+            assertEquals(List.of(articles.get(0).getCode()), codesOf(articlesTitled(Like.pattern(TITLE_PREFIX + "a\\_b"))), "Articles titled a_b");
+            assertEquals(List.of(articles.get(3).getCode()), codesOf(articlesTitled(Like.pattern(TITLE_PREFIX + "a\\\\b"))), "Articles titled a\\b");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    private PartialResultList<Article> articlesTitled(Like like) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of("title", like)).build(), true);
     }
 
     @Test
@@ -341,6 +444,60 @@ public class EntityRepositoryIT {
 
         transaction.run(() -> textRepository.delete(textRepository.getById(id)));
         assertNull(textRepository.getById(id), "Deleted text");
+    }
+
+    /**
+     * A {@link VersionedBaseEntity} gets the same created and last modified timestamp on persist. On update its last modified timestamp advances, unless it is
+     * skipped, and its version advances, while its created timestamp stays.
+     */
+    @Test
+    void testVersionedBaseEntityTimestampsAndVersion() {
+        var remark = new Remark();
+        remark.setText("persisted");
+        var id = transactionServiceCDI.call(() -> remarkRepository.persist(remark));
+
+        try {
+            var persisted = reloadRemark(id);
+            assertNotNull(persisted.getCreated(), "Created");
+            assertEquals(persisted.getCreated(), persisted.getLastModified(), "Last modified of persisted remark");
+            assertNotNull(persisted.getVersion(), "Version");
+
+            var skipped = updateRemark(id, remarkToUpdate -> {
+                remarkToUpdate.setLastModified(PAST_LAST_MODIFIED);
+                remarkToUpdate.skipAdjustLastModified();
+            });
+            assertEquals(PAST_LAST_MODIFIED, skipped.getLastModified(), "Last modified of remark updated with skipAdjustLastModified()");
+            assertTrue(skipped.getVersion() > persisted.getVersion(), "Version of remark updated with skipAdjustLastModified()");
+
+            var updated = updateRemark(id, remarkToUpdate -> remarkToUpdate.setText("updated"));
+            assertEquals(skipped.getCreated(), updated.getCreated(), "Created of updated remark");
+            assertTrue(updated.getLastModified().isAfter(PAST_LAST_MODIFIED), "Last modified of updated remark advances");
+            assertFalse(updated.getLastModified().isBefore(persisted.getLastModified()), "Last modified of updated remark is not before persisted one");
+            assertTrue(updated.getVersion() > skipped.getVersion(), "Version of updated remark advances");
+        }
+        finally {
+            transactionServiceCDI.run(() -> remarkRepository.delete(remarkRepository.getById(id)));
+        }
+    }
+
+    /**
+     * Returns the remark with given ID as stored after given change was updated in a transaction.
+     */
+    private Remark updateRemark(Long id, Consumer<Remark> change) {
+        transactionServiceCDI.run(() -> {
+            var remark = remarkRepository.getById(id);
+            change.accept(remark);
+            remarkRepository.update(remark);
+        });
+        return reloadRemark(id);
+    }
+
+    /**
+     * Returns the remark with given ID as stored, bypassing the second level cache.
+     */
+    private Remark reloadRemark(Long id) {
+        remarkRepository.getEntityManager().getEntityManagerFactory().getCache().evict(Remark.class);
+        return remarkRepository.getById(id);
     }
 
     // Entity without BaseEntity --------------------------------------------------------------------------------------
@@ -855,6 +1012,10 @@ public class EntityRepositoryIT {
             () -> categories.stream().map(category -> categoryRepository.getById(category.getSlug()))
                 .filter(Objects::nonNull).forEach(categoryRepository::delete)
         );
+    }
+
+    private Long selectLong(String jpql, Object parameter) {
+        return personRepository.getEntityManager().createQuery(jpql, Long.class).setParameter(1, parameter).getSingleResult();
     }
 
     private static List<Long> codesOf(List<Article> articles) {

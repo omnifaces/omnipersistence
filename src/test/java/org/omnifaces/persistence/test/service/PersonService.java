@@ -68,8 +68,8 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPage(page, count, "groups");
     }
 
-    public PartialResultList<Person> getPageViaQueryBuilder(Page page) {
-        return getPage(page, false, (builder, query, person) -> {
+    public PartialResultList<Person> getPageViaQueryBuilder(Page page, boolean count) {
+        return getPage(page, count, (builder, query, person) -> {
         });
     }
 

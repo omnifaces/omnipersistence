@@ -199,6 +199,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private static final Logger logger = Logger.getLogger(BaseEntityService.class.getName());
 
+    private static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE = "openjpa.FetchPlan.SubclassFetchMode";
+    private static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL = "parallel";
     private static final String LOG_FINER_GET_PAGE = "Get page: %s, count=%s, cacheable=%s, resultType=%s";
     private static final String LOG_FINER_SET_PARAMETER_VALUES = "Set parameter values: %s";
     private static final String LOG_FINER_QUERY_RESULT = "Query result: %s, estimatedTotalNumberOfResults=%s";
@@ -1932,8 +1934,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
         var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver, new HashMap<>());
-        buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
-        return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
+        var orderedBySubquery = buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
+        var typedQuery = buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
+
+        if (orderedBySubquery) {
+            buildSubclassFetchMode(typedQuery);
+        }
+
+        return typedQuery;
     }
 
     private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
@@ -2168,9 +2176,23 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
+    /**
+     * Sets the subclass fetch mode of OpenJPA to parallel on given query, which is ordered by a correlated subquery. In its default join mode, OpenJPA executes
+     * a query without a range as a union, which cannot hold a correlated subquery in its ORDER BY. A max results of {@link Integer#MAX_VALUE} does not prevent
+     * this, because OpenJPA treats it as no range.
+     */
+    private void buildSubclassFetchMode(Query query) {
+        if (provider == OPENJPA) {
+            query.setHint(QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE, QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL);
+        }
+    }
+
     // Sorting actions ------------------------------------------------------------------------------------------------
 
-    private <T extends E> void buildOrderBy(
+    /**
+     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection.
+     */
+    private <T extends E> boolean buildOrderBy(
         PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
@@ -2178,13 +2200,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var ordering = page.getOrdering();
 
         if (ordering.isEmpty() || pageBuilder.getIds() != null) { // The entities restricted to IDs are put in the order of the IDs afterwards.
-            return;
+            return false;
         }
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
         var root = pathResolver.get(null);
         var orders = new ArrayList<Order>(ordering.size() + 1);
         Entry<String, Boolean> lastCollectionOrder = null;
+        var orderedBySubquery = false;
 
         for (var order : ordering.entrySet()) {
             var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
@@ -2204,11 +2227,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             }
             else {
                 orders.add(buildCollectionOrder(order, collectionPath, page, criteriaQuery, criteriaBuilder, pathResolver, parameters));
+                orderedBySubquery = true;
             }
         }
 
         addIdTiebreakerIfNecessary(orders, ordering, lastCollectionOrder, criteriaBuilder, pathResolver);
         criteriaQuery.orderBy(orders);
+        return orderedBySubquery;
     }
 
     /**

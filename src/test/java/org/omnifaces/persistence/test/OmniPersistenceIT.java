@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
+import static org.omnifaces.persistence.Database.H2;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.ROWS_PER_PAGE;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_RECORDS;
@@ -63,6 +64,7 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIf;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
@@ -80,6 +82,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
@@ -112,6 +115,8 @@ public abstract class OmniPersistenceIT {
     static final String OPENJPA = ".*-openjpa";
     static final String ECLIPSELINK = ".*-eclipselink";
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
+    private static final String ECLIPSELINK_H2_TIME = "EclipseLink binds a LocalTime and an OffsetTime as a TIMESTAMP on 1970-01-01, which H2 compares to a TIME column"
+        + " on the current date";
     static final String HIBERNATE_FORMULA = "Address.string is a Hibernate specific @Formula";
     static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
         + " so this criteria is left out of the count query";
@@ -127,7 +132,7 @@ public abstract class OmniPersistenceIT {
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
-        var database = Database.valueOf(getProperty("test.database").toUpperCase());
+        var database = getTestRunDatabase();
         var wildFlyDB2 = database == DB2 && getProperty(PROFILE_ID).startsWith("wildfly-");
         var jtaDataSource = (wildFlyDB2 ? "java:jboss/datasources/" : "java:app/") + persistenceUnitName;
         var maven = Maven.resolver();
@@ -306,6 +311,21 @@ public abstract class OmniPersistenceIT {
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
+    }
+
+    /**
+     * Returns the test database from the system properties of the test run, which only the test client has.
+     */
+    private static Database getTestRunDatabase() {
+        return Database.valueOf(getProperty("test.database").toUpperCase());
+    }
+
+    /**
+     * Returns whether the test runs on EclipseLink with H2. This is evaluated by the test client via {@link DisabledIf}, because Arquillian reports a failed
+     * assumption in the container as an error.
+     */
+    static boolean isEclipseLinkOnH2() {
+        return isEclipseLink() && getTestRunDatabase() == H2;
     }
 
     protected static boolean isOpenJPA() {
@@ -665,20 +685,35 @@ public abstract class OmniPersistenceIT {
     }
 
     /**
-     * {@link Order} and {@link Between} on each temporal type include their bounds. An offset based value matches the same instant at another offset.
+     * {@link Order} and {@link Between} on each date-time type include their bounds. An offset based value matches the same instant at another offset.
      */
     @Test
-    void testPageWithOrderAndBetweenOnEachTemporalTypeOfAppointment() {
-        var latest = appointmentService().list().stream().max(Comparator.comparing(Appointment::getStartLocalDateTime)).orElseThrow();
+    void testPageWithOrderAndBetweenOnEachDateTimeTypeOfAppointment() {
+        var latest = latestAppointment();
         assertAll(
-            () -> assertOrderAndBetweenOnAppointment("startLocalTime", Appointment::getStartLocalTime, latest.getStartLocalTime()),
             () -> assertOrderAndBetweenOnAppointment("startLocalDateTime", Appointment::getStartLocalDateTime, latest.getStartLocalDateTime()),
-            () -> assertOrderAndBetweenOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, latest.getStartOffsetTime()),
             () -> assertOrderAndBetweenOnAppointment("startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime()),
             () -> assertOrderAndBetweenOnAppointment(
                 "startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime().withOffsetSameInstant(ZoneOffset.ofHours(2))
             )
         );
+    }
+
+    /**
+     * {@link Order} and {@link Between} on each time-of-day type include their bounds.
+     */
+    @Test
+    @DisabledIf(value = "isEclipseLinkOnH2", disabledReason = ECLIPSELINK_H2_TIME)
+    void testPageWithOrderAndBetweenOnEachTimeOfDayTypeOfAppointment() {
+        var latest = latestAppointment();
+        assertAll(
+            () -> assertOrderAndBetweenOnAppointment("startLocalTime", Appointment::getStartLocalTime, latest.getStartLocalTime()),
+            () -> assertOrderAndBetweenOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, latest.getStartOffsetTime())
+        );
+    }
+
+    private Appointment latestAppointment() {
+        return appointmentService().list().stream().max(Comparator.comparing(Appointment::getStartLocalDateTime)).orElseThrow();
     }
 
     @Test
@@ -889,7 +924,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithServiceInvocationInQueryBuilderBuildsLikeCriteria() {
         var page = Page.with().allMatch(Map.of("email", Like.contains("name1"))).build();
-        assertEquals(ids(personService().getPageViaQueryBuilder(page)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
+        assertEquals(ids(personService().getPageViaQueryBuilder(page, false)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
     }
 
     @Test
@@ -1154,6 +1189,35 @@ public abstract class OmniPersistenceIT {
             BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).orderBy("groups", ascending).build();
             assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
             assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPageWithGroups(page.apply(offset, limit), false));
+        }
+    }
+
+    /**
+     * An ordering on a field of a <code>@OneToMany</code> followed by an ordering on a field of the entity orders by both and then by the ID, also with a fetch
+     * of the collection and with a {@link QueryBuilder}. Paging from ordering values falls back to paging by offset under an ordering on a collection.
+     */
+    @Test
+    void testPageOrderedByOneToManyThenByFieldAndId() {
+        var all = personService().getAllWithPhones();
+
+        for (var ascending : List.of(true, false)) {
+            Function<Person, Phone.Type> extremePhoneType = person -> {
+                Stream<String> names = person.getPhones().stream().map(phone -> phone.getType().name()); // @Enumerated(STRING)
+                return Phone.Type.valueOf(extreme(names, ascending));
+            };
+            var ordering = new LinkedHashMap<String, Boolean>();
+            ordering.put("phones.type", ascending);
+            ordering.put("email", !ascending);
+            Comparator<Person> order = byKey((Person person) -> extremePhoneType.apply(person).name(), ascending)
+                .thenComparing(byKey(Person::getEmail, !ascending));
+            Function<Person, Map<String, Object>> orderingValues = person -> Map
+                .of("phones.type", extremePhoneType.apply(person), "email", person.getEmail(), Page.ID, person.getId());
+
+            for (var getPage : List.<BiFunction<Page, Boolean, PartialResultList<Person>>>of(
+                personService()::getPage, personService()::getPageWithPhones, personService()::getPageViaQueryBuilder
+            )) {
+                assertOrderedPages(all, person -> true, Map.of(), ordering, order, orderingValues, getPage);
+            }
         }
     }
 
@@ -2109,7 +2173,8 @@ public abstract class OmniPersistenceIT {
         var pageOffset = 20;
         var boundaryOffset = 12;
         var boundaryId = getIdOfPersonAtOffset(boundaryOffset);
-        var page = personService().getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, false).orderBy("id", true).build());
+        var page = personService()
+            .getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, false).orderBy("id", true).build(), false);
         var offsetPage = personService().getPage(Page.with().range(pageOffset, 10).orderBy("id", true).build(), false);
 
         assertEquals(
