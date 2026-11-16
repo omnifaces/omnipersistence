@@ -132,6 +132,11 @@ public enum Provider {
         }
 
         @Override
+        public boolean isEmbeddableInSupported() {
+            return false;
+        }
+
+        @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
             var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
             return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getDatabaseSession"), "getDatasourcePlatform").getClass().getSimpleName();
@@ -478,6 +483,18 @@ public enum Provider {
      * @since 2.0
      */
     public boolean isEmbeddableComparisonSupported() {
+        return true;
+    }
+
+    /**
+     * Returns whether an embeddable, such as an <code>@EmbeddedId</code>, can be the operand of an <code>IN</code> on every supported database. The default
+     * implementation returns {@code true}. EclipseLink returns {@code false}, because it renders a row value constructor, which SQL Server and DB2 do not
+     * support.
+     *
+     * @return Whether an embeddable can be the operand of an <code>IN</code> on every supported database.
+     * @since 2.0
+     */
+    public boolean isEmbeddableInSupported() {
         return true;
     }
 

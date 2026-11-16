@@ -41,6 +41,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -51,6 +52,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
@@ -175,7 +177,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     public <E, T extends E> List<T> runPostponedFetches(
-        Page page, EntityManager entityManager, Class<E> entityType, String idName, Function<Object, ?> idOf, List<T> entities
+        Page page, EntityManager entityManager, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, Function<Object, ?> idOf,
+        List<T> entities
     )
     {
         var fetchPaths = postponedFetches.stream().filter(path -> !path.contains(".")).sorted().toList();
@@ -184,7 +187,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         var fetchedEntities = new HashMap<String, Map<Object, Object>>(fetchPaths.size());
 
         for (var fetchPath : fetchPaths) {
-            var query = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idName, fetchPath, ids);
+            var query = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idRestriction, fetchPath, ids);
             var fetchedById = entityManager.createQuery(query).getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
             var fetchedByEntity = new IdentityHashMap<Object, Object>(distinctEntities.size());
             distinctEntities.forEach(entity -> fetchedByEntity.put(entity, fetchedById.get(idOf.apply(entity))));
@@ -203,7 +206,10 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * Builds a query which selects the entities with given IDs, with a left fetch join for given top level fetch path and for each postponed fetch nested in
      * it.
      */
-    private <E> CriteriaQuery<E> buildFetchQuery(CriteriaBuilder criteriaBuilder, Class<E> entityType, String idName, String fetchPath, List<?> ids) {
+    private <E> CriteriaQuery<E> buildFetchQuery(
+        CriteriaBuilder criteriaBuilder, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, String fetchPath, List<?> ids
+    )
+    {
         var query = criteriaBuilder.createQuery(entityType);
         var root = query.from(entityType);
         var fetches = new HashMap<String, FetchParent<?, ?>>();
@@ -214,7 +220,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             fetches.put(path, fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot)).fetch(path.substring(lastDot + 1), LEFT));
         }
 
-        return query.select(root).distinct(true).where(root.get(idName).in(ids));
+        return query.select(root).distinct(true).where(idRestriction.apply(root, ids));
     }
 
     /**

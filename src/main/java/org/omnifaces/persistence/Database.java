@@ -68,6 +68,11 @@ public enum Database {
             return "[";
         }
 
+        @Override
+        public int getMaxParameters() {
+            return SQLSERVER_MAX_PARAMETERS;
+        }
+
     },
 
     /**
@@ -81,6 +86,7 @@ public enum Database {
     UNKNOWN(true);
 
     private static final Logger logger = Logger.getLogger(Database.class.getName());
+    private static final int SQLSERVER_MAX_PARAMETERS = 2100;
 
     private final boolean sortsNullsLow;
     private final String[] names;
@@ -144,6 +150,17 @@ public enum Database {
      */
     public String getLikeSpecialCharacters() {
         return "";
+    }
+
+    /**
+     * Returns the maximum number of parameters in one SQL statement. The default implementation returns {@link Integer#MAX_VALUE}. {@link #SQLSERVER} returns
+     * 2100.
+     *
+     * @return The maximum number of parameters in one SQL statement.
+     * @since 2.0
+     */
+    public int getMaxParameters() {
+        return Integer.MAX_VALUE;
     }
 
 }

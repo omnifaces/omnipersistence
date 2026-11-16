@@ -21,6 +21,7 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
+import static java.util.Comparator.reverseOrder;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -828,7 +829,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
+     * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones. When there are more IDs than
+     * {@link Database#getMaxParameters()} allows in one query, they are got in several queries, and the entities are ordered by the natural ordering of the ID,
+     * descending, which may differ from the collation of the database for a string ID.
      *
      * @param ids Entity IDs to get entities by.
      * @return Found entities, or an empty set if there is none.
@@ -838,40 +841,63 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+     * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending. When there are more IDs than
+     * {@link Database#getMaxParameters()} allows in one query, they are got in several queries, and the entities are ordered by the natural ordering of the ID,
+     * descending, which may differ from the collation of the database for a string ID.
      *
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
      */
     protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
-        var copyOfIds = StreamSupport.stream(ids.spliterator(), false).toList();
+        var copyOfIds = StreamSupport.stream(ids.spliterator(), false).distinct().toList();
+        var maxIdsPerQuery = database.getMaxParameters() / (embeddableIdType == null ? 1 : embeddableIdType.getAttributes().size());
 
-        if (copyOfIds.isEmpty()) {
+        if (copyOfIds.size() <= maxIdsPerQuery) {
+            return getByIdsInOneQuery(copyOfIds, includeSoftDeleted);
+        }
+
+        var entities = new ArrayList<E>(copyOfIds.size());
+
+        for (var i = 0; i < copyOfIds.size(); i += maxIdsPerQuery) {
+            entities.addAll(getByIdsInOneQuery(copyOfIds.subList(i, Math.min(i + maxIdsPerQuery, copyOfIds.size())), includeSoftDeleted));
+        }
+
+        entities.sort(comparing(this::getId, reverseOrder()));
+        return entities;
+    }
+
+    private List<E> getByIdsInOneQuery(List<I> ids, boolean includeSoftDeleted) {
+        if (ids.isEmpty()) {
             return emptyList();
         }
 
-        String paramNames;
+        var id = "e." + idAttribute.getName();
+        var orOfEqualities = embeddableIdType != null && !provider.isEmbeddableInSupported();
+        String idPredicate;
         Map<String, Object> paramValues;
 
-        if (!provider.isCollectionParameterSupported()) {
-            paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
-            var map = new HashMap<String, Object>(copyOfIds.size());
-            range(0, copyOfIds.size()).forEach(i -> map.put("id" + i, copyOfIds.get(i)));
+        if (orOfEqualities || !provider.isCollectionParameterSupported()) {
+            var names = range(0, ids.size()).mapToObj(i -> ":id" + i);
+
+            if (orOfEqualities) {
+                idPredicate = names.map(name -> id + " = " + name).collect(joining(" OR ", "(", ")"));
+            }
+            else {
+                idPredicate = id + names.collect(joining(", ", " IN (", ")"));
+            }
+
+            var map = new HashMap<String, Object>(ids.size());
+            range(0, ids.size()).forEach(i -> map.put("id" + i, ids.get(i)));
             paramValues = map;
         }
         else {
-            paramNames = ":ids";
-            paramValues = Map.of("ids", copyOfIds);
+            idPredicate = id + " IN (:ids)";
+            paramValues = Map.of("ids", ids);
         }
 
         var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
-        return list(
-            select("")
-                + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e." + idAttribute.getName() + " IN (" + paramNames + ")"
-                + orderByIdDescending(),
-            paramValues
-        );
+        return list(select("") + whereClause + (whereClause.isEmpty() ? " WHERE " : " AND ") + idPredicate + orderByIdDescending(), paramValues);
     }
 
     /**
@@ -2032,8 +2058,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             !entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof PostponedFetchRoot<?> postponedFetchRoot
                 && postponedFetchRoot.hasPostponedFetches()
         ) {
+            var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
-                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), idGetter, entities
+                pageBuilder.getPage(), getEntityManager(), entityType,
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, entities
             );
         }
 
@@ -2472,7 +2500,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!(query instanceof Subquery) && pageBuilder.getIds() != null) {
-            restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, pathResolver.get(idAttribute.getName()).in(pageBuilder.getIds()));
+            restriction = conjunctRestrictionsIfNecessary(
+                criteriaBuilder, restriction, buildIdInPredicate(criteriaBuilder, pathResolver.get(idAttribute.getName()), pageBuilder.getIds())
+            );
         }
 
         if (restriction != null) {
@@ -3032,6 +3062,18 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 .map(idPart -> criteriaBuilder.equal(((Path<?>) id).get(idPart.getName()), ((Path<?>) otherId).get(idPart.getName())))
                 .toArray(Predicate[]::new)
         );
+    }
+
+    /**
+     * Returns a predicate which matches given ID against given IDs, as an OR of equalities when the ID is an embeddable which the provider cannot put in an
+     * <code>IN</code>.
+     */
+    private Predicate buildIdInPredicate(CriteriaBuilder criteriaBuilder, Expression<?> id, Collection<?> ids) {
+        if (embeddableIdType == null || provider.isEmbeddableInSupported()) {
+            return id.in(ids);
+        }
+
+        return criteriaBuilder.or(ids.stream().map(otherId -> criteriaBuilder.equal(id, otherId)).toArray(Predicate[]::new));
     }
 
     private static Predicate[] toArray(List<Predicate> predicates) {

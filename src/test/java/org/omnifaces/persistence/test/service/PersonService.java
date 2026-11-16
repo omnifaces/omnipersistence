@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test.service;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.persistence.JPA.concat;
+import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 
 import java.util.LinkedHashMap;
@@ -185,7 +186,9 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
      * Updates the nickname of the person with given ID via native SQL, which the second level cache of the persistence provider does not see.
      */
     public int updateNicknameViaNativeSql(Long id, String nickname) {
-        return getEntityManager().createNativeQuery("UPDATE Person SET nickname = ?1 WHERE id = ?2").setParameter(1, nickname).setParameter(2, id)
+        // EclipseLink creates the default table as PERSON; MySQL on Linux and a case-sensitive SQL Server collation resolve table names case-sensitively.
+        var table = getProvider() == ECLIPSELINK ? "PERSON" : "Person";
+        return getEntityManager().createNativeQuery("UPDATE " + table + " SET nickname = ?1 WHERE id = ?2").setParameter(1, nickname).setParameter(2, id)
             .executeUpdate();
     }
 

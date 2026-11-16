@@ -27,6 +27,7 @@ import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OP
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA_COUNT;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.PROFILE_ID;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.TEST_DATABASE;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.ROWS_PER_PAGE;
 import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_PHONES_PER_PERSON_0;
@@ -807,18 +808,28 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * <code>getByIds(ids)</code>, and <code>getPage(page, count, fetchFields)</code> with criteria on the ID, return the matching entities when there are more
-     * IDs than the maximum number of parameters in a SQL Server statement. Negated criteria on IDs return the other entities.
+     * <code>getByIds(ids)</code> returns the matching entities ordered by ID, descending, when there are more IDs than the maximum number of parameters in a
+     * SQL Server statement.
      */
     @Test
-    void testGetByIdsAndPageWithIdsBeyondSqlServerParameterLimit() {
+    void testGetByIdsWithIdsBeyondSqlServerParameterLimit() {
+        var ids = LongStream.rangeClosed(1, SQL_SERVER_MAX_PARAMETERS + 1L).boxed().toList();
+        var expectedIds = personRepository.list().stream().map(Person::getId).filter(ids::contains).toList();
+        assertFalse(expectedIds.isEmpty(), "Persons by IDs exist");
+        assertEquals(expectedIds, personRepository.getByIds(ids).stream().map(Person::getId).toList(), "Persons by IDs");
+    }
+
+    /**
+     * <code>getPage(page, count, fetchFields)</code> with criteria on the ID returns the matching entities when there are more IDs than the maximum number of
+     * parameters in a SQL Server statement. Negated criteria on IDs return the other entities. SQL Server cannot run one paged query with that many parameters.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = TEST_DATABASE, matches = "(?i)sqlserver", disabledReason = "SQL Server supports at most 2100 parameters per statement")
+    void testPageWithIdsBeyondSqlServerParameterLimit() {
         var ids = LongStream.rangeClosed(1, SQL_SERVER_MAX_PARAMETERS + 1L).boxed().toList();
         var allIds = personRepository.list().stream().map(Person::getId).sorted().toList();
         var expectedIds = allIds.stream().filter(ids::contains).toList();
         assertFalse(expectedIds.isEmpty(), "Persons by IDs exist");
-
-        var byIds = personRepository.getByIds(ids);
-        assertEquals(expectedIds, byIds.stream().map(Person::getId).sorted().toList(), "Persons by IDs");
 
         var page = personRepository.getPage(Page.with().allMatch(Map.of("id", ids)).build(), true, "phones");
         assertEquals(expectedIds, page.stream().map(Person::getId).sorted().toList(), "Page of persons by IDs");

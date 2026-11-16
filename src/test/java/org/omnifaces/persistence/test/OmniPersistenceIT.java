@@ -108,6 +108,7 @@ import org.omnifaces.utils.data.Range;
 public abstract class OmniPersistenceIT {
 
     static final String PROFILE_ID = "profile.id";
+    static final String TEST_DATABASE = "test.database";
     private static final String READ_COMMITTED = "<isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>";
     private static final String DB2_USER = "db2inst1";
     private static final String DB2_PASSWORD = "PassW0rd!";
@@ -314,18 +315,25 @@ public abstract class OmniPersistenceIT {
     }
 
     /**
+     * Returns the name of the test database from the system properties of the test run, or {@code null} in the container.
+     */
+    private static String getTestRunDatabaseName() {
+        return getProperty(TEST_DATABASE);
+    }
+
+    /**
      * Returns the test database from the system properties of the test run, which only the test client has.
      */
     private static Database getTestRunDatabase() {
-        return Database.valueOf(getProperty("test.database").toUpperCase());
+        return Database.valueOf(getTestRunDatabaseName().toUpperCase());
     }
 
     /**
      * Returns whether the test runs on EclipseLink with H2. This is evaluated by the test client via {@link DisabledIf}, because Arquillian reports a failed
-     * assumption in the container as an error.
+     * assumption in the container as an error. Without the system properties of the test run, as in the container, this returns {@code false}.
      */
     static boolean isEclipseLinkOnH2() {
-        return isEclipseLink() && getTestRunDatabase() == H2;
+        return isEclipseLink() && H2.name().equalsIgnoreCase(getTestRunDatabaseName());
     }
 
     protected static boolean isOpenJPA() {
