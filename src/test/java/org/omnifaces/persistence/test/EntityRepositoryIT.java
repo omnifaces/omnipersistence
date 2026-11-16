@@ -46,6 +46,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.LongStream;
 
 import jakarta.ejb.EJB;
 import jakarta.inject.Inject;
@@ -96,6 +97,7 @@ import org.omnifaces.utils.collection.PartialResultList;
 public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
+    private static final int SQL_SERVER_MAX_PARAMETERS = 2100;
     private static final Instant PAST_LAST_MODIFIED = Instant.parse("2000-01-01T00:00:00Z");
     private static final String ECLIPSELINK_ENUM_COLLECTION = "EclipseLink maps an enum element collection without @Enumerated to a VARCHAR column, which PostgreSQL does not compare to the bound ordinal";
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
@@ -802,6 +804,29 @@ public class EntityRepositoryIT {
         finally {
             transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id)));
         }
+    }
+
+    /**
+     * <code>getByIds(ids)</code>, and <code>getPage(page, count, fetchFields)</code> with criteria on the ID, return the matching entities when there are more
+     * IDs than the maximum number of parameters in a SQL Server statement. Negated criteria on IDs return the other entities.
+     */
+    @Test
+    void testGetByIdsAndPageWithIdsBeyondSqlServerParameterLimit() {
+        var ids = LongStream.rangeClosed(1, SQL_SERVER_MAX_PARAMETERS + 1L).boxed().toList();
+        var allIds = personRepository.list().stream().map(Person::getId).sorted().toList();
+        var expectedIds = allIds.stream().filter(ids::contains).toList();
+        assertFalse(expectedIds.isEmpty(), "Persons by IDs exist");
+
+        var byIds = personRepository.getByIds(ids);
+        assertEquals(expectedIds, byIds.stream().map(Person::getId).sorted().toList(), "Persons by IDs");
+
+        var page = personRepository.getPage(Page.with().allMatch(Map.of("id", ids)).build(), true, "phones");
+        assertEquals(expectedIds, page.stream().map(Person::getId).sorted().toList(), "Page of persons by IDs");
+        assertEquals(expectedIds.size(), page.getEstimatedTotalNumberOfResults(), "Count of persons by IDs");
+
+        var firstIds = allIds.subList(0, allIds.size() / 2);
+        var notFirst = personRepository.getPage(Page.with().allMatch(Map.of("id", Not.value(firstIds))).build(), false);
+        assertEquals(allIds.subList(firstIds.size(), allIds.size()), notFirst.stream().map(Person::getId).sorted().toList(), "Page of persons not by IDs");
     }
 
     /**

@@ -2745,6 +2745,34 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
+     * Builds an <code>IN</code> predicate on given values when the type is a number or an enum and every value is a plain value of it, else returns
+     * {@code null}. Such values compare by equality, and one <code>IN</code> keeps a long list flat, because EclipseLink renders an <code>OR</code> of many
+     * comparisons as deeply nested parentheses, which overflow the stack of the H2 parser.
+     */
+    private Predicate buildEqualityInPredicate(Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+        if (!type.isEnum() && !Numeric.is(type)) {
+            return null;
+        }
+
+        var parameters = new ArrayList<Expression<?>>();
+
+        for (var item : (Iterable<?>) stream(value)::iterator) {
+            if (item == null || item instanceof Criteria || isEntity(item)) {
+                return null;
+            }
+
+            try {
+                parameters.add(parameterBuilder.create(createTypedCriteria(type, item).getValue()));
+            }
+            catch (IllegalArgumentException e) {
+                return null; // An unparseable item matches nothing, which the comparison per item handles.
+            }
+        }
+
+        return path.in(parameters.toArray(Expression<?>[]::new));
+    }
+
+    /**
      * Builds a predicate on multiple values, or on a value of a field nested in a <code>@OneToMany</code>. A negation is applied on the comparisons and not
      * around the predicate, because OpenJPA cannot render a <code>NOT</code> around a comparison with a correlated subquery.
      */
@@ -2762,6 +2790,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!oneToManyField && !elementCollections.test(field)) {
+            var in = buildEqualityInPredicate(path, type, value, parameterBuilder);
+
+            if (in != null) {
+                return negated ? negate(in, false, path, criteriaBuilder) : in;
+            }
+
             var predicates = stream(value).map(item -> buildTypedPredicate(path, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
                 .filter(Objects::nonNull)
                 .toList();
