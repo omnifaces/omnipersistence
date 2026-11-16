@@ -19,6 +19,7 @@ import static org.omnifaces.persistence.Provider.HIBERNATE;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -186,9 +187,10 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
      * Updates the nickname of the person with given ID via native SQL, which the second level cache of the persistence provider does not see.
      */
     public int updateNicknameViaNativeSql(Long id, String nickname) {
-        // EclipseLink creates the default table as PERSON; MySQL on Linux and a case-sensitive SQL Server collation resolve table names case-sensitively.
-        var table = getProvider() == ECLIPSELINK ? "PERSON" : "Person";
-        return getEntityManager().createNativeQuery("UPDATE " + table + " SET nickname = ?1 WHERE id = ?2").setParameter(1, nickname).setParameter(2, id)
+        // EclipseLink creates default table and column names in uppercase, which SQL Server with a case-sensitive collation distinguishes.
+        var sql = "UPDATE Person SET nickname = ?1 WHERE id = ?2";
+        return getEntityManager().createNativeQuery(getProvider() == ECLIPSELINK ? sql.toUpperCase(Locale.ROOT) : sql).setParameter(1, nickname)
+            .setParameter(2, id)
             .executeUpdate();
     }
 
