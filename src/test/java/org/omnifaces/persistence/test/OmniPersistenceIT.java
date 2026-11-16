@@ -1939,10 +1939,14 @@ public abstract class OmniPersistenceIT {
 
     // Page with DTO mapping ------------------------------------------------------------------------------------------
 
+    /**
+     * The person cards of {@link PersonService#getPageOfPersonCards(Page, boolean)} and of the OptimusFaces query shape agree, card by card.
+     */
     @Test
     void testPageOfPersonCards() {
         var result = personService().getAllPersonCards();
         assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
+        assertEquals(cardValues(result), cardValues(personService().getPageOfPersonCardsAsOptimusFaces(Page.ALL, false)), "Person cards of OptimusFaces shape");
         result.forEach(card -> {
             assertNotNull(card.getId(), "Card has ID");
             assertNotNull(card.getEmail(), "Card has email");
@@ -1953,54 +1957,76 @@ public abstract class OmniPersistenceIT {
         });
     }
 
+    private static List<List<Object>> cardValues(List<PersonCard> cards) {
+        return cards.stream().map(card -> List.<Object>of(card.getId(), card.getEmail(), card.getAddressString(), card.getTotalPhones())).toList();
+    }
+
     @Test
     void testPageOfPersonCardsWithPagination() {
-        var page = personService().getPageOfPersonCards(Page.of(0, 5), true);
-        assertEquals(5, page.size(), "Page returns 5 cards");
-        assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        for (var getPage : personCardLoaders()) {
+            var page = getPage.apply(Page.of(0, 5), true);
+            assertEquals(5, page.size(), "Page returns 5 cards");
+            assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        }
+    }
+
+    /**
+     * Returns the loaders of person cards: in the query shape of OmniPersistence, and in that of OptimusFaces.
+     */
+    private List<BiFunction<Page, Boolean, PartialResultList<PersonCard>>> personCardLoaders() {
+        return List.of(personService()::getPageOfPersonCards, personService()::getPageOfPersonCardsAsOptimusFaces);
     }
 
     @Test
     void testPageOfPersonCardsWithCriteriaAndOrderingOnExpression() {
         var all = personService().getAllPersonCards();
 
-        for (var ascending : List.of(true, false)) {
-            assertOrderedPages(
-                all, card -> likes("street1", card.getAddressString()), Map.of("addressString", Like.contains("street1")), ordering("addressString", ascending),
-                byKey(PersonCard::getAddressString, ascending), card -> orderingValues("addressString", card.getAddressString(), card),
-                personService()::getPageOfPersonCards
-            );
+        for (var getPage : personCardLoaders()) {
+            for (var ascending : List.of(true, false)) {
+                assertOrderedPages(
+                    all, card -> likes("street1", card.getAddressString()), Map.of("addressString", Like.contains("street1")),
+                    ordering("addressString", ascending),
+                    byKey(PersonCard::getAddressString, ascending), card -> orderingValues("addressString", card.getAddressString(), card),
+                    getPage
+                );
+            }
         }
     }
 
     @Test
     void testPageOfPersonCardsWithNegatedCriteriaOnExpressionAndAggregate() {
         var all = personService().getAllPersonCards();
-        var notStreet1 = Not.value(Like.contains("street1"));
-        assertPage(
-            all, card -> notStreet1.applies(card.getAddressString()), Map.of("addressString", notStreet1), Map.of(), personService()::getPageOfPersonCards, true
-        );
-        var notTotalPhones = Not.value(TOTAL_PHONES);
-        assertPage(
-            all, card -> notTotalPhones.applies(card.getTotalPhones()), Map.of("totalPhones", notTotalPhones), Map.of(), personService()::getPageOfPersonCards,
-            true
-        );
+
+        for (var getPage : personCardLoaders()) {
+            var notStreet1 = Not.value(Like.contains("street1"));
+            assertPage(
+                all, card -> notStreet1.applies(card.getAddressString()), Map.of("addressString", notStreet1), Map.of(), getPage, true
+            );
+            var notTotalPhones = Not.value(TOTAL_PHONES);
+            assertPage(
+                all, card -> notTotalPhones.applies(card.getTotalPhones()), Map.of("totalPhones", notTotalPhones), Map.of(), getPage,
+                true
+            );
+        }
     }
 
     @Test
     void testPageOfPersonCardsWithCriteriaAndOrderingOnAggregate() {
         var all = personService().getAllPersonCards();
-        assertPage(
-            all, card -> card.getTotalPhones() == TOTAL_PHONES, Map.of("totalPhones", String.valueOf(TOTAL_PHONES)), Map.of(),
-            personService()::getPageOfPersonCards, true
-        );
 
-        for (var ascending : List.of(true, false)) {
-            assertOrderedPages(
-                all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
-                byKey(PersonCard::getTotalPhones, ascending),
-                card -> orderingValues("totalPhones", card.getTotalPhones(), card), personService()::getPageOfPersonCards
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> card.getTotalPhones() == TOTAL_PHONES, Map.of("totalPhones", String.valueOf(TOTAL_PHONES)), Map.of(),
+                getPage, true
             );
+
+            for (var ascending : List.of(true, false)) {
+                assertOrderedPages(
+                    all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
+                    byKey(PersonCard::getTotalPhones, ascending),
+                    card -> orderingValues("totalPhones", card.getTotalPhones(), card), getPage
+                );
+            }
         }
     }
 
@@ -2129,6 +2155,25 @@ public abstract class OmniPersistenceIT {
         var page = personService().getPage(Page.of(9, 10), false);
         var allIds = personService().getPage(Page.ALL, false).stream().map(Person::getId).toList();
         assertEquals(allIds.subList(9, 19), page.stream().map(Person::getId).toList(), "Page is ordered by default ordering");
+    }
+
+    /**
+     * A page which is not cacheable reads a change which was made behind the second level cache, after a cacheable page has put the entity in there.
+     */
+    @Test
+    void testPageWithoutCacheReadsChangeMadeBehindSecondLevelCache() {
+        var id = 1L;
+        var page = Page.with().allMatch(Map.of("id", id)).build();
+        var nickname = personService().getPage(page, false).get(0).nickname();
+
+        try {
+            personService().updateNicknameViaNativeSql(id, "uncached");
+            assertEquals("uncached", personService().getPageWithoutCache(page).get(0).nickname(), "Nickname read without cache");
+        }
+        finally {
+            personService().updateNicknameViaNativeSql(id, nickname);
+            personService().getPageWithoutCache(page); // Puts the restored nickname back in the second level cache.
+        }
     }
 
     @Test

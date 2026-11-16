@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.service;
 
+import static jakarta.persistence.metamodel.Type.PersistenceType.EMBEDDABLE;
 import static java.lang.String.format;
 import static org.omnifaces.persistence.model.dto.Page.ID;
 import static org.omnifaces.utils.reflect.Reflections.findField;
@@ -19,6 +20,7 @@ import static org.omnifaces.utils.reflect.Reflections.findGetter;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -85,8 +87,11 @@ class RootPathResolver implements PathResolver {
         for (int i = 0; i < depth; i++) {
             String attribute = attributes[i];
 
-            if (i + 1 < depth || elementCollections.test(originalField)) {
-                path = explicitJoin || !joins.containsKey(attribute) ? join((From<?, ?>) path, attribute) : joins.get(attribute);
+            if (!explicitJoin && isEmbedded(path, attribute)) {
+                path = path.get(attribute);
+            }
+            else if (i + 1 < depth || elementCollections.test(originalField)) {
+                path = explicitJoin || !joins.containsKey(attribute) ? join(path, attribute) : joins.get(attribute);
             }
             else {
                 try {
@@ -116,22 +121,40 @@ class RootPathResolver implements PathResolver {
 
     /**
      * Joins given attribute of given parent, with a <code>LEFT JOIN</code> when it is an optional singular association, so that an entity without the
-     * association is kept, else with an <code>INNER JOIN</code>.
+     * association is kept, else with an <code>INNER JOIN</code>. A parent which is not a {@link From}, such as an embeddable, is navigated via a path
+     * expression.
      */
-    private static Join<?, ?> join(From<?, ?> from, String attribute) {
-        return from.join(attribute, isOptionalSingularAssociation(from, attribute) ? JoinType.LEFT : JoinType.INNER);
+    private static Path<?> join(Path<?> path, String attribute) {
+        if (path instanceof From<?, ?> from) {
+            return from.join(attribute, isOptionalSingularAssociation(from, attribute) ? JoinType.LEFT : JoinType.INNER);
+        }
+
+        return path.get(attribute);
+    }
+
+    /**
+     * Returns whether given attribute of given parent is an embedded value or ID, so that its attributes are reached via a path expression, because an
+     * embeddable is not an association.
+     */
+    private static boolean isEmbedded(Path<?> path, String attribute) {
+        return findSingularAttribute(path, attribute).filter(singularAttribute -> singularAttribute.getType().getPersistenceType() == EMBEDDABLE).isPresent();
+    }
+
+    private static Optional<SingularAttribute<?, ?>> findSingularAttribute(Path<?> path, String attribute) {
+        var type = getManagedType(path.getModel());
+
+        try {
+            return type != null && type.getAttribute(attribute) instanceof SingularAttribute<?, ?> singularAttribute
+                ? Optional.of(singularAttribute)
+                : Optional.empty();
+        }
+        catch (IllegalArgumentException e) {
+            return Optional.empty(); // The attribute is not declared on the static type, e.g. on a subtype.
+        }
     }
 
     private static boolean isOptionalSingularAssociation(From<?, ?> from, String attribute) {
-        var type = getManagedType(from.getModel());
-
-        try {
-            return type != null && type.getAttribute(attribute) instanceof SingularAttribute<?, ?> singularAttribute && singularAttribute.isAssociation()
-                && singularAttribute.isOptional();
-        }
-        catch (IllegalArgumentException e) {
-            return false; // The attribute is not declared on the static type, e.g. on a subtype.
-        }
+        return findSingularAttribute(from, attribute).filter(SingularAttribute::isAssociation).filter(SingularAttribute::isOptional).isPresent();
     }
 
     private static ManagedType<?> getManagedType(Bindable<?> model) {

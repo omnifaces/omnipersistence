@@ -13,7 +13,9 @@
 package org.omnifaces.persistence.test;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.toSet;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,6 +35,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceCDI.TOTAL_REC
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -57,6 +60,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
+import org.omnifaces.persistence.criteria.Order;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.VersionedBaseEntity;
@@ -65,9 +69,13 @@ import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
+import org.omnifaces.persistence.test.model.Attachment;
 import org.omnifaces.persistence.test.model.Category;
 import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.Membership;
+import org.omnifaces.persistence.test.model.MembershipId;
 import org.omnifaces.persistence.test.model.Note;
+import org.omnifaces.persistence.test.model.Period;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Remark;
@@ -111,6 +119,10 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Phone> phoneRepository;
     @Inject
     private EntityRepository<Long, Remark> remarkRepository;
+    @Inject
+    private EntityRepository<Long, Attachment> attachmentRepository;
+    @Inject
+    private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
     private EntityRepository<String, Note> noteRepository;
     @Inject
@@ -498,6 +510,107 @@ public class EntityRepositoryIT {
     private Remark reloadRemark(Long id) {
         remarkRepository.getEntityManager().getEntityManagerFactory().getCache().evict(Remark.class);
         return remarkRepository.getById(id);
+    }
+
+    /**
+     * {@link EntityRepository#fetchLazyCollections(Object, Function...)} loads the given lazy collections, and without getters every collection which is not a
+     * map, so that they are available after the transaction.
+     */
+    @Test
+    void testFetchLazyCollectionsInitializesPhonesAndGroups() {
+        var id = 1L;
+        var totalGroups = transactionServiceCDI.call(() -> personRepository.getById(id).getGroups().size());
+        var withPhones = transactionServiceCDI.call(() -> personRepository.fetchLazyCollections(personRepository.getById(id), Person::getPhones));
+        assertEquals(TOTAL_PHONES_PER_PERSON_0, withPhones.getPhones().size(), "Phones fetched via getter");
+
+        var withAll = transactionServiceCDI.call(() -> personRepository.fetchLazyCollections(personRepository.getById(id)));
+        assertEquals(TOTAL_PHONES_PER_PERSON_0, withAll.getPhones().size(), "Phones fetched without getters");
+        assertEquals(totalGroups, withAll.getGroups().size(), "Groups fetched without getters");
+    }
+
+    /**
+     * {@link EntityRepository#fetchLazyMaps(Object, Function...)} loads the lazy maps, and {@link EntityRepository#fetchLazyBlobs(Object)} sets the lazy blobs
+     * of the stored entity on the given entity.
+     */
+    @Test
+    void testFetchLazyMapsAndBlobs() {
+        var attachment = new Attachment();
+        attachment.getProperties().put("type", "text/plain");
+        attachment.setContent("content".getBytes(UTF_8));
+        var id = transactionServiceCDI.call(() -> attachmentRepository.persist(attachment));
+
+        try {
+            var withProperties = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyMaps(attachmentRepository.getById(id)));
+            assertEquals(Map.of("type", "text/plain"), withProperties.getProperties(), "Properties");
+
+            var withContent = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyBlobs(attachmentRepository.getById(id)));
+            assertArrayEquals("content".getBytes(UTF_8), withContent.getContent(), "Content");
+        }
+        finally {
+            transactionServiceCDI.run(() -> attachmentRepository.delete(attachmentRepository.getById(id)));
+        }
+    }
+
+    /**
+     * An entity with an <code>@EmbeddedId</code> and an <code>@Embedded</code> value is persisted, got by its ID or IDs, updated and listed. It is paged with
+     * criteria and ordering on properties of both, counted and deleted. It is paged with a fetch of its element collection and an ordering on it.
+     */
+    @Test
+    void testEntityWithEmbeddedIdPersistsGetsListsAndPages() {
+        var start = LocalDate.of(2026, 1, 1);
+        var memberships = List.of(
+            new Membership(new MembershipId("embedded-a", "x"), new Period(start, start.plusMonths(1))),
+            new Membership(new MembershipId("embedded-a", "y"), new Period(start.plusMonths(2), null)),
+            new Membership(new MembershipId("embedded-b", "x"), new Period(start.plusMonths(1), null))
+        );
+        memberships.get(0).getRoles().add("treasurer");
+        memberships.get(1).getRoles().add("chair");
+        memberships.get(2).getRoles().add("secretary");
+        memberships.forEach(membership -> transactionServiceCDI.run(() -> membershipRepository.persist(membership)));
+
+        try {
+            var ay = membershipRepository.getById(memberships.get(1).getId());
+            assertEquals(start.plusMonths(2), ay.getPeriod().getStartDate(), "Start date of membership got by ID");
+            assertNull(ay.getPeriod().getEndDate(), "End date of membership got by ID");
+            assertNull(membershipRepository.getById(new MembershipId("embedded-a", "z")), "Membership got by absent ID");
+
+            var byIds = membershipRepository.getByIds(List.of(memberships.get(0).getId(), memberships.get(2).getId()));
+            assertEquals(List.of(memberships.get(0).getId(), memberships.get(2).getId()), membershipIds(byIds).stream().sorted().toList(), "Got by IDs");
+
+            var byRole = membershipRepository
+                .getPage(Page.with().allMatch(Map.of("id.memberName", Like.startsWith("embedded-"))).orderBy("roles", true).build(), false, "roles");
+            assertEquals(List.of(memberships.get(1).getId(), memberships.get(2).getId(), memberships.get(0).getId()), membershipIds(byRole), "Ordered by role");
+            assertEquals(Set.of("chair"), byRole.get(0).getRoles(), "Roles fetched");
+
+            var end = start.plusMonths(3);
+            transactionServiceCDI.run(() -> membershipRepository.update(new Membership(ay.getId(), new Period(ay.getPeriod().getStartDate(), end))));
+            assertEquals(end, membershipRepository.getById(ay.getId()).getPeriod().getEndDate(), "End date of updated membership");
+            assertEquals(
+                membershipIds(memberships), membershipIds(membershipRepository.list()).stream().filter(membershipIds(memberships)::contains).sorted().toList(),
+                "Listed memberships"
+            );
+
+            var ofA = membershipRepository
+                .getPage(Page.with().allMatch(Map.of("id.memberName", "embedded-a")).orderBy("id.clubName", false).build(), true);
+            assertEquals(List.of(memberships.get(1).getId(), memberships.get(0).getId()), membershipIds(ofA), "Memberships of a by club descending");
+            assertEquals(2, ofA.getEstimatedTotalNumberOfResults(), "Count of memberships of a");
+
+            var later = membershipRepository.getPage(
+                Page.with().allMatch(Map.of("id.memberName", Like.startsWith("embedded-"), "period.startDate", Order.greaterThan(start)))
+                    .orderBy("period.startDate", true).build(),
+                false
+            );
+            assertEquals(List.of(memberships.get(2).getId(), memberships.get(1).getId()), membershipIds(later), "Memberships starting later by start date");
+        }
+        finally {
+            memberships.forEach(
+                membership -> transactionServiceCDI.run(() -> membershipRepository.findById(membership.getId()).ifPresent(membershipRepository::delete))
+            );
+        }
+    }
+
+    private static List<MembershipId> membershipIds(List<Membership> memberships) {
+        return memberships.stream().map(Membership::getId).toList();
     }
 
     // Entity without BaseEntity --------------------------------------------------------------------------------------

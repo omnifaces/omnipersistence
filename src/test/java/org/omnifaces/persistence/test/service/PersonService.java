@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test.service;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.omnifaces.persistence.JPA.concat;
+import static org.omnifaces.persistence.Provider.HIBERNATE;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Optional;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Subquery;
 
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
@@ -104,6 +106,41 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         });
     }
 
+    /**
+     * The same person cards as {@link #getPageOfPersonCards(Page, boolean)}, in the query shape of the OptimusFaces integration tests. It groups by the joined
+     * address entity. It groups only outside the count subquery. It maps the address string to the <code>@Formula</code> on Hibernate.
+     */
+    public PartialResultList<PersonCard> getPageOfPersonCardsAsOptimusFaces(Page page, boolean count) {
+        return getPage(page, count, PersonCard.class, (builder, query, person) -> {
+            Join<Person, Address> personAddress = person.join("address");
+            Join<Person, Phone> personPhones = person.join("phones");
+
+            LinkedHashMap<Getter<PersonCard>, Expression<?>> mapping = new LinkedHashMap<>();
+            mapping.put(PersonCard::getId, person.get("id"));
+            mapping.put(PersonCard::getEmail, person.get("email"));
+
+            if (getProvider() == HIBERNATE) {
+                mapping.put(PersonCard::getAddressString, personAddress.get("string"));
+            }
+            else {
+                mapping.put(
+                    PersonCard::getAddressString,
+                    concat(
+                        builder, personAddress.get("street"), " ", personAddress.get("houseNumber"), ", ", personAddress.get("postcode"), " ",
+                        personAddress.get("city"), ", ", personAddress.get("country")
+                    )
+                );
+            }
+
+            if (!(query instanceof Subquery)) {
+                query.groupBy(person.get("id"), person.get("email"), personAddress);
+            }
+
+            mapping.put(PersonCard::getTotalPhones, builder.count(personPhones));
+            return mapping;
+        });
+    }
+
     public PartialResultList<Person> getAllWithAddress() {
         return getPageWithAddress(Page.ALL, false);
     }
@@ -138,6 +175,18 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public int updateEmailByMappedIdRange(String email, Long minId, Long maxId) {
         return update("SET e.email = :email WHERE e.id BETWEEN :minId AND :maxId", Map.of("email", email, "minId", minId, "maxId", maxId));
+    }
+
+    public PartialResultList<Person> getPageWithoutCache(Page page) {
+        return getPage(page, false, false);
+    }
+
+    /**
+     * Updates the nickname of the person with given ID via native SQL, which the second level cache of the persistence provider does not see.
+     */
+    public int updateNicknameViaNativeSql(Long id, String nickname) {
+        return getEntityManager().createNativeQuery("UPDATE Person SET nickname = ?1 WHERE id = ?2").setParameter(1, nickname).setParameter(2, id)
+            .executeUpdate();
     }
 
 }

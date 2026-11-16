@@ -54,4 +54,10 @@ public class PersonServiceCDI extends PersonService {
         return super.updateEmailByMappedIdRange(email, minId, maxId);
     }
 
+    @Override
+    @Transactional(REQUIRED)
+    public int updateNicknameViaNativeSql(Long id, String nickname) {
+        return super.updateNicknameViaNativeSql(id, nickname);
+    }
+
 }

@@ -61,7 +61,14 @@ public enum Database {
     /**
      * SQL Server database.
      */
-    SQLSERVER(true),
+    SQLSERVER(true) {
+
+        @Override
+        public String getLikeSpecialCharacters() {
+            return "[";
+        }
+
+    },
 
     /**
      * DB2 database.
@@ -125,6 +132,18 @@ public enum Database {
      */
     public boolean sortsNullsLow() {
         return sortsNullsLow;
+    }
+
+    /**
+     * Returns the characters which this database treats as special in a <code>LIKE</code> pattern next to <code>%</code> and <code>_</code>, such as
+     * <code>[</code> on SQL Server. The default implementation returns an empty string. They are escaped only on the database which needs it, because DB2
+     * rejects an escape before any other character than the wildcards and the escape itself.
+     *
+     * @return The characters which this database treats as special in a <code>LIKE</code> pattern next to <code>%</code> and <code>_</code>.
+     * @since 2.0
+     */
+    public String getLikeSpecialCharacters() {
+        return "";
     }
 
 }
