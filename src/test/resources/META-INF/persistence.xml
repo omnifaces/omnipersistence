@@ -28,6 +28,8 @@
         <class>org.omnifaces.persistence.model.TimestampedBaseEntity</class>
         <class>org.omnifaces.persistence.model.VersionedBaseEntity</class>
 
+        <shared-cache-mode>${sharedCacheMode}</shared-cache-mode>
+
         <properties>
             <!-- JPA -->
             <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
@@ -39,8 +41,8 @@
 
             <!-- Hibernate -->
             <property name="hibernate.show_sql" value="true" />
-            <property name="hibernate.cache.use_second_level_cache" value="false" />
-            <property name="hibernate.cache.use_query_cache" value="false" />
+            <property name="hibernate.cache.use_second_level_cache" value="${secondLevelCache}" />
+            <property name="hibernate.cache.use_query_cache" value="${secondLevelCache}" />
 
             <!-- EclipseLink -->
             <property name="eclipselink.logging.logger" value="ServerLogger"/>
@@ -51,6 +53,9 @@
 
             <!-- OpenJPA -->
             <property name="openjpa.Log" value="DefaultLevel=WARN, Runtime=INFO, SQL=TRACE" />
+            <property name="openjpa.DataCache" value="${secondLevelCache}" />
+            <property name="openjpa.QueryCache" value="${secondLevelCache}" />
+            <property name="openjpa.RemoteCommitProvider" value="sjvm" />
             ${openJpaProperties}
 
             <!-- WildFly -->

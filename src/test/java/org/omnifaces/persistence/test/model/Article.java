@@ -20,11 +20,13 @@ import java.util.HashSet;
 import java.util.Set;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 
 import org.omnifaces.persistence.audit.Audit;
@@ -66,6 +68,12 @@ public class Article {
 
     @ElementCollection
     private Set<Gender> audiences = new HashSet<>();
+
+    @Convert(converter = GenderCodeConverter.class)
+    private Gender audienceCode;
+
+    @ManyToMany
+    private Set<Category> categories = new HashSet<>();
 
     @Column(columnDefinition = "DECIMAL(10,2)") // OpenJPA ignores precision and scale on H2.
     private BigDecimal price;
@@ -140,6 +148,22 @@ public class Article {
 
     public void setAudiences(Set<Gender> audiences) {
         this.audiences = audiences;
+    }
+
+    public Gender getAudienceCode() {
+        return audienceCode;
+    }
+
+    public void setAudienceCode(Gender audienceCode) {
+        this.audienceCode = audienceCode;
+    }
+
+    public Set<Category> getCategories() {
+        return categories;
+    }
+
+    public void setCategories(Set<Category> categories) {
+        this.categories = categories;
     }
 
     public BigDecimal getPrice() {

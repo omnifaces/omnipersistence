@@ -169,7 +169,7 @@ public final class Like extends Criteria<String> {
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         Class<?> type = path.getJavaType();
 
-        if (isOrdinalEnum(path)) {
+        if (isEnumNotStoredByName(path)) {
             return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
         }
         else if (Bool.is(type)) {

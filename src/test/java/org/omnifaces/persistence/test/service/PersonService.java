@@ -13,7 +13,11 @@
 package org.omnifaces.persistence.test.service;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
+import static java.util.stream.Collectors.toMap;
+import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
+import static org.omnifaces.persistence.JPA.castAsString;
 import static org.omnifaces.persistence.JPA.concat;
+import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 
@@ -21,18 +25,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Subquery;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
+import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
 import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
 
@@ -81,6 +88,36 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPage(page, false, (builder, query, person) -> {
             getById(1L);
         });
+    }
+
+    /**
+     * Restricts the page to the persons whose ID contains the given term, via a <code>LIKE</code> predicate built in the query builder. When the given phone
+     * service is not <code>null</code>, it is invoked first.
+     */
+    public PartialResultList<Person> getPageViaQueryBuilderBuildingLike(Page page, PhoneService phoneService, String term) {
+        return getPage(page, false, (builder, query, person) -> {
+            if (phoneService != null) {
+                phoneService.getById(1L);
+            }
+
+            query.where(builder.like(castAsString(builder, person.get("id")), "%" + escapeLike(term) + "%", LIKE_ESCAPE));
+        });
+    }
+
+    public Person getByEmailViaNamedTypedQuery(String email) {
+        return createNamedTypedQuery(Person.BY_EMAIL).setParameter("email", email).getSingleResult();
+    }
+
+    public Person getByEmailViaNamedQuery(String email) {
+        return (Person) createNamedQuery(Person.BY_EMAIL).setParameter("email", email).getSingleResult();
+    }
+
+    public Person getByEmailViaTypedQuery(String email) {
+        return createTypedQuery("SELECT e FROM Person e WHERE e.email = ?1").setParameter(1, email).getSingleResult();
+    }
+
+    public Long getIdByEmailViaTypedQuery(String email) {
+        return createTypedQuery("SELECT e.id FROM Person e WHERE e.email = ?1", Long.class).setParameter(1, email).getSingleResult();
     }
 
     public PartialResultList<PersonCard> getPageOfPersonCards(Page page, boolean count) {
@@ -155,6 +192,23 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPageWithGroups(Page.ALL, false);
     }
 
+    public PartialResultList<PersonPhoneStats> getPageOfPersonPhoneStats(Page page, boolean count) {
+        return getPage(page, count, PersonPhoneStats.class, (builder, query, person) -> {
+            Join<Person, Phone> personPhones = person.join("phones");
+            Expression<Long> phoneId = personPhones.get("id");
+
+            LinkedHashMap<Getter<PersonPhoneStats>, Expression<?>> mapping = new LinkedHashMap<>();
+            mapping.put(PersonPhoneStats::getId, person.get("id"));
+            mapping.put(PersonPhoneStats::getMaxPhoneId, builder.max(phoneId));
+            mapping.put(PersonPhoneStats::getSumPhoneId, builder.sum(phoneId));
+            mapping.put(PersonPhoneStats::getTotalPhoneTypes, builder.countDistinct(personPhones.get("type")));
+            mapping.put(PersonPhoneStats::getSumPhoneIdOrZero, builder.coalesce(builder.sum(phoneId), 0L));
+
+            query.groupBy(person.get("id"));
+            return mapping;
+        });
+    }
+
     public PartialResultList<PersonCard> getAllPersonCards() {
         return getPageOfPersonCards(Page.ALL, false);
     }
@@ -181,6 +235,26 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public PartialResultList<Person> getPageWithoutCache(Page page) {
         return getPage(page, false, false);
+    }
+
+    /**
+     * Returns per expression on the person ID whether {@link Provider#isAggregation(Expression)} recognizes it as an aggregation.
+     */
+    public Map<String, Boolean> getAggregationsOfIdExpressions() {
+        var builder = getEntityManager().getCriteriaBuilder();
+        Expression<Long> id = builder.createQuery(Long.class).from(Person.class).get("id");
+        var expressions = Map.<String, Expression<?>>of(
+            "id", id, "sum(id)", builder.sum(id), "coalesce(sum(id), 0)", builder.coalesce(builder.sum(id), 0L), "id + 1", builder.sum(id, 1L), "id + id",
+            builder.sum(id, id), "coalesce(id + 1, 0)", builder.coalesce(builder.sum(id, 1L), 0L)
+        );
+        return expressions.entrySet().stream().collect(toMap(Entry::getKey, entry -> getProvider().isAggregation(entry.getValue())));
+    }
+
+    /**
+     * Returns whether the person with given ID is in the second level cache.
+     */
+    public boolean isInSecondLevelCache(Long id) {
+        return getEntityManager().getEntityManagerFactory().getCache().contains(Person.class, id);
     }
 
     /**

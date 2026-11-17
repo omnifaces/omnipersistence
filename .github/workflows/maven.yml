@@ -48,7 +48,7 @@ jobs:
           sleep 2
         done
         mysql -e "CREATE USER test IDENTIFIED BY 'test';"
-        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT; do
+        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
           mysql -e "CREATE DATABASE $database CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; GRANT ALL ON $database.* TO test;"
         done
     - name: Set up PostgreSQL (already provided by ubuntu-latest)
@@ -56,7 +56,7 @@ jobs:
       run: |
         sudo systemctl start postgresql.service
         sudo -u postgres psql postgres -c "CREATE USER test WITH ENCRYPTED PASSWORD 'test';"
-        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT; do
+        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
           sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C';"
         done
     - name: Set up SQL Server (via Microsoft's Docker image)
@@ -70,7 +70,7 @@ jobs:
           sleep 3
         done
         sqlcmd -Q "CREATE LOGIN test WITH PASSWORD = 'PassW0rd!';"
-        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT; do
+        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
           sqlcmd -Q "CREATE DATABASE $database COLLATE Latin1_General_100_BIN2;"
           sqlcmd -d $database -Q "CREATE USER test FOR LOGIN test; ALTER ROLE db_owner ADD MEMBER test;"
         done

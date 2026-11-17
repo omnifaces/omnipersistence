@@ -14,7 +14,7 @@ package org.omnifaces.persistence.criteria;
 
 import static java.time.format.DateTimeFormatter.ofPattern;
 import static java.util.stream.Collectors.toSet;
-import static org.omnifaces.persistence.JPA.isEnumeratedByOrdinal;
+import static org.omnifaces.persistence.JPA.isEnumeratedByName;
 import static org.omnifaces.persistence.JPA.matchNothing;
 import static org.omnifaces.utils.stream.Streams.stream;
 
@@ -156,12 +156,12 @@ public abstract class Criteria<T> implements Serializable {
     }
 
     /**
-     * Returns whether given path is an enum which is mapped by ordinal, as determined by <code>JPA#isEnumeratedByOrdinal(Path)</code>. A string based predicate
-     * cannot match such a path by constant name in SQL, so it has to be built by
+     * Returns whether given path is an enum whose column does not hold the constant name, as determined by <code>JPA#isEnumeratedByName(Path)</code>, such as
+     * an ordinal or a converted enum. A string based predicate cannot match such a path by constant name in SQL, so it has to be built by
      * {@link #buildByMatchingEnumConstants(Expression, CriteriaBuilder, ParameterBuilder)}.
      */
-    static boolean isOrdinalEnum(Expression<?> path) {
-        return path.getJavaType().isEnum() && path instanceof Path<?> p && isEnumeratedByOrdinal(p);
+    static boolean isEnumNotStoredByName(Expression<?> path) {
+        return path.getJavaType().isEnum() && path instanceof Path<?> p && !isEnumeratedByName(p);
     }
 
     /**

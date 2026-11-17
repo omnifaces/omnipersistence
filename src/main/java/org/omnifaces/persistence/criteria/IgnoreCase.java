@@ -57,7 +57,7 @@ public final class IgnoreCase extends Criteria<String> {
 
     @Override
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
-        if (isOrdinalEnum(path)) {
+        if (isEnumNotStoredByName(path)) {
             return buildByMatchingEnumConstants(path, criteriaBuilder, parameterBuilder);
         }
 

@@ -14,6 +14,7 @@ package org.omnifaces.persistence.datasource;
 
 import static java.beans.Introspector.getBeanInfo;
 import static java.beans.PropertyEditorManager.findEditor;
+import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableMap;
 
@@ -46,6 +47,9 @@ import jakarta.annotation.Nullable;
  * @see SwitchableXADataSource
  */
 public class CommonDataSourceWrapper implements CommonDataSource {
+
+    private static final String ERROR_UNKNOWN_PROPERTY = "Data source %s has no writable property %s.";
+    private static final String ERROR_UNCONVERTIBLE_PROPERTY = "Data source %s has property %s of type %s, which cannot be converted from a String.";
 
     private CommonDataSource wrapped;
     private Map<String, PropertyDescriptor> dataSourceProperties;
@@ -152,12 +156,24 @@ public class CommonDataSourceWrapper implements CommonDataSource {
      *
      * @param name The name of the property to set.
      * @param value The String value to convert and set.
+     * @throws IllegalArgumentException When the wrapped data source has no writable property of given name, or when its type cannot be converted from a String.
      */
     public void setWithConversion(String name, String value) {
 
         PropertyDescriptor property = dataSourceProperties.get(name);
 
+        if (property == null || property.getWriteMethod() == null) {
+            throw new IllegalArgumentException(format(ERROR_UNKNOWN_PROPERTY, getWrapped().getClass().getName(), name));
+        }
+
         PropertyEditor editor = findEditor(property.getPropertyType());
+
+        if (editor == null) {
+            throw new IllegalArgumentException(
+                format(ERROR_UNCONVERTIBLE_PROPERTY, getWrapped().getClass().getName(), name, property.getPropertyType().getName())
+            );
+        }
+
         editor.setAsText(value);
 
         try {

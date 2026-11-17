@@ -20,8 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
+import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
@@ -38,12 +41,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -51,6 +56,7 @@ import java.util.stream.LongStream;
 
 import jakarta.ejb.EJB;
 import jakarta.inject.Inject;
+import jakarta.persistence.NonUniqueResultException;
 import jakarta.persistence.TransactionRequiredException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -60,6 +66,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.criteria.Criteria;
+import org.omnifaces.persistence.criteria.IgnoreCase;
 import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.criteria.Order;
@@ -73,7 +81,10 @@ import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Attachment;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.Invoice;
+import org.omnifaces.persistence.test.model.Letter;
 import org.omnifaces.persistence.test.model.Membership;
 import org.omnifaces.persistence.test.model.MembershipId;
 import org.omnifaces.persistence.test.model.Note;
@@ -82,6 +93,7 @@ import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Remark;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.service.EntityEvents;
 import org.omnifaces.persistence.test.service.StartupServiceEJB;
 import org.omnifaces.persistence.test.service.TestAuditListener;
@@ -128,6 +140,8 @@ public class EntityRepositoryIT {
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
     private EntityRepository<String, Note> noteRepository;
+    @Inject
+    private EntityRepository<Long, Document> documentRepository;
     @Inject
     private TransactionServiceCDI transactionServiceCDI;
     @EJB
@@ -622,8 +636,19 @@ public class EntityRepositoryIT {
     void testFetchLazyCollectionsInitializesPhonesAndGroups() {
         var id = 1L;
         var totalGroups = transactionServiceCDI.call(() -> personRepository.getById(id).getGroups().size());
-        var withPhones = transactionServiceCDI.call(() -> personRepository.fetchLazyCollections(personRepository.getById(id), Person::getPhones));
+        var persistenceUnitUtil = personRepository.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil();
+        var withPhones = transactionServiceCDI.call(() -> {
+            var person = personRepository.getById(id);
+            assertFalse(persistenceUnitUtil.isLoaded(person, "phones"), "Phones not loaded before");
+            var fetched = personRepository.fetchLazyCollections(person, Person::getPhones);
+            assertTrue(persistenceUnitUtil.isLoaded(fetched, "phones"), "Phones loaded after");
+            return fetched;
+        });
         assertEquals(TOTAL_PHONES_PER_PERSON_0, withPhones.getPhones().size(), "Phones fetched via getter");
+
+        var withOptionalPhones = transactionServiceCDI.call(() -> personRepository.fetchLazyCollections(personRepository.findById(id), Person::getPhones));
+        assertEquals(TOTAL_PHONES_PER_PERSON_0, withOptionalPhones.orElseThrow().getPhones().size(), "Phones fetched via getter on optional");
+        assertTrue(personRepository.fetchLazyCollections(Optional.<Person>empty(), Person::getPhones).isEmpty(), "Empty optional");
 
         var withAll = transactionServiceCDI.call(() -> personRepository.fetchLazyCollections(personRepository.getById(id)));
         assertEquals(TOTAL_PHONES_PER_PERSON_0, withAll.getPhones().size(), "Phones fetched without getters");
@@ -647,6 +672,13 @@ public class EntityRepositoryIT {
 
             var withContent = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyBlobs(attachmentRepository.getById(id)));
             assertArrayEquals("content".getBytes(UTF_8), withContent.getContent(), "Content");
+
+            var withOptionalProperties = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyMaps(attachmentRepository.findById(id)));
+            assertEquals(Map.of("type", "text/plain"), withOptionalProperties.orElseThrow().getProperties(), "Properties on optional");
+            var withOptionalContent = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyBlobs(attachmentRepository.findById(id)));
+            assertArrayEquals("content".getBytes(UTF_8), withOptionalContent.orElseThrow().getContent(), "Content on optional");
+            assertTrue(attachmentRepository.fetchLazyMaps(Optional.<Attachment>empty()).isEmpty(), "Empty optional of maps");
+            assertTrue(attachmentRepository.fetchLazyBlobs(Optional.<Attachment>empty()).isEmpty(), "Empty optional of blobs");
         }
         finally {
             transactionServiceCDI.run(() -> attachmentRepository.delete(attachmentRepository.getById(id)));
@@ -1150,6 +1182,347 @@ public class EntityRepositoryIT {
         var page = articleRepository.getPage(Page.with().allMatch(criteria).build(), true);
         assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + tags);
         return codesOf(page);
+    }
+
+    /**
+     * The fetched elements of a page ordered by their nullable field are in the same order as the database sorts that field, including the position of
+     * <code>NULL</code> and of mixed case values in the binary collation of the test databases.
+     */
+    @Test
+    void testPageWithPhonesOrderedByLabelSortsFetchedPhonesAsDatabase() {
+        var phones = persistTemporaryPhones(Arrays.asList("a", "B", null));
+
+        try {
+            for (var ascending : List.of(true, false)) {
+                var expected = phoneRepository
+                    .list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 ORDER BY f.label " + (ascending ? "ASC" : "DESC"), 1L).stream()
+                    .map(Phone::getLabel)
+                    .toList();
+                var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L)).orderBy("phones.label", ascending).build(), false, "phones");
+                assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getLabel).toList(), "Ascending " + ascending);
+            }
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    /**
+     * The fetched elements of a page filtered by an {@link Order} on their String field are those which the database selects by that criteria, also with mixed
+     * case values in the binary collation of the test databases.
+     */
+    @Test
+    void testPageWithPhonesFilteredByOrderOnMixedCaseNumberKeepsPhonesSelectedByDatabase() {
+        var phones = persistTemporaryPhones(List.of("a1", "B1"));
+
+        try {
+            var expected = phoneRepository.list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 AND f.number > ?2", 1L, "a").stream().map(Phone::getId)
+                .collect(toSet());
+            var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L, "phones.number", Order.greaterThan("a"))).build(), false, "phones");
+            assertEquals(List.of(1L), page.stream().map(Person::getId).toList(), "Person");
+            assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getId).collect(toSet()), "Fetched phones");
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    private List<Phone> persistTemporaryPhones(List<String> values) {
+        var phones = new ArrayList<Phone>();
+
+        for (var value : values) {
+            var phone = new Phone();
+            phone.setType(Phone.Type.WORK);
+            phone.setNumber(value == null ? "temporary" : value);
+            phone.setLabel(value);
+            transactionServiceCDI.run(() -> {
+                var owner = personRepository.getById(1L);
+                phone.setOwner(owner);
+                phoneRepository.persist(phone);
+                owner.getPhones().add(phone);
+            });
+            phones.add(phone);
+        }
+
+        return phones;
+    }
+
+    private void deleteTemporaryPhones(List<Phone> phones) {
+        var ids = phones.stream().map(Phone::getId).filter(Objects::nonNull).collect(toSet());
+        transactionServiceCDI.run(() -> {
+            personRepository.getById(1L).getPhones().removeIf(phone -> ids.contains(phone.getId()));
+            ids.stream().map(phoneRepository::getById).filter(Objects::nonNull).forEach(phoneRepository::delete);
+        });
+    }
+
+    @Test
+    void testManageIfNecessaryOfDtoReturnsItUnchanged() {
+        var card = new PersonCard(1L, "card@example.com", "address", 0L);
+        assertSame(card, transactionServiceCDI.call(() -> personRepository.manageIfNecessary(card)), "DTO");
+    }
+
+    @Test
+    void testEscapeLikeInCriteriaQueryBuilderOfListFindAndFindFirst() {
+        var articles = List.of(persistArticle("a_b", null), persistArticle("axb", null));
+
+        try {
+            CriteriaQueryBuilder<Article> builder = (criteriaBuilder, query, root) -> query
+                .where(criteriaBuilder.like(root.<String>get("title"), "%" + escapeLike("a_b"), LIKE_ESCAPE));
+            var expected = codesOf(articles.subList(0, 1));
+            assertEquals(expected, codesOf(articleRepository.list(builder, Map.of())), "list");
+            assertEquals(expected, codesOf(articleRepository.find(builder, Map.of()).stream().toList()), "find");
+            assertEquals(expected, codesOf(articleRepository.findFirst(builder, Map.of()).stream().toList()), "findFirst");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    @Test
+    void testFindWithMultipleResultsThrowsNonUniqueResult() {
+        assertThrows(NonUniqueResultException.class, () -> personRepository.find("WHERE e.id BETWEEN ?1 AND ?2", 2L, 4L), "JPQL");
+        assertThrows(
+            NonUniqueResultException.class,
+            () -> personRepository.find((criteriaBuilder, query, root) -> query.where(root.get("id").in(2L, 3L)), Map.of()),
+            "CriteriaQueryBuilder"
+        );
+    }
+
+    /**
+     * Each criteria on an enum mapped via a converter selects exactly the entities whose enum value {@link Criteria#applies(Object)} accepts.
+     */
+    @Test
+    @DisabledIfSystemProperty(
+        named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA fails with a ClassCastException on persisting an enum field with an AttributeConverter"
+    )
+    void testCriteriaOnConvertedEnumAgreeWithApplies() {
+        var articles = new ArrayList<Article>();
+
+        try {
+            for (var gender : Gender.values()) {
+                var article = newArticle("converted-" + gender, null);
+                article.setAudienceCode(gender);
+                transactionServiceCDI.run(() -> articleRepository.persist(article));
+                articles.add(article);
+            }
+
+            for (var criteria : List.<Criteria<?>>of(
+                Like.startsWith("mal"), Like.contains("male"), IgnoreCase.value("male"), Order.greaterThan(Gender.FEMALE), Order.lessThanOrEqualTo(Gender.TRANS)
+            )) {
+                var expected = articles.stream().filter(article -> criteria.applies(article.getAudienceCode())).map(Article::getCode).sorted().toList();
+                var criteriaMap = new HashMap<>(TITLED);
+                criteriaMap.put("audienceCode", criteria);
+                var page = articleRepository.getPage(Page.with().allMatch(criteriaMap).orderBy("id", true).build(), true);
+                assertEquals(expected, codesOf(page), criteria.toString());
+            }
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
+     * Criteria on a <code>@ManyToMany</code> behave like on a <code>@OneToMany</code>: multiple values must all match, and a negated value excludes the
+     * entities having it.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testCriteriaOnManyToManyAgreeWithOneToMany() {
+        var first = newCategory("m2m-a", "A");
+        var second = newCategory("m2m-b", "B");
+        var articles = new ArrayList<Article>();
+
+        try {
+            transactionServiceCDI.run(() -> List.of(first, second).forEach(categoryRepository::persist));
+            articles.add(persistArticleInCategories("both", first, second));
+            articles.add(persistArticleInCategories("first", first));
+            articles.add(persistArticleInCategories("none"));
+
+            assertEquals(codesOf(articles.subList(0, 1)), codesOfCategorized(Map.of("categories.slug", List.of("m2m-a", "m2m-b"))), "All of");
+            assertEquals(codesOf(articles.subList(0, 1)), codesOfCategorized(Map.of("categories.slug", "m2m-b")), "Single value");
+            assertEquals(codesOf(articles.subList(2, 3)), codesOfCategorized(Map.of("categories.slug", Not.value("m2m-a"))), "Not");
+        }
+        finally {
+            deleteArticles(articles);
+            deleteCategories(List.of(first, second));
+        }
+    }
+
+    /**
+     * The fetched elements of a <code>@ManyToMany</code> are those matching an entity value on their association, also when the entity does not implement
+     * <code>equals()</code>.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not load a lazy association of the fetched elements")
+    void testPageWithFetchedManyToManyFilteredByEntityValueWithoutEquals() {
+        var root = newCategory("m2m-root", "Root");
+        var first = newCategory("m2m-a", "A");
+        var second = newCategory("m2m-b", "B");
+        var articles = new ArrayList<Article>();
+
+        try {
+            transactionServiceCDI.run(() -> {
+                categoryRepository.persist(root);
+                first.setParent(categoryRepository.getById("m2m-root"));
+                List.of(first, second).forEach(categoryRepository::persist);
+            });
+            articles.add(persistArticleInCategories("both", first, second));
+            articles.add(persistArticleInCategories("first", first));
+            articles.add(persistArticleInCategories("second", second));
+
+            var criteria = new HashMap<>(TITLED);
+            criteria.put("categories.parent", categoryRepository.getById("m2m-root"));
+            var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true, "categories");
+            assertEquals(codesOf(articles.subList(0, 2)), codesOf(page), "Articles");
+            assertEquals(2, page.getEstimatedTotalNumberOfResults(), "Count");
+            page.forEach(
+                article -> assertEquals(
+                    Set.of("m2m-a"), article.getCategories().stream().map(Category::getSlug).collect(toSet()), "Fetched categories of " + article.getTitle()
+                )
+            );
+        }
+        finally {
+            deleteArticles(articles);
+            deleteCategories(List.of(first, second, root));
+        }
+    }
+
+    /**
+     * An ordering on a field of a <code>@ManyToMany</code> returns each entity once, and places the entities without elements where the database sorts
+     * <code>NULL</code>, see {@link Database#sortsNullsLow()}.
+     */
+    @Test
+    void testGetPageOrderedByManyToManyPlacesArticlesWithoutCategoriesAsNulls() {
+        var first = newCategory("m2m-a", "A");
+        var second = newCategory("m2m-b", "B");
+        var articles = new ArrayList<Article>();
+
+        try {
+            transactionServiceCDI.run(() -> List.of(first, second).forEach(categoryRepository::persist));
+            articles.add(persistArticleInCategories("b", second));
+            articles.add(persistArticleInCategories("a", first));
+            articles.add(persistArticleInCategories("none"));
+            var categorized = List.of(articles.get(1).getCode(), articles.get(0).getCode());
+            var uncategorized = List.of(articles.get(2).getCode());
+            var nullsLow = articleRepository.getDatabase().sortsNullsLow();
+            var ascending = new ArrayList<>(nullsLow ? uncategorized : categorized);
+            ascending.addAll(nullsLow ? categorized : uncategorized);
+            var descending = new ArrayList<>(ascending);
+            Collections.reverse(descending);
+
+            for (var order : Map.of(true, ascending, false, descending).entrySet()) {
+                var page = articleRepository.getPage(Page.with().allMatch(TITLED).orderBy("categories.name", order.getKey()).build(), true);
+                assertEquals(order.getValue(), codesOf(page), "Ascending " + order.getKey());
+                assertEquals(3, page.getEstimatedTotalNumberOfResults(), "Count ascending " + order.getKey());
+            }
+        }
+        finally {
+            deleteArticles(articles);
+            deleteCategories(List.of(first, second));
+        }
+    }
+
+    private Article persistArticleInCategories(String title, Category... categories) {
+        var article = newArticle(title, null);
+        transactionServiceCDI.run(() -> {
+            Arrays.stream(categories).map(category -> categoryRepository.getById(category.getSlug())).forEach(article.getCategories()::add);
+            articleRepository.persist(article);
+        });
+        return article;
+    }
+
+    private List<Long> codesOfCategorized(Map<String, Object> categoryCriteria) {
+        var criteria = new HashMap<>(TITLED);
+        criteria.putAll(categoryCriteria);
+        var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true);
+        assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + categoryCriteria);
+        return codesOf(page);
+    }
+
+    @Test
+    void testGetPageWithFetchAndCriteriaOnGrandparentResolvesNestedPath() {
+        var root = newCategory("tree-root", "Root");
+        var child = newCategory("tree-child", "Child");
+        var grandchild = newCategory("tree-grandchild", "Grandchild");
+
+        try {
+            transactionServiceCDI.run(() -> {
+                categoryRepository.persist(root);
+                child.setParent(categoryRepository.getById("tree-root"));
+                categoryRepository.persist(child);
+                grandchild.setParent(categoryRepository.getById("tree-child"));
+                categoryRepository.persist(grandchild);
+            });
+
+            var criteria = Page.with().allMatch(Map.of("parent.parent.name", "Root")).build();
+            assertEquals(List.of("tree-grandchild"), slugsOf(categoryRepository.getPage(criteria, true)), "Without fetch");
+            assertEquals(List.of("tree-grandchild"), slugsOf(categoryRepository.getPage(criteria, true, "parent")), "With fetch of parent");
+        }
+        finally {
+            deleteCategories(List.of(grandchild, child, root));
+        }
+    }
+
+    private static List<String> slugsOf(List<Category> categories) {
+        return categories.stream().map(Category::getSlug).toList();
+    }
+
+    /**
+     * A page of the root of an entity hierarchy, ordered by an element collection, returns the subclass instances in order across offset pages, also when
+     * restricted to one subclass.
+     */
+    @Test
+    void testPageOfEntityHierarchyOrderedByElementCollection() {
+        var documents = List.<Document>of(
+            newDocument(new Invoice(), "b", 10), newDocument(new Letter(), "a", "Ann"), newDocument(new Invoice(), "c", 20),
+            newDocument(new Letter(), "d", "Dave")
+        );
+
+        try {
+            documents.forEach(document -> transactionServiceCDI.run(() -> documentRepository.persist(document)));
+            var expected = List.of(documents.get(1).getId(), documents.get(0).getId(), documents.get(2).getId(), documents.get(3).getId());
+            var titled = Map.<String, Object>of("title", Like.startsWith(TITLE_PREFIX));
+            var firstPage = documentRepository.getPage(Page.with().range(0, 2).allMatch(titled).orderBy("labels", true).build(), true);
+            var secondPage = documentRepository.getPage(Page.with().range(2, 2).allMatch(titled).orderBy("labels", true).build(), true);
+            assertEquals(expected.subList(0, 2), firstPage.stream().map(Document::getId).toList(), "First page");
+            assertEquals(expected.subList(2, 4), secondPage.stream().map(Document::getId).toList(), "Second page");
+            assertEquals(4, firstPage.getEstimatedTotalNumberOfResults(), "Count");
+            assertTrue(firstPage.get(0) instanceof Letter && firstPage.get(1) instanceof Invoice, "Subclass instances");
+            var details = new ArrayList<>(firstPage.stream().map(EntityRepositoryIT::detailOf).toList());
+            details.addAll(secondPage.stream().map(EntityRepositoryIT::detailOf).toList());
+            assertEquals(List.of("Ann", 10, 20, "Dave"), details, "Subclass fields");
+
+            var invoices = documentRepository.getPage(
+                Page.with().allMatch(titled).orderBy("labels", true).build(), true,
+                (criteriaBuilder, query, root) -> query.where(criteriaBuilder.equal(root.type(), Invoice.class))
+            );
+            assertEquals(List.of(documents.get(0).getId(), documents.get(2).getId()), invoices.stream().map(Document::getId).toList(), "Criteria on subclass");
+            assertEquals(List.of(10, 20), invoices.stream().map(EntityRepositoryIT::detailOf).toList(), "Subclass fields of criteria on subclass");
+        }
+        finally {
+            transactionServiceCDI.run(
+                () -> documents.stream().filter(document -> document.getId() != null).map(document -> documentRepository.getById(document.getId()))
+                    .filter(Objects::nonNull).forEach(documentRepository::delete)
+            );
+        }
+    }
+
+    private static Document newDocument(Document document, String label, Object detail) {
+        document.setTitle(TITLE_PREFIX + label);
+        document.getLabels().add(label);
+
+        if (document instanceof Invoice invoice) {
+            invoice.setAmount((Integer) detail);
+        }
+        else if (document instanceof Letter letter) {
+            letter.setAuthor((String) detail);
+        }
+
+        return document;
+    }
+
+    private static Object detailOf(Document document) {
+        return document instanceof Invoice invoice ? invoice.getAmount() : ((Letter) document).getAuthor();
     }
 
     @Test

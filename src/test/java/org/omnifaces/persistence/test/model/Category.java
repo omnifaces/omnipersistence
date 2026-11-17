@@ -12,8 +12,11 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import static jakarta.persistence.FetchType.LAZY;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToOne;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
@@ -26,6 +29,8 @@ public class Category {
     private String slug;
 
     private String name;
+
+    private Category parent;
 
     @Id
     public String getSlug() {
@@ -42,6 +47,15 @@ public class Category {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    @ManyToOne(fetch = LAZY)
+    public Category getParent() {
+        return parent;
+    }
+
+    public void setParent(Category parent) {
+        this.parent = parent;
     }
 
 }
