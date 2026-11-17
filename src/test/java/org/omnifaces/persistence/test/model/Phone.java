@@ -38,6 +38,8 @@ public class Phone extends LocalGeneratedIdEntity {
     private @NotNull @Enumerated(STRING) Type type;
     private @NotNull String number;
 
+    private String label;
+
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private @NotNull Person owner;
 
@@ -55,6 +57,14 @@ public class Phone extends LocalGeneratedIdEntity {
 
     public void setNumber(String number) {
         this.number = number;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     public Person getOwner() {

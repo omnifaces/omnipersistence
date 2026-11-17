@@ -2104,7 +2104,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
                 pageBuilder.getPage(), getEntityManager(), entityType,
-                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, this::isEntity, entities
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, this::isEntity, database.sortsNullsLow(),
+                entities
             );
         }
 

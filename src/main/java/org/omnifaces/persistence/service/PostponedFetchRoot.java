@@ -16,6 +16,7 @@ import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
+import static java.util.Comparator.nullsFirst;
 import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElse;
 import static java.util.function.Function.identity;
@@ -179,7 +180,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     public <E, T extends E> List<T> runPostponedFetches(
         Page page, EntityManager entityManager, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, Function<Object, ?> idOf,
-        java.util.function.Predicate<Object> isEntity, List<T> entities
+        java.util.function.Predicate<Object> isEntity, boolean nullsLow, List<T> entities
     )
     {
         var fetchPaths = postponedFetches.stream().filter(path -> !path.contains(".")).sorted().toList();
@@ -203,7 +204,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
                 path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
             )
         );
-        buildPostponedFetches(page, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
+        buildPostponedFetches(page, nullsLow, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
@@ -259,12 +260,13 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * returned it.
      */
     private static <T> void buildPostponedFetches(
-        Page page, Map<String, Map<String, Object>> filters, List<T> entities, List<String> fetchPaths, Map<String, Map<Object, Object>> fetchedEntities,
+        Page page, boolean nullsLow, Map<String, Map<String, Object>> filters, List<T> entities, List<String> fetchPaths,
+        Map<String, Map<Object, Object>> fetchedEntities,
         List<List<Object>> fetchedEntityProperties
     )
     {
         entities.forEach(
-            entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page, filters).fetchedEntityProperties())
+            entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page, nullsLow, filters).fetchedEntityProperties())
         );
     }
 
@@ -272,7 +274,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     private static <T> EntityRow<T> processEntityFetches(
-        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, Map<String, Map<String, Object>> filters
+        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, boolean nullsLow, Map<String, Map<String, Object>> filters
     )
     {
         var copies = paths.stream().map(path -> {
@@ -285,7 +287,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             var pathFilters = filters.get(path);
             var filtered = col.stream().filter(item -> matchesFetchFilters(item, pathFilters))
                 .collect(toCollection(ArrayList::new));
-            var itemComp = buildFetchItemComparator(path, page.getOrdering());
+            var itemComp = buildFetchItemComparator(path, page.getOrdering(), nullsLow);
 
             if (itemComp != null) {
                 filtered.sort(itemComp);
@@ -298,13 +300,14 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     @SuppressWarnings("unchecked")
-    private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering) {
+    private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering, boolean nullsLow) {
+        Comparator<Comparable<Object>> nullsOrder = nullsLow ? nullsFirst(naturalOrder()) : nullsLast(naturalOrder());
         return ordering.entrySet().stream()
             .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
             .map(entry -> {
                 var subField = entry.getKey().substring(fetchPath.length() + 1);
                 var ascending = entry.getValue();
-                var fieldComp = comparing(obj -> sortKeyOf(obj, subField), nullsLast(naturalOrder()));
+                var fieldComp = comparing(obj -> sortKeyOf(obj, subField), nullsOrder);
                 return ascending ? fieldComp : fieldComp.reversed();
             })
             .reduce(Comparator::thenComparing)

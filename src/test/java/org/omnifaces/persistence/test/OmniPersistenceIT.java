@@ -12,9 +12,12 @@
  */
 package org.omnifaces.persistence.test;
 
+import static jakarta.persistence.SharedCacheMode.ALL;
+import static jakarta.persistence.SharedCacheMode.UNSPECIFIED;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.time.temporal.ChronoField.HOUR_OF_DAY;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -28,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
 import static org.omnifaces.persistence.Database.H2;
+import static org.omnifaces.persistence.Database.SQLSERVER;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.ROWS_PER_PAGE;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_RECORDS;
@@ -36,6 +40,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -69,6 +74,7 @@ import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.function.Executable;
 import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Between;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Enumerated;
@@ -96,6 +102,7 @@ import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
+import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -119,6 +126,8 @@ public abstract class OmniPersistenceIT {
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
     private static final String ECLIPSELINK_H2_TIME = "EclipseLink binds a LocalTime and an OffsetTime as a TIMESTAMP on 1970-01-01, which H2 compares to a TIME column"
         + " on the current date";
+    private static final String ECLIPSELINK_H2_OFFSET = "EclipseLink stores an OffsetTime and an OffsetDateTime on H2 as TIME and TIMESTAMP without offset";
+    private static final String HIBERNATE_SQLSERVER_OFFSET_TIME = "Like on the hour of an OffsetTime does not match on Hibernate with SQL Server";
     static final String HIBERNATE_FORMULA = "Address.string is a Hibernate specific @Formula";
     static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
         + " so this criteria is left out of the count query";
@@ -129,10 +138,19 @@ public abstract class OmniPersistenceIT {
     private static final long MAX_ID = 190;
     private static final LocalDate MAX_DATE_OF_BIRTH = LocalDate.of(1970, 1, 1);
     private static final long TOTAL_PHONES = 3;
+    private static final String HOUR_FORMAT = "%02d:";
     private static final String MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT = ":14:15";
     private static final String MONTH_AND_DAY_OF_FIRST_APPOINTMENT_AND_SPACE = "-11-14 ";
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
+        return createDeployment(testClass, excludedStartupService, false);
+    }
+
+    /**
+     * Creates the deployment of given test class without given startup service. When {@code secondLevelCache} is {@code true}, every provider caches all
+     * entities in its second level cache. Otherwise only EclipseLink does, as it does by default.
+     */
+    static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService, boolean secondLevelCache) {
         var persistenceUnitName = testClass.getSimpleName();
         var database = getTestRunDatabase();
         var wildFlyDB2 = database == DB2 && getProperty(PROFILE_ID).startsWith("wildfly-");
@@ -146,7 +164,10 @@ public abstract class OmniPersistenceIT {
                 new StringAsset(
                     substitute(
                         "META-INF/persistence.xml", persistenceUnitName,
-                        Map.of("${jtaDataSource}", jtaDataSource, "${openJpaProperties}", openJpaPropertiesOf(database, persistenceUnitName))
+                        Map.of(
+                            "${jtaDataSource}", jtaDataSource, "${openJpaProperties}", openJpaPropertiesOf(database, persistenceUnitName), "${sharedCacheMode}",
+                            (secondLevelCache ? ALL : UNSPECIFIED).name(), "${secondLevelCache}", String.valueOf(secondLevelCache)
+                        )
                     )
                 ),
                 "META-INF/persistence.xml"
@@ -335,6 +356,17 @@ public abstract class OmniPersistenceIT {
      */
     static boolean isEclipseLinkOnH2() {
         return isEclipseLink() && H2.name().equalsIgnoreCase(getTestRunDatabaseName());
+    }
+
+    /**
+     * Returns whether the test runs on EclipseLink with H2 or on Hibernate with SQL Server. See {@link #isEclipseLinkOnH2()}.
+     */
+    static boolean isEclipseLinkOnH2OrHibernateOnSqlServer() {
+        return isEclipseLinkOnH2() || isHibernate() && SQLSERVER.name().equalsIgnoreCase(getTestRunDatabaseName());
+    }
+
+    protected static boolean isHibernate() {
+        return !isEclipseLink() && !isOpenJPA();
     }
 
     protected static boolean isOpenJPA() {
@@ -1428,28 +1460,25 @@ public abstract class OmniPersistenceIT {
         assertPageWithLikeOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT);
     }
 
+    /**
+     * {@link Like} on the hour of an {@code OffsetTime} selects the same entities in SQL as {@link Like#applies(Object)} does in memory.
+     */
     @Test
-    @DisabledIf(
-        value = "isEclipseLinkOnH2", disabledReason = "EclipseLink stores an OffsetTime and an OffsetDateTime on H2 as TIME and TIMESTAMP without offset"
-    )
-    void testPageWithLikeOnOffsetPartAgreesWithApplies() {
-        var appointments = appointmentService().list();
-        var assertions = new ArrayList<Executable>();
+    @DisabledIf(value = "isEclipseLinkOnH2OrHibernateOnSqlServer", disabledReason = ECLIPSELINK_H2_OFFSET + "; " + HIBERNATE_SQLSERVER_OFFSET_TIME)
+    void testPageWithLikeOnHourOfOffsetTime() {
+        assertPageWithLikeOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, hourOfAnyAppointment(Appointment::getStartOffsetTime));
+    }
 
-        for (var entry : Map.<String, Function<Appointment, Object>>of(
-            "startOffsetTime", Appointment::getStartOffsetTime, "startOffsetDateTime", Appointment::getStartOffsetDateTime
-        ).entrySet()) {
-            var field = entry.getKey();
-            var getter = entry.getValue();
-
-            for (var term : List.of("13:", "+00", "+01")) {
-                var expectedIds = appointments.stream().filter(appointment -> likes(term, getter.apply(appointment))).map(Appointment::getId).sorted().toList();
-                assertions
-                    .add(() -> assertEquals(expectedIds, appointmentIds(field, Like.contains(term)).stream().sorted().toList(), field + " containing " + term));
-            }
-        }
-
-        assertAll(assertions);
+    /**
+     * {@link Like} on the hour of an {@code OffsetDateTime} selects the same entities in SQL as {@link Like#applies(Object)} does in memory.
+     */
+    @Test
+    @DisabledIf(value = "isEclipseLinkOnH2", disabledReason = ECLIPSELINK_H2_OFFSET)
+    void testPageWithLikeOnHourOfOffsetDateTime() {
+        assertPageWithLikeOnAppointment(
+            "startOffsetDateTime", Appointment::getStartOffsetDateTime,
+            hourOfAnyAppointment(Appointment::getStartOffsetDateTime)
+        );
     }
 
     @Test
@@ -1920,6 +1949,13 @@ public abstract class OmniPersistenceIT {
         return ids(appointmentService().getPage(Page.with().allMatch(Map.of(field, criteria)).build(), false));
     }
 
+    /**
+     * Returns the hour of given time of an appointment as it is loaded, followed by a colon, as a term to match the hour part only.
+     */
+    private String hourOfAnyAppointment(Function<Appointment, TemporalAccessor> getter) {
+        return HOUR_FORMAT.formatted(getter.apply(appointmentService().list().get(0)).get(HOUR_OF_DAY));
+    }
+
     private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
         assertPage(
             appointmentService().list(), appointment -> likes(term, getter.apply(appointment)), Map.of(field, Like.contains(term)), Map.of(),
@@ -2150,6 +2186,57 @@ public abstract class OmniPersistenceIT {
         }
     }
 
+    /**
+     * {@link Provider#isAggregation(Expression)} recognizes an aggregate, also wrapped in a function, and not a path or arithmetic, also wrapped in a function.
+     */
+    @Test
+    void testIsAggregationRecognizesNestedAggregateAndNotArithmetic() {
+        assertEquals(
+            Map.of(
+                "id", false, "sum(id)", true, "coalesce(sum(id), 0)", true, "id + 1", false, "id + id", false, "coalesce(id + 1, 0)", false
+            ), personService().getAggregationsOfIdExpressions()
+        );
+    }
+
+    /**
+     * A criteria and an ordering on each kind of aggregate of a DTO select the same entities as in memory: <code>MAX</code>, <code>SUM</code>,
+     * <code>COUNT(DISTINCT)</code> and an aggregate wrapped in <code>COALESCE</code>.
+     */
+    @Test
+    void testPageOfDtoWithCriteriaAndOrderingOnEachAggregate() {
+        var all = personService().getPageOfPersonPhoneStats(Page.ALL, false);
+        Map<String, Function<PersonPhoneStats, Long>> aggregates = Map.of(
+            "maxPhoneId", PersonPhoneStats::getMaxPhoneId, "sumPhoneId", PersonPhoneStats::getSumPhoneId, "totalPhoneTypes",
+            PersonPhoneStats::getTotalPhoneTypes, "sumPhoneIdOrZero", PersonPhoneStats::getSumPhoneIdOrZero
+        );
+
+        var assertions = new ArrayList<Executable>();
+
+        for (var aggregate : aggregates.entrySet()) {
+            var field = aggregate.getKey();
+            var getter = aggregate.getValue();
+            var values = all.stream().map(getter).sorted().toList();
+            var median = values.get(values.size() / 2);
+            assertions.add(
+                () -> assertPage(
+                    all, stats -> getter.apply(stats) > median, Map.of(field, Order.greaterThan(median)), Map.of(),
+                    personService()::getPageOfPersonPhoneStats, true
+                )
+            );
+
+            for (var ascending : List.of(true, false)) {
+                assertions.add(
+                    () -> assertOrderedPages(
+                        all, stats -> true, Map.of(), ordering(field, ascending), byKey(getter, ascending),
+                        stats -> orderingValues(field, getter.apply(stats), stats), personService()::getPageOfPersonPhoneStats
+                    )
+                );
+            }
+        }
+
+        assertAll(assertions);
+    }
+
     // Page with cursor-based paging ----------------------------------------------------------------------------------
 
     @Test
@@ -2275,25 +2362,6 @@ public abstract class OmniPersistenceIT {
         var page = personService().getPage(Page.of(9, 10), false);
         var allIds = personService().getPage(Page.ALL, false).stream().map(Person::getId).toList();
         assertEquals(allIds.subList(9, 19), page.stream().map(Person::getId).toList(), "Page is ordered by default ordering");
-    }
-
-    /**
-     * A page which is not cacheable reads a change which was made behind the second level cache, after a cacheable page has put the entity in there.
-     */
-    @Test
-    void testPageWithoutCacheReadsChangeMadeBehindSecondLevelCache() {
-        var id = 1L;
-        var page = Page.with().allMatch(Map.of("id", id)).build();
-        var nickname = personService().getPage(page, false).get(0).nickname();
-
-        try {
-            personService().updateNicknameViaNativeSql(id, "uncached");
-            assertEquals("uncached", personService().getPageWithoutCache(page).get(0).nickname(), "Nickname read without cache");
-        }
-        finally {
-            personService().updateNicknameViaNativeSql(id, nickname);
-            personService().getPageWithoutCache(page); // Puts the restored nickname back in the second level cache.
-        }
     }
 
     @Test

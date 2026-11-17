@@ -21,14 +21,18 @@ import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_RETRIEVE_MODE;
 import static org.omnifaces.persistence.JPA.QUERY_HINT_CACHE_STORE_MODE;
 import static org.omnifaces.utils.Collections.unmodifiableSet;
 import static org.omnifaces.utils.Lang.isOneOf;
+import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.findClass;
 import static org.omnifaces.utils.reflect.Reflections.findMethod;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 
 import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import jakarta.persistence.CacheRetrieveMode;
@@ -86,7 +90,9 @@ public enum Provider {
 
         @Override
         public boolean isAggregation(Expression<?> expression) {
-            return HIBERNATE_AGGREGATE_FUNCTION.get().isInstance(expression);
+            return HIBERNATE_AGGREGATE_FUNCTION.get().isInstance(expression) || findMethod(expression, "getArguments")
+                .map(getArguments -> isAnyAggregation(this, invokeMethod(expression, getArguments)))
+                .orElse(false);
         }
 
         @Override
@@ -145,7 +151,9 @@ public enum Provider {
 
         @Override
         public boolean isAggregation(Expression<?> expression) {
-            return ECLIPSELINK_FUNCTION_EXPRESSION_IMPL.get().isInstance(expression) && AGGREGATE_FUNCTIONS.contains(invokeMethod(expression, "getOperation"));
+            return ECLIPSELINK_FUNCTION_EXPRESSION_IMPL.get().isInstance(expression)
+                && (AGGREGATE_FUNCTIONS.contains(invokeMethod(expression, "getOperation"))
+                    || isAnyAggregation(this, invokeMethod(expression, "getChildExpressions")));
         }
 
         @Override
@@ -179,9 +187,13 @@ public enum Provider {
 
         @Override
         public boolean isAggregation(Expression<?> expression) {
-            // We could also invoke toValue() on it and then isAggregate(), but that requires ExpressionFactory and CriteriaQueryImpl arguments which are not
-            // trivial to get here.
-            return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase());
+            if (!OPENJPA_CRITERIA_EXPRESSION.get().isInstance(expression)) {
+                return false;
+            }
+
+            var aggregation = new AtomicBoolean();
+            invokeMethod(expression, "acceptVisit", createOpenJpaAggregationVisitor(aggregation));
+            return aggregation.get();
         }
 
         @Override
@@ -205,7 +217,16 @@ public enum Provider {
         @Override
         public void configureSecondLevelCache(Query query, boolean cacheable) {
             var openJpaQuery = OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query);
-            invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
+            var fetchPlan = invokeMethod(openJpaQuery, "getFetchPlan"); // OpenJPA does not bypass its data cache on the standard cache mode hints of a query.
+            invokeMethod(fetchPlan, "setQueryResultCacheEnabled", cacheable);
+            invokeMethod(
+                fetchPlan, "setCacheRetrieveMode",
+                enumValueOf(OPENJPA_DATA_CACHE_RETRIEVE_MODE.get(), (cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS).name())
+            );
+            invokeMethod(
+                fetchPlan, "setCacheStoreMode",
+                enumValueOf(OPENJPA_DATA_CACHE_STORE_MODE.get(), (cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH).name())
+            );
         }
 
         @Override
@@ -247,7 +268,63 @@ public enum Provider {
         "org.eclipse.persistence.internal.jpa.querydef.FunctionExpressionImpl"
     );
     private static final Optional<Class<Object>> OPENJPA_QUERY_IMPL = findClass("org.apache.openjpa.persistence.OpenJPAQuery");
+    private static final Optional<Class<Object>> OPENJPA_CRITERIA_EXPRESSION = findClass("org.apache.openjpa.persistence.criteria.CriteriaExpression");
+    private static final Optional<Class<Object>> OPENJPA_CRITERIA_EXPRESSION_VISITOR = findClass(
+        "org.apache.openjpa.persistence.criteria.CriteriaExpressionVisitor"
+    );
+    private static final Optional<Class<Object>> OPENJPA_TRAVERSAL_STYLE = findClass(
+        "org.apache.openjpa.persistence.criteria.CriteriaExpressionVisitor$TraversalStyle"
+    );
+    private static final Optional<Class<Object>> OPENJPA_SUM = findClass("org.apache.openjpa.persistence.criteria.Expressions$Sum");
+    private static final Optional<Class<Object>> OPENJPA_DATA_CACHE_RETRIEVE_MODE = findClass("org.apache.openjpa.kernel.DataCacheRetrieveMode");
+    private static final Optional<Class<Object>> OPENJPA_DATA_CACHE_STORE_MODE = findClass("org.apache.openjpa.kernel.DataCacheStoreMode");
     private static final Set<String> AGGREGATE_FUNCTIONS = unmodifiableSet("MIN", "MAX", "SUM", "AVG", "COUNT");
+
+    private static boolean isAnyAggregation(Provider provider, List<?> expressions) {
+        for (var expression : expressions) {
+            if (expression instanceof Expression<?> argument && provider.isAggregation(argument)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns an OpenJPA {@code CriteriaExpressionVisitor} which sets given flag when it enters an aggregate function.
+     */
+    private static Object createOpenJpaAggregationVisitor(AtomicBoolean aggregation) {
+        var visitorType = OPENJPA_CRITERIA_EXPRESSION_VISITOR.get();
+        var prefix = enumValueOf(OPENJPA_TRAVERSAL_STYLE.get(), "PREFIX");
+        return Proxy.newProxyInstance(visitorType.getClassLoader(), new Class<?>[] { visitorType }, (proxy, method, args) -> switch (method.getName()) {
+            case "enter" -> {
+                if (isOpenJpaAggregateFunction(args[0])) {
+                    aggregation.set(true);
+                }
+                yield null;
+            }
+            case "isVisited" -> false;
+            case "getTraversalStyle" -> prefix;
+            case "hashCode" -> System.identityHashCode(proxy);
+            case "equals" -> proxy == args[0];
+            case "toString" -> visitorType.getSimpleName();
+            default -> null;
+        });
+    }
+
+    /**
+     * Returns whether given OpenJPA criteria expression is an aggregate function. OpenJPA represents both the aggregate {@code SUM(x)} and the arithmetic
+     * {@code x + y} as {@code Expressions.Sum}, the latter with a second operand.
+     */
+    private static boolean isOpenJpaAggregateFunction(Object expression) {
+        return AGGREGATE_FUNCTIONS.contains(expression.getClass().getSimpleName().toUpperCase())
+            && !(OPENJPA_SUM.get().isInstance(expression) && accessField(expression, "e2") != null);
+    }
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private static Object enumValueOf(Class<Object> enumType, String name) {
+        return Enum.valueOf((Class) enumType, name);
+    }
 
     private static Object unwrapEntityManagerFactoryIfNecessary(EntityManagerFactory entityManagerFactory) {
         var packageName = entityManagerFactory.getClass().getPackage().getName();
@@ -294,7 +371,8 @@ public enum Provider {
     }
 
     /**
-     * Returns whether the given expression is an aggregation. The default implementation throws {@link UnsupportedOperationException}.
+     * Returns whether the given expression is an aggregation, or a function with an aggregation among its arguments, such as {@code COALESCE(SUM(x), 0)}. The
+     * default implementation throws {@link UnsupportedOperationException}.
      *
      * @param expression The expression to check.
      * @return Whether the given expression is an aggregation.

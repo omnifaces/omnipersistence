@@ -1184,6 +1184,77 @@ public class EntityRepositoryIT {
         return codesOf(page);
     }
 
+    /**
+     * The fetched elements of a page ordered by their nullable field are in the same order as the database sorts that field, including the position of
+     * <code>NULL</code> and of mixed case values in the binary collation of the test databases.
+     */
+    @Test
+    void testPageWithPhonesOrderedByLabelSortsFetchedPhonesAsDatabase() {
+        var phones = persistTemporaryPhones(Arrays.asList("a", "B", null));
+
+        try {
+            for (var ascending : List.of(true, false)) {
+                var expected = phoneRepository
+                    .list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 ORDER BY f.label " + (ascending ? "ASC" : "DESC"), 1L).stream()
+                    .map(Phone::getLabel)
+                    .toList();
+                var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L)).orderBy("phones.label", ascending).build(), false, "phones");
+                assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getLabel).toList(), "Ascending " + ascending);
+            }
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    /**
+     * The fetched elements of a page filtered by an {@link Order} on their String field are those which the database selects by that criteria, also with mixed
+     * case values in the binary collation of the test databases.
+     */
+    @Test
+    void testPageWithPhonesFilteredByOrderOnMixedCaseNumberKeepsPhonesSelectedByDatabase() {
+        var phones = persistTemporaryPhones(List.of("a1", "B1"));
+
+        try {
+            var expected = phoneRepository.list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 AND f.number > ?2", 1L, "a").stream().map(Phone::getId)
+                .collect(toSet());
+            var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L, "phones.number", Order.greaterThan("a"))).build(), false, "phones");
+            assertEquals(List.of(1L), page.stream().map(Person::getId).toList(), "Person");
+            assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getId).collect(toSet()), "Fetched phones");
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    private List<Phone> persistTemporaryPhones(List<String> values) {
+        var phones = new ArrayList<Phone>();
+
+        for (var value : values) {
+            var phone = new Phone();
+            phone.setType(Phone.Type.WORK);
+            phone.setNumber(value == null ? "temporary" : value);
+            phone.setLabel(value);
+            transactionServiceCDI.run(() -> {
+                var owner = personRepository.getById(1L);
+                phone.setOwner(owner);
+                phoneRepository.persist(phone);
+                owner.getPhones().add(phone);
+            });
+            phones.add(phone);
+        }
+
+        return phones;
+    }
+
+    private void deleteTemporaryPhones(List<Phone> phones) {
+        var ids = phones.stream().map(Phone::getId).filter(Objects::nonNull).collect(toSet());
+        transactionServiceCDI.run(() -> {
+            personRepository.getById(1L).getPhones().removeIf(phone -> ids.contains(phone.getId()));
+            ids.stream().map(phoneRepository::getById).filter(Objects::nonNull).forEach(phoneRepository::delete);
+        });
+    }
+
     @Test
     void testManageIfNecessaryOfDtoReturnsItUnchanged() {
         var card = new PersonCard(1L, "card@example.com", "address", 0L);
