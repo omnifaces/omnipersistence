@@ -84,14 +84,17 @@ class RootPathResolver implements PathResolver {
         String[] attributes = originalField.split("\\.");
         int depth = attributes.length;
 
+        String joinPath = null;
+
         for (int i = 0; i < depth; i++) {
             String attribute = attributes[i];
+            joinPath = toJoinPath(joinPath, attribute);
 
             if (!explicitJoin && isEmbedded(path, attribute)) {
                 path = path.get(attribute);
             }
             else if (i + 1 < depth || elementCollections.test(originalField)) {
-                path = explicitJoin || !joins.containsKey(attribute) ? join(path, attribute) : joins.get(attribute);
+                path = explicitJoin || !joins.containsKey(joinPath) ? join(path, attribute) : joins.get(joinPath);
             }
             else {
                 try {
@@ -205,30 +208,45 @@ class RootPathResolver implements PathResolver {
         return null;
     }
 
+    /**
+     * Returns the joins and fetches of given root, mapped by their path of attribute names from the root, such as <code>parent.parent</code>.
+     */
     private static Map<String, Path<?>> getJoins(From<?, ?> from) {
         Map<String, Path<?>> joins = new HashMap<>();
-        collectJoins(from, joins);
+        collectJoins(from, null, joins);
         return joins;
     }
 
-    private static void collectJoins(Path<?> path, Map<String, Path<?>> joins) {
+    private static void collectJoins(Path<?> path, String parentJoinPath, Map<String, Path<?>> joins) {
+        var joinPath = parentJoinPath;
+
+        if (path instanceof Join<?, ?> join) {
+            joinPath = toJoinPath(parentJoinPath, join.getAttribute().getName());
+        }
+        else if (path instanceof Fetch<?, ?> fetch) {
+            joinPath = toJoinPath(parentJoinPath, fetch.getAttribute().getName());
+        }
+
+        var childParentJoinPath = joinPath;
+
         if (path instanceof From<?, ?> from) {
-            from.getJoins().forEach(join -> collectJoins(join, joins));
+            from.getJoins().forEach(join -> collectJoins(join, childParentJoinPath, joins));
         }
         if (path instanceof FetchParent<?, ?> fetchParent) {
             try {
-                fetchParent.getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, joins));
+                fetchParent.getFetches().stream().filter(Path.class::isInstance).forEach(fetch -> collectJoins((Path<?>) fetch, childParentJoinPath, joins));
             }
             catch (NullPointerException openJPAWillThrowThisOnEmptyFetches) {
                 // Ignore and continue.
             }
         }
-        if (path instanceof Join<?, ?> join) {
-            joins.put(join.getAttribute().getName(), path);
+        if (joinPath != null) {
+            joins.put(joinPath, path);
         }
-        else if (path instanceof Fetch<?, ?> fetch) {
-            joins.put(fetch.getAttribute().getName(), path);
-        }
+    }
+
+    private static String toJoinPath(String parentJoinPath, String attribute) {
+        return parentJoinPath == null ? attribute : parentJoinPath + "." + attribute;
     }
 
 }

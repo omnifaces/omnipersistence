@@ -13,6 +13,7 @@
 package org.omnifaces.persistence;
 
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ELEMENT_COLLECTION;
+import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.MANY_TO_ONE;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_MANY;
 import static jakarta.persistence.metamodel.Attribute.PersistentAttributeType.ONE_TO_ONE;
@@ -209,7 +210,7 @@ public enum Provider {
 
         @Override
         public void configureOrderBySubquery(Query query) {
-            query.setHint(QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE, QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL);
+            query.setHint(QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE, QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_NONE);
         }
 
     },
@@ -234,11 +235,11 @@ public enum Provider {
      */
     public static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE = "openjpa.FetchPlan.SubclassFetchMode"; // none | join | parallel
     /**
-     * Returns the OpenJPA-specific "parallel" value of the "subclass fetch mode" query hint: {@value}.
+     * Returns the OpenJPA-specific "none" value of the "subclass fetch mode" query hint: {@value}.
      *
      * @since 2.0
      */
-    public static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL = "parallel";
+    public static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_NONE = "none";
 
     private static final Optional<Class<Object>> HIBERNATE_PROXY = findClass("org.hibernate.proxy.HibernateProxy");
     private static final Optional<Class<Object>> HIBERNATE_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
@@ -322,6 +323,18 @@ public enum Provider {
      */
     public boolean isOneToMany(Attribute<?, ?> attribute) {
         return attribute.getPersistentAttributeType() == ONE_TO_MANY;
+    }
+
+    /**
+     * Returns whether the given attribute is a one-to-many or a many-to-many relationship. The default implementation returns {@code true} if
+     * {@link #isOneToMany(Attribute)} does, or if {@link Attribute#getPersistentAttributeType()} equals {@link PersistentAttributeType#MANY_TO_MANY}.
+     *
+     * @param attribute The attribute to check.
+     * @return Whether the given attribute is a one-to-many or a many-to-many relationship.
+     * @since 2.0
+     */
+    public boolean isOneOrManyToMany(Attribute<?, ?> attribute) {
+        return isOneToMany(attribute) || attribute.getPersistentAttributeType() == MANY_TO_MANY;
     }
 
     /**
@@ -454,8 +467,9 @@ public enum Provider {
 
     /**
      * Applies hints to the given query which is ordered by a correlated subquery. The default implementation does nothing. OpenJPA sets its subclass fetch mode
-     * to parallel: in its default join mode, OpenJPA executes a query without a range as a union, which cannot hold a correlated subquery in its ORDER BY. A
-     * max results of {@link Integer#MAX_VALUE} does not prevent this, because OpenJPA treats it as no range.
+     * to none, so that it executes one SELECT: its join mode executes a query without a range as a union, and its parallel mode executes one query per
+     * subclass, and neither can be ordered by a correlated subquery. A max results of {@link Integer#MAX_VALUE} does not prevent the union, because OpenJPA
+     * treats it as no range.
      *
      * @param query The query which is ordered by a correlated subquery.
      * @since 2.0

@@ -89,7 +89,7 @@ Person           person  = personRepository.getById(id);            // null if a
 Person           person  = personRepository.getByIdWithLoadGraph(id, "Person.withPhones");
 List<Person>     persons = personRepository.getByIds(List.of(1L, 2L, 3L));
 List<Person>     persons = personRepository.list();
-Optional<Person> person  = personRepository.findFirst("WHERE email = ?1", email);
+Optional<Person> person  = personRepository.findFirst("WHERE e.email = ?1", email);
 ```
 
 The entity graph name passed to `getByIdWithLoadGraph` refers to a `@NamedEntityGraph` declared on the entity:
@@ -858,7 +858,7 @@ OmniPersistence ships its own Arquillian-based integration test suite. Every sce
 
 The tests cover CRUD, soft delete, `@NonDeletable`, auditing, and provider/database detection.
 They cover paginated queries with offset based and value based paging, also on nullable fields, multiple fields and DTO projections.
-They cover all `Criteria` types, also `null`, `Not` and `Like.pattern()`, on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
+They cover all `Criteria` types, also `null`, `Not` and `Like.pattern()`, on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany`, `@ManyToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
 They also cover the fetched elements of fetch fields, and the agreement of `Criteria#applies()` with the SQL.
 
 More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`.
@@ -892,10 +892,14 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 ## 16. Known issues
 
 - On OpenWebBeans (TomEE), only injection points of `EntityRepository` are supported. A programmatic lookup, such as via `Instance` or `CDI.current().select()`, is not.
+- On OpenWebBeans (TomEE), an `EntityRepository` of an entity and an `EntityRepository` of its subclass cannot both be injected in the same application, such as one of `Document` and one of `Invoice extends Document`. OpenWebBeans matches the repository of the subclass to the injection point of the superclass, so the deployment fails with `AmbiguousResolutionException`.
+- On EclipseLink with H2, `Like` on an `OffsetTime` or `OffsetDateTime` field does not match the offset, and on an `OffsetDateTime` not always the hour either. EclipseLink creates their columns as `TIME` and `TIMESTAMP` without offset, so the stored value is in another offset than the Java value.
 - On EclipseLink with H2, `Order` and `Between` on a `LocalTime` or `OffsetTime` field match the wrong rows, because EclipseLink binds a time as a `TIMESTAMP` on 1970-01-01, and H2 compares it to the time on the current date.
 - On EclipseLink, a collection of enums needs an explicit `@Enumerated`. Without it, EclipseLink maps the collection to a `VARCHAR` column while it binds the ordinal, so a criteria on it fails on strict databases such as PostgreSQL.
 - On EclipseLink and OpenJPA, `delete()` of a managed entity does not unset its ID, because they do not allow modifying the ID of a managed entity.
-- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany`, and a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
+- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, and a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
+- On OpenJPA, persisting an enum field with an `AttributeConverter` fails with a `ClassCastException`, so `Like` and `IgnoreCase` on such a field cannot be used either.
+- On OpenJPA, a criteria on a lazy association of the elements of a fetched collection, such as `categories.parent` with a fetch of `categories`, leaves the fetched collection empty. OpenJPA does not load that association on the fetched elements. The entities themselves are filtered correctly.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.

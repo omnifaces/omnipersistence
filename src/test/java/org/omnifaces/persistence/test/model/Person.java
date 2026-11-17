@@ -28,17 +28,20 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.NamedAttributeNode;
 import jakarta.persistence.NamedEntityGraph;
+import jakarta.persistence.NamedQuery;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.validation.constraints.NotNull;
 
 @Entity
 @NamedEntityGraph(name = Person.WITH_PHONES, attributeNodes = @NamedAttributeNode("phones"))
+@NamedQuery(name = Person.BY_EMAIL, query = "SELECT p FROM Person p WHERE p.email = :email")
 public class Person extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 
     public static final String WITH_PHONES = "Person.withPhones";
+    public static final String BY_EMAIL = "Person.byEmail";
 
     private @NotNull String email;
     private @NotNull @Enumerated Gender gender;

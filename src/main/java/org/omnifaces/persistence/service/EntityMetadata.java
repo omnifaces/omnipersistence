@@ -205,11 +205,11 @@ final class EntityMetadata {
         }
 
         /**
-         * Returns whether the given field path is nested in a <code>@OneToMany</code> field, e.g. <code>phones.number</code> when <code>phones</code> is a
-         * <code>@OneToMany</code> field.
+         * Returns whether the given field path is nested in a <code>@OneToMany</code> or <code>@ManyToMany</code> field, e.g. <code>phones.number</code> when
+         * <code>phones</code> is a <code>@OneToMany</code> field.
          *
          * @param field The field path.
-         * @return Whether the given field path is nested in a <code>@OneToMany</code> field.
+         * @return Whether the given field path is nested in a <code>@OneToMany</code> or <code>@ManyToMany</code> field.
          */
         boolean isOneToMany(String field) {
             return getPathMapping(field).nestedInOneToMany();
@@ -266,7 +266,7 @@ final class EntityMetadata {
                     return PathMapping.unresolved(nestedInOneToMany);
                 }
 
-                nestedInOneToMany |= attribute.oneToMany();
+                nestedInOneToMany |= attribute.oneOrManyToMany();
 
                 if (attribute.nestedType() == null) {
                     return PathMapping.unresolved(nestedInOneToMany);
@@ -293,7 +293,8 @@ final class EntityMetadata {
                 typeMappings.put(
                     attribute.getName(),
                     new AttributeMapping(
-                        provider.isElementCollection(attribute), provider.isOneToMany(attribute), provider.isManyOrOneToOne(attribute), getNestedType(attribute)
+                        provider.isElementCollection(attribute), provider.isOneOrManyToMany(attribute), provider.isManyOrOneToOne(attribute),
+                        getNestedType(attribute)
                     )
                 );
             }
@@ -361,11 +362,11 @@ final class EntityMetadata {
      * The association mapping of an attribute.
      *
      * @param elementCollection Whether the attribute is an <code>@ElementCollection</code>.
-     * @param oneToMany Whether the attribute is a <code>@OneToMany</code>.
+     * @param oneOrManyToMany Whether the attribute is a <code>@OneToMany</code> or <code>@ManyToMany</code>.
      * @param manyOrOneToOne Whether the attribute is a <code>@ManyToOne</code> or <code>@OneToOne</code>.
      * @param nestedType The entity type the attribute refers to, or <code>null</code> if it does not refer to one.
      */
-    private record AttributeMapping(boolean elementCollection, boolean oneToMany, boolean manyOrOneToOne, Class<?> nestedType) {
+    private record AttributeMapping(boolean elementCollection, boolean oneOrManyToMany, boolean manyOrOneToOne, Class<?> nestedType) {
     }
 
     /**

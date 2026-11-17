@@ -594,7 +594,7 @@ public final class JPA {
         Bindable<?> model = path.getModel();
 
         if (model instanceof Attribute<?, ?> attribute && attribute.getJavaMember() instanceof AnnotatedElement member) {
-            var enumerated = member.getAnnotation(Enumerated.class);
+            var enumerated = findEnumerated(path);
 
             if (enumerated != null) {
                 return enumerated.value() == EnumType.ORDINAL;
@@ -605,6 +605,24 @@ public final class JPA {
         }
 
         return false;
+    }
+
+    /**
+     * Returns whether given path is {@link Enumerated} by {@link EnumType#STRING}, so that its column holds the name of the enum constant.
+     *
+     * @param path Path of interest.
+     * @return Whether given path is {@link Enumerated} by {@link EnumType#STRING}.
+     * @since 2.0
+     */
+    public static boolean isEnumeratedByName(Path<?> path) {
+        var enumerated = findEnumerated(path);
+        return enumerated != null && enumerated.value() == EnumType.STRING;
+    }
+
+    private static Enumerated findEnumerated(Path<?> path) {
+        return path.getModel() instanceof Attribute<?, ?> attribute && attribute.getJavaMember() instanceof AnnotatedElement member
+            ? member.getAnnotation(Enumerated.class)
+            : null;
     }
 
     // Helpers ----------------------------------------------------------------------------------------------------------------------------

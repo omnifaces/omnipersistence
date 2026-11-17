@@ -18,6 +18,7 @@ import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElse;
+import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
 import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
@@ -178,7 +179,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     public <E, T extends E> List<T> runPostponedFetches(
         Page page, EntityManager entityManager, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, Function<Object, ?> idOf,
-        List<T> entities
+        java.util.function.Predicate<Object> isEntity, List<T> entities
     )
     {
         var fetchPaths = postponedFetches.stream().filter(path -> !path.contains(".")).sorted().toList();
@@ -196,7 +197,13 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
-        buildPostponedFetches(page, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
+        var filters = fetchPaths.stream().collect(
+            toMap(
+                identity(),
+                path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
+            )
+        );
+        buildPostponedFetches(page, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
@@ -252,17 +259,20 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * returned it.
      */
     private static <T> void buildPostponedFetches(
-        Page page, List<T> entities, List<String> fetchPaths, Map<String, Map<Object, Object>> fetchedEntities, List<List<Object>> fetchedEntityProperties
+        Page page, Map<String, Map<String, Object>> filters, List<T> entities, List<String> fetchPaths, Map<String, Map<Object, Object>> fetchedEntities,
+        List<List<Object>> fetchedEntityProperties
     )
     {
-        entities.forEach(entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page).fetchedEntityProperties()));
+        entities.forEach(
+            entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page, filters).fetchedEntityProperties())
+        );
     }
 
     private record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
     }
 
     private static <T> EntityRow<T> processEntityFetches(
-        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page
+        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, Map<String, Map<String, Object>> filters
     )
     {
         var copies = paths.stream().map(path -> {
@@ -272,7 +282,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
                 return raw; // @OneToOne / @ManyToOne
             }
 
-            var filtered = col.stream().filter(item -> matchesFetchFilters(item, collectFiltersForFetch(path, page.getRequiredCriteria())))
+            var pathFilters = filters.get(path);
+            var filtered = col.stream().filter(item -> matchesFetchFilters(item, pathFilters))
                 .collect(toCollection(ArrayList::new));
             var itemComp = buildFetchItemComparator(path, page.getOrdering());
 
@@ -346,16 +357,46 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return Optional.empty();
     }
 
-    private static Map<String, Object> collectFiltersForFetch(String fetchPath, Map<String, Object> requiredCriteria) {
+    /**
+     * Returns the criteria on the fields of the elements of given fetch path, mapped by field. An entity value is replaced by an {@link EntityIdentity}, so
+     * that it matches the fetched entity with the same identifier, also when the entity does not implement <code>equals()</code>.
+     */
+    private static Map<String, Object> collectFiltersForFetch(
+        String fetchPath, Map<String, Object> requiredCriteria, java.util.function.Predicate<Object> isEntity, Function<Object, ?> idOf
+    )
+    {
         var filters = new LinkedHashMap<String, Object>();
 
         for (var entry : requiredCriteria.entrySet()) {
             if (entry.getKey().startsWith(fetchPath + ".")) {
-                filters.put(entry.getKey().substring(fetchPath.length() + 1), entry.getValue());
+                filters.put(entry.getKey().substring(fetchPath.length() + 1), toEntityIdentityIfEntity(entry.getValue(), isEntity, idOf));
             }
         }
 
         return filters;
+    }
+
+    private static Object toEntityIdentityIfEntity(Object value, java.util.function.Predicate<Object> isEntity, Function<Object, ?> idOf) {
+        if (isMultiValued(value)) {
+            return stream(value).map(item -> toEntityIdentityIfEntity(item, isEntity, idOf)).toList();
+        }
+        else if (value != null && isEntity.test(value)) {
+            return new EntityIdentity(idOf.apply(value), idOf);
+        }
+        else {
+            return value;
+        }
+    }
+
+    /**
+     * Matches a fetched entity by its identifier.
+     */
+    private record EntityIdentity(Object id, Function<Object, ?> idOf) {
+
+        boolean matches(Object entity) {
+            return entity != null && Objects.equals(id, idOf.apply(entity));
+        }
+
     }
 
     private static boolean matchesFetchFilters(Object item, Map<String, Object> filters) {
@@ -379,6 +420,9 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         }
         else if (criteria instanceof Criteria<?> c) {
             return c.applies(fieldValue);
+        }
+        else if (criteria instanceof EntityIdentity entityIdentity) {
+            return entityIdentity.matches(fieldValue);
         }
         else if (isMultiValued(criteria)) {
             return stream(criteria).anyMatch(item -> appliesFetchFilter(item, fieldValue));

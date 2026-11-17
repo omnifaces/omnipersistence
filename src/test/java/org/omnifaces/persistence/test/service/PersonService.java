@@ -13,7 +13,10 @@
 package org.omnifaces.persistence.test.service;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
+import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
+import static org.omnifaces.persistence.JPA.castAsString;
 import static org.omnifaces.persistence.JPA.concat;
+import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
 
@@ -81,6 +84,36 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPage(page, false, (builder, query, person) -> {
             getById(1L);
         });
+    }
+
+    /**
+     * Restricts the page to the persons whose ID contains the given term, via a <code>LIKE</code> predicate built in the query builder. When the given phone
+     * service is not <code>null</code>, it is invoked first.
+     */
+    public PartialResultList<Person> getPageViaQueryBuilderBuildingLike(Page page, PhoneService phoneService, String term) {
+        return getPage(page, false, (builder, query, person) -> {
+            if (phoneService != null) {
+                phoneService.getById(1L);
+            }
+
+            query.where(builder.like(castAsString(builder, person.get("id")), "%" + escapeLike(term) + "%", LIKE_ESCAPE));
+        });
+    }
+
+    public Person getByEmailViaNamedTypedQuery(String email) {
+        return createNamedTypedQuery(Person.BY_EMAIL).setParameter("email", email).getSingleResult();
+    }
+
+    public Person getByEmailViaNamedQuery(String email) {
+        return (Person) createNamedQuery(Person.BY_EMAIL).setParameter("email", email).getSingleResult();
+    }
+
+    public Person getByEmailViaTypedQuery(String email) {
+        return createTypedQuery("SELECT e FROM Person e WHERE e.email = ?1").setParameter(1, email).getSingleResult();
+    }
+
+    public Long getIdByEmailViaTypedQuery(String email) {
+        return createTypedQuery("SELECT e.id FROM Person e WHERE e.email = ?1", Long.class).setParameter(1, email).getSingleResult();
     }
 
     public PartialResultList<PersonCard> getPageOfPersonCards(Page page, boolean count) {

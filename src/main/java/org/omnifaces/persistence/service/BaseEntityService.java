@@ -581,7 +581,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Optional&lt;Foo&gt; foo = find("WHERE bar = ?1 AND baz = ?2", bar, baz);
+     * Optional&lt;Foo&gt; foo = find("WHERE e.bar = ?1 AND e.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -609,7 +609,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
+     * Optional&lt;Foo&gt; foo = find("WHERE e.bar = :bar AND e.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -676,7 +676,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = ?1 AND baz = ?2", bar, baz);
+     * Optional&lt;Foo&gt; foo = findFirst("WHERE e.bar = ?1 AND e.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -704,7 +704,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
+     * Optional&lt;Foo&gt; foo = findFirst("WHERE e.bar = :bar AND e.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -984,7 +984,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * List&lt;Foo&gt; foos = list("WHERE bar = ?1 AND baz = ?2", bar, baz);
+     * List&lt;Foo&gt; foos = list("WHERE e.bar = ?1 AND e.baz = ?2", bar, baz);
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -1011,7 +1011,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
+     * List&lt;Foo&gt; foos = list("WHERE e.bar = :bar AND e.baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
@@ -1096,15 +1096,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     private TypedQuery<E> createQuery(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
-        var criteriaBuilder = getEntityManager().getCriteriaBuilder();
-        var criteriaQuery = criteriaBuilder.createQuery(entityType);
-        var root = criteriaQuery.from(entityType);
-        queryBuilder.build(criteriaBuilder, criteriaQuery, root);
-        restrictNotSoftDeleted(criteriaQuery, root, criteriaBuilder);
+        return runWithCurrentInstance(() -> {
+            var criteriaBuilder = getEntityManager().getCriteriaBuilder();
+            var criteriaQuery = criteriaBuilder.createQuery(entityType);
+            var root = criteriaQuery.from(entityType);
+            queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+            restrictNotSoftDeleted(criteriaQuery, root, criteriaBuilder);
 
-        var query = getEntityManager().createQuery(criteriaQuery);
-        setMappedParameters(query, parameters);
-        return query;
+            var query = getEntityManager().createQuery(criteriaQuery);
+            setMappedParameters(query, parameters);
+            return query;
+        });
     }
 
     // Insert actions -------------------------------------------------------------------------------------------------
@@ -1449,8 +1451,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param <E> The generic entity type.
      * @param entity Entity to manage, may be <code>null</code>.
-     * @return The managed entity, or <code>null</code> when <code>null</code> was supplied. It leniently returns the very same argument if the entity has no ID
-     * or has been deleted in the meanwhile.
+     * @return The managed entity, or <code>null</code> when <code>null</code> was supplied. It leniently returns the very same argument if it is a DTO, which
+     * is a subclass of an entity, if the entity has no ID, or if it has been deleted in the meanwhile.
      * @throws IllegalArgumentException When the given entity is actually not an entity.
      */
     @SuppressWarnings("hiding")
@@ -1458,6 +1460,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     protected <E> E manageIfNecessary(@Nullable E entity) {
         if (entity == null) {
             return null;
+        }
+
+        if (!provider.isProxy(entity) && provider.getEntityType(entity) != entity.getClass()) {
+            return entity;
         }
 
         var id = idGetter.apply(entity);
@@ -1788,7 +1794,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
-     * criteria.put("bar", bar); // Exact match.
+     * criteria.put("bar", bar); // Exact match, case insensitive on a String.
      * criteria.put("baz", IgnoreCase.value(baz)); // Case insensitive match.
      * criteria.put("faz", Like.contains(faz)); // Case insensitive LIKE match.
      * criteria.put("kaz", Order.greaterThan(kaz)); // Greater than match.
@@ -1825,7 +1831,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      * Map&lt;String, Object&gt; criteria = new HashMap&lt;&gt;();
-     * criteria.put("bar", bar); // Exact match.
+     * criteria.put("bar", bar); // Exact match, case insensitive on a String.
      * criteria.put("baz", IgnoreCase.value(baz)); // Case insensitive match.
      * criteria.put("faz", Like.contains(faz)); // Case insensitive LIKE match.
      * criteria.put("kaz", Order.greaterThan(kaz)); // Greater than match.
@@ -1835,7 +1841,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
      * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
-     * call {@link EntityManager#flush()} before when there are any.
+     * call {@link EntityManager#flush()} before when there are any. A fetched collection holds only the elements matching the criteria on its fields, such as
+     * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
+     * {@link #save(Object)}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -1859,7 +1867,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <p>
      * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
      * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
-     * call {@link EntityManager#flush()} before when there are any.
+     * call {@link EntityManager#flush()} before when there are any. A fetched collection holds only the elements matching the criteria on its fields, such as
+     * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
+     * {@link #save(Object)}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -2094,7 +2104,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
                 pageBuilder.getPage(), getEntityManager(), entityType,
-                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, entities
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, this::isEntity, entities
             );
         }
 
@@ -2103,8 +2113,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the entities of the page in two queries: first the IDs of the page in the desired order, then the entities having those IDs, which are put in the
-     * order of the IDs. This is used when ordering on a field of a <code>@OneToMany</code> or <code>@ElementCollection</code> on DB2, because DB2 does not
-     * accept a correlated subquery as order expression (SQLSTATE 42703), see {@link #buildIdQuery(PageBuilder, CriteriaBuilder)}.
+     * order of the IDs. This is used when ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> on DB2,
+     * because DB2 does not accept a correlated subquery as order expression (SQLSTATE 42703), see {@link #buildIdQuery(PageBuilder, CriteriaBuilder)}.
      */
     private <T extends E> List<T> getResultListViaIdQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
         var ids = buildIdQuery(pageBuilder, criteriaBuilder).getResultList();
@@ -2334,8 +2344,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the path of the <code>@OneToMany</code> or <code>@ElementCollection</code> field which given field is or is nested in, or <code>null</code> when
-     * it is in none of them.
+     * Returns the path of the <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> field which given field is or is nested in,
+     * or <code>null</code> when it is in none of them.
      */
     private String findCollectionPath(String field) {
         var attributes = field.split("\\.");
@@ -2352,10 +2362,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds the order of given ordering on a field of a <code>@OneToMany</code> or <code>@ElementCollection</code>. The root entities are ordered by the
-     * smallest value of the field among the elements of the collection when ascending, or else by the largest one. Only the elements matching the required
-     * criteria on the collection are considered, with multiple values and a negation applied per element; optional criteria are not. A plain order on the field
-     * would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database orders <code>null</code>.
+     * Builds the order of given ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code>. The root
+     * entities are ordered by the smallest value of the field among the elements of the collection when ascending, or else by the largest one. Only the
+     * elements matching the required criteria on the collection are considered, with multiple values and a negation applied per element; optional criteria are
+     * not. A plain order on the field would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database
+     * orders <code>null</code>.
      * <p>
      * The order is a correlated subquery wrapped in <code>COALESCE</code> with a <code>NULL</code> fallback, because EclipseLink does not accept a subquery as
      * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts neither, so there the order is built by
@@ -2386,11 +2397,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds the smallest value of a field of a <code>@OneToMany</code> or <code>@ElementCollection</code> among the elements of the collection when given
-     * ordering is ascending, or else the largest one, as an aggregate over a <code>LEFT JOIN</code> of the collection, for use in a query grouped by the ID. It
-     * considers the same elements as {@link #buildCollectionOrder(Entry, String, Page, CriteriaQuery, CriteriaBuilder, PathResolver, Map)}: the required
-     * criteria on the collection are applied per element via a <code>CASE</code>, so that an entity without matching elements gets <code>NULL</code>. These
-     * criteria are added to given element predicates.
+     * Builds the smallest value of a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> among the elements of the
+     * collection when given ordering is ascending, or else the largest one, as an aggregate over a <code>LEFT JOIN</code> of the collection, for use in a query
+     * grouped by the ID. It considers the same elements as
+     * {@link #buildCollectionOrder(Entry, String, Page, CriteriaQuery, CriteriaBuilder, PathResolver, Map)}: the required criteria on the collection are
+     * applied per element via a <code>CASE</code>, so that an entity without matching elements gets <code>NULL</code>. These criteria are added to given
+     * element predicates.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private Expression<?> buildCollectionAggregate(
@@ -2768,8 +2780,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether a criteria with a single value on a field nested in a <code>@OneToMany</code> is built as correlated subquery by
-     * {@link #buildArrayPredicate}. This is so in the data query, because a JOIN on the main query would return an entity once per matching element. In the
+     * Returns whether a criteria with a single value on a field nested in a <code>@OneToMany</code> or <code>@ManyToMany</code> is built as correlated subquery
+     * by {@link #buildArrayPredicate}. This is so in the data query, because a JOIN on the main query would return an entity once per matching element. In the
      * count query, the JOIN is inside the subquery selecting the entities to count, so it does not multiply the count, and OpenJPA cannot resolve a nested
      * correlated subquery there. A negated value is always built as correlated subquery, because a negated JOIN matches any other element instead of no
      * element.
@@ -2856,8 +2868,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds a predicate on multiple values, or on a value of a field nested in a <code>@OneToMany</code>. A negation is applied on the comparisons and not
-     * around the predicate, because OpenJPA cannot render a <code>NOT</code> around a comparison with a correlated subquery.
+     * Builds a predicate on multiple values, or on a value of a field nested in a <code>@OneToMany</code> or <code>@ManyToMany</code>. A negation is applied on
+     * the comparisons and not around the predicate, because OpenJPA cannot render a <code>NOT</code> around a comparison with a correlated subquery.
      */
     private Predicate buildArrayPredicate(
         Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
@@ -2933,11 +2945,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds a correlated subquery which counts the distinct elements of given <code>@OneToMany</code> or <code>@ElementCollection</code> field matching any of
-     * given items. This simulates an IN clause without a JOIN on the main query, so that the main query still returns all elements of the field. Plain items
-     * are assumed to each match at most one distinct element, so all of them must match: <code>COUNT = items</code>. A {@link Criteria} item such as
-     * <code>Like</code> may match more than one element, so it gets its own subquery wherein at least one element must match: <code>COUNT &gt; 0</code>. When
-     * negated, the comparison is inverted.
+     * Builds a correlated subquery which counts the distinct elements of given <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> field matching any of given items. This simulates an IN clause without a JOIN on the main query, so that the main query
+     * still returns all elements of the field. Plain items are assumed to each match at most one distinct element, so all of them must match:
+     * <code>COUNT = items</code>. A {@link Criteria} item such as <code>Like</code> may match more than one element, so it gets its own subquery wherein at
+     * least one element must match: <code>COUNT &gt; 0</code>. When negated, the comparison is inverted.
      */
     private Predicate buildCollectionSubqueryPredicate(
         Class<?> type, String field, List<?> items, boolean anyMatch, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
@@ -2974,7 +2986,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns given type, or when it is <code>null</code>, the type of the elements of given <code>@OneToMany</code> or <code>@ElementCollection</code> field.
+     * Returns given type, or when it is <code>null</code>, the type of the elements of given <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> field.
      */
     private Class<?> resolveElementType(Class<?> type, String field, AbstractQuery<?> query, PathResolver pathResolver) {
         if (type != null) {
@@ -2989,8 +3002,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Parses each plain value in given criteria on an element of a <code>@OneToMany</code> or <code>@ElementCollection</code>, so that an unparseable value
-     * throws {@link IllegalArgumentException} before any parameter of the criteria is created.
+     * Parses each plain value in given criteria on an element of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code>, so
+     * that an unparseable value throws {@link IllegalArgumentException} before any parameter of the criteria is created.
      */
     private void parseElementCriteria(Class<?> type, Object criteria) {
         var value = unwrapNot(criteria);
@@ -3004,8 +3017,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Builds the predicate of given criteria on given path of an element of a <code>@OneToMany</code> or <code>@ElementCollection</code> in a correlated
-     * subquery. Multiple values are ORed.
+     * Builds the predicate of given criteria on given path of an element of a <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> in a correlated subquery. Multiple values are ORed.
      */
     private Predicate buildElementPredicate(
         Expression<?> path, Class<?> type, Object criteria, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
