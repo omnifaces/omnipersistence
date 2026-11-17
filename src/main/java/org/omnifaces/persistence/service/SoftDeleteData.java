@@ -14,12 +14,18 @@ package org.omnifaces.persistence.service;
 
 import static java.lang.Character.toUpperCase;
 import static java.lang.String.format;
+import static org.omnifaces.persistence.service.BaseEntityService.isEmptyMultiValue;
 import static org.omnifaces.utils.reflect.Reflections.accessField;
 import static org.omnifaces.utils.reflect.Reflections.invokeMethod;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
 
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.SoftDeletable;
@@ -80,6 +86,20 @@ class SoftDeleteData {
 
     public void setSoftDeleted(Object entity, boolean deleted) {
         invokeMethod(entity, setterName, typeActive ^ deleted);
+    }
+
+    /**
+     * Returns whether given criteria restrict the soft deletable field.
+     */
+    public boolean isRestrictedBy(Map<String, Object> criteria) {
+        return softDeletable && criteria.containsKey(fieldName) && !isEmptyMultiValue(criteria.get(fieldName));
+    }
+
+    /**
+     * Returns the predicate which excludes soft deleted rows of given root, or <code>null</code> when the entity is not soft deletable.
+     */
+    public Predicate buildNotSoftDeletedPredicate(Path<?> root, CriteriaBuilder criteriaBuilder) {
+        return softDeletable ? criteriaBuilder.equal(root.get(fieldName), typeActive) : null;
     }
 
     public String getWhereClause(boolean includeSoftDeleted) {

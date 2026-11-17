@@ -397,6 +397,81 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * A page and a {@link CriteriaQueryBuilder} exclude soft deleted entities, of both soft deletable types. A page with criteria on the soft deletable field
+     * returns the soft deleted ones as well.
+     */
+    @Test
+    void testPageAndCriteriaQueryBuilderExcludeSoftDeleted() {
+        var active = new Text();
+        var softDeleted = new Text();
+        var activeId = transactionServiceCDI.call(() -> textRepository.persist(active));
+        var softDeletedId = transactionServiceCDI.call(() -> textRepository.persist(softDeleted));
+        var articles = List.of(persistArticle("active", null, "b"), persistArticle("deleted", null, "a"));
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(softDeletedId)));
+            transactionServiceCDI.run(() -> articleRepository.softDelete(articleRepository.getById(articles.get(1).getCode())));
+            var ids = List.of(activeId, softDeletedId);
+
+            var allTexts = textRepository.getPage(Page.ALL, true);
+            assertEquals(textRepository.list().stream().map(Text::getId).toList(), allTexts.stream().map(Text::getId).toList(), "Page without criteria");
+            assertEquals(textRepository.list().size(), allTexts.getEstimatedTotalNumberOfResults(), "Count without criteria");
+            assertEquals(List.of(activeId), idsOfTexts(Map.of("id", ids)), "Page with criteria");
+            assertEquals(List.of(softDeletedId), idsOfTexts(Map.of("id", ids, "active", false)), "Page with criteria on soft deletable field");
+            assertEquals(
+                List.of(activeId), textRepository.list((criteriaBuilder, query, root) -> query.where(root.get("id").in(ids)), Map.of()).stream()
+                    .map(Text::getId).toList(),
+                "List via CriteriaQueryBuilder"
+            );
+
+            assertEquals(codesOf(articles.subList(0, 1)), codesOf(articleRepository.getPage(Page.with().allMatch(TITLED).build(), true)), "Articles");
+            assertEquals(
+                codesOf(articles.subList(0, 1)),
+                codesOf(articleRepository.getPage(Page.with().range(0, 1).allMatch(TITLED).orderBy("tags", true).build(), true)),
+                "First article ordered by tags"
+            );
+            var emptySoftDeleteCriteria = new HashMap<>(TITLED);
+            emptySoftDeleteCriteria.put("deleted", List.of());
+            assertEquals(
+                codesOf(articles.subList(0, 1)), codesOf(articleRepository.getPage(Page.with().allMatch(emptySoftDeleteCriteria).build(), true)),
+                "Articles with empty criteria on soft deletable field"
+            );
+            var softDeletedArticles = new HashMap<>(TITLED);
+            softDeletedArticles.put("deleted", true);
+            assertEquals(
+                codesOf(articles.subList(1, 2)), codesOf(articleRepository.getPage(Page.with().allMatch(softDeletedArticles).build(), true)),
+                "Articles with criteria on soft deletable field"
+            );
+        }
+        finally {
+            transactionServiceCDI.run(() -> List.of(activeId, softDeletedId).forEach(id -> textRepository.delete(textRepository.getById(id, true))));
+            deleteArticles(articles);
+        }
+    }
+
+    private List<Long> idsOfTexts(Map<String, Object> criteria) {
+        var page = textRepository.getPage(Page.with().allMatch(criteria).build(), true);
+        assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + criteria);
+        return page.stream().map(Text::getId).toList();
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not support EntityManager#getEntityGraph()")
+    void testGetByIdWithLoadGraphExcludesSoftDeleted() {
+        var text = new Text();
+        var id = transactionServiceCDI.call(() -> textRepository.persist(text));
+
+        try {
+            assertNotNull(textRepository.getByIdWithLoadGraph(id, Text.PLAIN), "Active text");
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(id)));
+            assertNull(textRepository.getByIdWithLoadGraph(id, Text.PLAIN), "Soft deleted text");
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id, true)));
+        }
+    }
+
+    /**
      * A fetch in a {@link CriteriaQueryBuilder} of <code>list()</code>, <code>find()</code> and <code>findFirst()</code> loads the fetched association, on
      * every provider.
      */
@@ -459,6 +534,30 @@ public class EntityRepositoryIT {
 
         transaction.run(() -> textRepository.delete(textRepository.getById(id)));
         assertNull(textRepository.getById(id), "Deleted text");
+    }
+
+    /**
+     * A soft deleted entity stays excluded from {@code getById()} when the persistence context already holds a reference to it.
+     */
+    @Test
+    void testGetByIdOfSoftDeletedEntityReferencedInPersistenceContextReturnsNull() {
+        var text = new Text();
+        var id = transactionServiceCDI.call(() -> textRepository.persist(text));
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(id)));
+            assertNull(transactionServiceCDI.call(() -> {
+                textRepository.getEntityManager().getReference(Text.class, id);
+                return textRepository.getById(id);
+            }), "Soft deleted text referenced in persistence context");
+            assertNotNull(transactionServiceCDI.call(() -> {
+                textRepository.getEntityManager().getReference(Text.class, id);
+                return textRepository.getSoftDeletedById(id);
+            }), "Soft deleted text referenced in persistence context via getSoftDeletedById");
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id, true)));
+        }
     }
 
     /**
@@ -993,6 +1092,64 @@ public class EntityRepositoryIT {
             deleteArticles(articles);
             deleteCategories(List.of(category));
         }
+    }
+
+    @Test
+    void testCriteriaOnElementCollectionMatchesDuplicateAndCaseVariantItemsOnce() {
+        var articles = List.of(persistArticle("tagged", null, "x", "y"));
+
+        try {
+            var expected = codesOf(articles);
+            assertEquals(expected, codesOfTagged(List.of("x", "x")), "Duplicate items");
+            assertEquals(expected, codesOfTagged(List.of("x", "X")), "Case variant items");
+            assertEquals(expected, codesOfTagged(List.of("X", "y")), "Case variant item and other item");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testCriteriaOnElementCollectionMatchesNestedMultiValuedItem() {
+        var articles = List.of(persistArticle("rated", null, Set.of(1, 3), Set.of()));
+
+        try {
+            var criteria = new HashMap<>(TITLED);
+            criteria.put("ratings", List.of(List.of(1, 2), 3));
+            var page = articleRepository.getPage(Page.with().allMatch(criteria).build(), true);
+            assertEquals(codesOf(articles), codesOf(page), "Nested multi-valued item and other item");
+            assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of nested multi-valued item and other item");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    @Test
+    @DisabledIfSystemProperty(
+        named = TEST_DATABASE, matches = "(?i)mysql|sqlserver", disabledReason = "Case insensitive collation rejects case variant elements"
+    )
+    void testCriteriaOnElementCollectionMatchesCaseVariantElementsOnce() {
+        var articles = List.of(persistArticle("java", null, "Java", "java", "y"));
+
+        try {
+            var expected = codesOf(articles);
+            assertEquals(expected, codesOfTagged("java"), "Item matching two case variant elements");
+            assertEquals(expected, codesOfTagged(List.of("JAVA")), "Single item list matching two case variant elements");
+            assertEquals(expected, codesOfTagged(List.of("java", "y")), "Item matching two case variant elements and other item");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    private List<Long> codesOfTagged(Object tags) {
+        var criteria = new HashMap<>(TITLED);
+        criteria.put("tags", tags);
+        var page = articleRepository.getPage(Page.with().allMatch(criteria).build(), true);
+        assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + tags);
+        return codesOf(page);
     }
 
     @Test

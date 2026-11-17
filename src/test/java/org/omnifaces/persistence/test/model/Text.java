@@ -15,13 +15,17 @@ package org.omnifaces.persistence.test.model;
 import static org.omnifaces.persistence.model.SoftDeletable.Type.ACTIVE;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.NamedEntityGraph;
 
 import org.omnifaces.persistence.model.SoftDeletable;
 
 @Entity
+@NamedEntityGraph(name = Text.PLAIN)
 public class Text extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
+
+    public static final String PLAIN = "Text.plain";
 
     @SoftDeletable(type = ACTIVE)
     private boolean active = true;

@@ -248,6 +248,18 @@ public class CriteriaTest {
     class OrderTest {
 
         @Test
+        void appliesComparesByNumericValueAcrossType() {
+            assertTrue(Order.greaterThan(5).applies(6L));
+            assertFalse(Order.greaterThan(5).applies(new BigDecimal("4.5")));
+        }
+
+        @Test
+        void appliesComparesInfinityAsDouble() {
+            assertTrue(Order.greaterThan(0.0).applies(Double.POSITIVE_INFINITY));
+            assertFalse(Order.greaterThan(0.0).applies(Double.NEGATIVE_INFINITY));
+        }
+
+        @Test
         void greaterThanApplies() {
             var order = Order.greaterThan(18);
             assertTrue(order.applies(19));
@@ -548,6 +560,25 @@ public class CriteriaTest {
         @Test
         void appliesReturnsTrueForNumberPassedDirectly() {
             assertTrue(Numeric.value(42).applies(42));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        void appliesComparesByNumericValueAcrossScale() {
+            var numeric = Numeric.parse("5", (Class<Number>) (Class<?>) BigDecimal.class);
+            assertTrue(numeric.applies(new BigDecimal("5.00")));
+        }
+
+        @Test
+        void appliesComparesByNumericValueAcrossType() {
+            assertTrue(Numeric.value(5).applies(5L));
+            assertFalse(Numeric.value(5).applies(5.5));
+        }
+
+        @Test
+        void appliesComparesNaNAndInfinityAsDouble() {
+            assertFalse(Numeric.value(1.0).applies(Double.NaN));
+            assertTrue(Numeric.value(Double.POSITIVE_INFINITY).applies(Double.POSITIVE_INFINITY));
         }
 
         @SuppressWarnings("unchecked")
