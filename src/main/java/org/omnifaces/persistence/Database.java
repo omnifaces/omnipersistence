@@ -61,7 +61,19 @@ public enum Database {
     /**
      * SQL Server database.
      */
-    SQLSERVER(true),
+    SQLSERVER(true) {
+
+        @Override
+        public String getLikeSpecialCharacters() {
+            return "[";
+        }
+
+        @Override
+        public int getMaxParameters() {
+            return SQLSERVER_MAX_PARAMETERS;
+        }
+
+    },
 
     /**
      * DB2 database.
@@ -74,6 +86,7 @@ public enum Database {
     UNKNOWN(true);
 
     private static final Logger logger = Logger.getLogger(Database.class.getName());
+    private static final int SQLSERVER_MAX_PARAMETERS = 2098; // SQL Server rejects a statement of 2100 parameters (error 8003).
 
     private final boolean sortsNullsLow;
     private final String[] names;
@@ -125,6 +138,29 @@ public enum Database {
      */
     public boolean sortsNullsLow() {
         return sortsNullsLow;
+    }
+
+    /**
+     * Returns the characters which this database treats as special in a <code>LIKE</code> pattern next to <code>%</code> and <code>_</code>, such as
+     * <code>[</code> on SQL Server. The default implementation returns an empty string. They are escaped only on the database which needs it, because DB2
+     * rejects an escape before any other character than the wildcards and the escape itself.
+     *
+     * @return The characters which this database treats as special in a <code>LIKE</code> pattern next to <code>%</code> and <code>_</code>.
+     * @since 2.0
+     */
+    public String getLikeSpecialCharacters() {
+        return "";
+    }
+
+    /**
+     * Returns the maximum number of parameters in one SQL statement. The default implementation returns {@link Integer#MAX_VALUE}. {@link #SQLSERVER} returns
+     * the highest count its JDBC driver accepts.
+     *
+     * @return The maximum number of parameters in one SQL statement.
+     * @since 2.0
+     */
+    public int getMaxParameters() {
+        return Integer.MAX_VALUE;
     }
 
 }

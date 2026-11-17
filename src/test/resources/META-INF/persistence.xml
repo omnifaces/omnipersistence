@@ -25,6 +25,8 @@
         <!-- Needed for OpenJPA only! -->
         <class>org.omnifaces.persistence.model.BaseEntity</class>
         <class>org.omnifaces.persistence.model.LockedBaseEntity</class>
+        <class>org.omnifaces.persistence.model.TimestampedBaseEntity</class>
+        <class>org.omnifaces.persistence.model.VersionedBaseEntity</class>
 
         <properties>
             <!-- JPA -->

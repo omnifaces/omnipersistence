@@ -121,8 +121,6 @@ public final class JPA {
     // Private constants ------------------------------------------------------------------------------------------------------------------
 
     private static final String LIKE_SPECIAL_CHARACTERS = "%_" + LIKE_ESCAPE;
-    private static final String LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER = "[";
-    private static final String LIKE_SPECIAL_CHARACTERS_SQLSERVER = LIKE_SPECIAL_CHARACTERS + LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER;
     private static final String DATE_PATTERN = "YYYY-MM-DD";
     private static final String TIME_PATTERN = "HH24:MI:SS";
     private static final String DATE_TIME_PATTERN = DATE_PATTERN + " " + TIME_PATTERN;
@@ -412,9 +410,7 @@ public final class JPA {
      * @since 2.0
      */
     public static String escapeLike(String value) {
-        // DB2 rejects an escape before any other character than the wildcards and the escape itself, so [ is escaped on SQL Server only.
-        var database = requireCurrentBaseEntityService("escapeLike").getDatabase();
-        return escape(value, database == SQLSERVER ? LIKE_SPECIAL_CHARACTERS_SQLSERVER : LIKE_SPECIAL_CHARACTERS);
+        return escape(value, LIKE_SPECIAL_CHARACTERS + requireCurrentBaseEntityService("escapeLike").getDatabase().getLikeSpecialCharacters());
     }
 
     /**
@@ -428,9 +424,7 @@ public final class JPA {
      * @since 2.0
      */
     public static String escapeLikePattern(String pattern) {
-        var specialCharacters = requireCurrentBaseEntityService("escapeLikePattern").getDatabase() == SQLSERVER
-            ? LIKE_PATTERN_SPECIAL_CHARACTERS_SQLSERVER
-            : "";
+        var specialCharacters = requireCurrentBaseEntityService("escapeLikePattern").getDatabase().getLikeSpecialCharacters();
         var escaped = new StringBuilder(pattern.length());
 
         for (var i = 0; i < pattern.length(); i++) {

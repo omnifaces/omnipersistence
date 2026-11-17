@@ -72,6 +72,11 @@ public enum Provider {
     HIBERNATE {
 
         @Override
+        public boolean isManagedIdMutable() {
+            return true;
+        }
+
+        @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
             var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
             return invokeMethod(invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getJdbcServices"), "getJdbcEnvironment"), "getDialect").getClass()
@@ -122,6 +127,16 @@ public enum Provider {
     ECLIPSELINK {
 
         @Override
+        public boolean isCollectionParameterSupported() {
+            return false;
+        }
+
+        @Override
+        public boolean isEmbeddableInSupported() {
+            return false;
+        }
+
+        @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
             var unwrappedEntityManagerFactory = unwrapEntityManagerFactoryIfNecessary(entityManagerFactory);
             return invokeMethod(invokeMethod(unwrappedEntityManagerFactory, "getDatabaseSession"), "getDatasourcePlatform").getClass().getSimpleName();
@@ -134,9 +149,7 @@ public enum Provider {
 
         @Override
         public void configureSecondLevelCache(Query query, boolean cacheable) {
-            query
-                .setHint(QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE, cacheable)
-                .setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
+            query.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
             super.configureSecondLevelCache(query, cacheable);
         }
 
@@ -146,6 +159,16 @@ public enum Provider {
      * OpenJPA provider.
      */
     OPENJPA {
+
+        @Override
+        public boolean isEmbeddableComparisonSupported() {
+            return false;
+        }
+
+        @Override
+        public boolean isNestedSubqueryInSubquerySupported() {
+            return false;
+        }
 
         @Override
         public String getDialectName(EntityManagerFactory entityManagerFactory) {
@@ -184,6 +207,11 @@ public enum Provider {
             invokeMethod(invokeMethod(openJpaQuery, "getFetchPlan"), "setQueryResultCacheEnabled", cacheable);
         }
 
+        @Override
+        public void configureOrderBySubquery(Query query) {
+            query.setHint(QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE, QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL);
+        }
+
     },
 
     /**
@@ -199,6 +227,18 @@ public enum Provider {
     public static final String QUERY_HINT_ECLIPSELINK_MAINTAIN_CACHE = "eclipselink.maintain-cache"; // true | false
     /** Returns the EclipseLink-specific "refresh" query hint constant: {@value}. */
     public static final String QUERY_HINT_ECLIPSELINK_REFRESH = "eclipselink.refresh"; // true | false
+    /**
+     * Returns the OpenJPA-specific "subclass fetch mode" query hint constant: {@value}.
+     *
+     * @since 2.0
+     */
+    public static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE = "openjpa.FetchPlan.SubclassFetchMode"; // none | join | parallel
+    /**
+     * Returns the OpenJPA-specific "parallel" value of the "subclass fetch mode" query hint: {@value}.
+     *
+     * @since 2.0
+     */
+    public static final String QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_PARALLEL = "parallel";
 
     private static final Optional<Class<Object>> HIBERNATE_PROXY = findClass("org.hibernate.proxy.HibernateProxy");
     private static final Optional<Class<Object>> HIBERNATE_AGGREGATE_FUNCTION = findClass("org.hibernate.query.sqm.function.SelfRenderingSqmAggregateFunction");
@@ -410,6 +450,75 @@ public enum Provider {
         query
             .setHint(QUERY_HINT_CACHE_STORE_MODE, cacheable ? CacheStoreMode.USE : CacheStoreMode.REFRESH)
             .setHint(QUERY_HINT_CACHE_RETRIEVE_MODE, cacheable ? CacheRetrieveMode.USE : CacheRetrieveMode.BYPASS);
+    }
+
+    /**
+     * Applies hints to the given query which is ordered by a correlated subquery. The default implementation does nothing. OpenJPA sets its subclass fetch mode
+     * to parallel: in its default join mode, OpenJPA executes a query without a range as a union, which cannot hold a correlated subquery in its ORDER BY. A
+     * max results of {@link Integer#MAX_VALUE} does not prevent this, because OpenJPA treats it as no range.
+     *
+     * @param query The query which is ordered by a correlated subquery.
+     * @since 2.0
+     */
+    public void configureOrderBySubquery(Query query) {
+        // NOOP.
+    }
+
+    /**
+     * Returns whether a single collection valued parameter is supported in a JPQL <code>IN</code> expression. Else every value needs its own parameter. The
+     * default implementation returns {@code true}. EclipseLink returns {@code false}.
+     *
+     * @return Whether a single collection valued parameter is supported in a JPQL <code>IN</code> expression.
+     * @since 2.0
+     */
+    public boolean isCollectionParameterSupported() {
+        return true;
+    }
+
+    /**
+     * Returns whether an embeddable, such as an <code>@EmbeddedId</code>, can be compared as a whole in JPQL. The default implementation returns {@code true}.
+     * OpenJPA returns {@code false}.
+     *
+     * @return Whether an embeddable can be compared as a whole in JPQL.
+     * @since 2.0
+     */
+    public boolean isEmbeddableComparisonSupported() {
+        return true;
+    }
+
+    /**
+     * Returns whether an embeddable, such as an <code>@EmbeddedId</code>, can be the operand of an <code>IN</code> on every supported database. The default
+     * implementation returns {@code true}. EclipseLink returns {@code false}, because it renders a row value constructor, which SQL Server and DB2 do not
+     * support.
+     *
+     * @return Whether an embeddable can be the operand of an <code>IN</code> on every supported database.
+     * @since 2.0
+     */
+    public boolean isEmbeddableInSupported() {
+        return true;
+    }
+
+    /**
+     * Returns whether the ID of a managed entity can be modified, so that it can be unset after the entity is removed. The default implementation returns
+     * {@code false}. Hibernate returns {@code true}.
+     *
+     * @return Whether the ID of a managed entity can be modified.
+     * @since 2.0
+     */
+    public boolean isManagedIdMutable() {
+        return false;
+    }
+
+    /**
+     * Returns whether a correlated subquery can be nested in a subquery, such as in the subquery of a count query. The default implementation returns
+     * {@code true}. OpenJPA returns {@code false}: it correlates a nested subquery with an extra cross-joined entity instead of the counted one, as it declares
+     * the root of the enclosing subquery once more when the nested subquery refers to it.
+     *
+     * @return Whether a correlated subquery can be nested in a subquery.
+     * @since 2.0
+     */
+    public boolean isNestedSubqueryInSubquerySupported() {
+        return true;
     }
 
 }

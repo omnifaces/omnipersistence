@@ -14,11 +14,14 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.CacheRetrieveMode.BYPASS;
 import static jakarta.persistence.metamodel.PluralAttribute.CollectionType.MAP;
+import static jakarta.persistence.metamodel.Type.PersistenceType.BASIC;
+import static jakarta.persistence.metamodel.Type.PersistenceType.EMBEDDABLE;
 import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
+import static java.util.Comparator.reverseOrder;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -36,9 +39,6 @@ import static org.omnifaces.persistence.JPA.findFirstResult;
 import static org.omnifaces.persistence.JPA.getValidationMode;
 import static org.omnifaces.persistence.JPA.lower;
 import static org.omnifaces.persistence.JPA.matchNothing;
-import static org.omnifaces.persistence.Provider.ECLIPSELINK;
-import static org.omnifaces.persistence.Provider.HIBERNATE;
-import static org.omnifaces.persistence.Provider.OPENJPA;
 import static org.omnifaces.persistence.audit.AuditListener.copySnapshot;
 import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
 import static org.omnifaces.persistence.model.dto.Page.ID;
@@ -111,6 +111,7 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.PluralAttribute.CollectionType;
 import jakarta.persistence.metamodel.SingularAttribute;
@@ -235,6 +236,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private Function<Object, Object> idGetter;
     private Consumer<Object> idUnsetter;
     private IdAttribute idAttribute;
+    private ManagedType<?> embeddableIdType;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -281,6 +283,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         idGetter = mappings::getId;
         idUnsetter = mappings::unsetId;
         idAttribute = mappings.getIdAttribute(entityType);
+        embeddableIdType = getMetamodel().getAttribute(idAttribute.getName()) instanceof SingularAttribute<?, ?> attribute
+            && attribute.getType().getPersistenceType() == EMBEDDABLE && attribute.getType() instanceof ManagedType<?> embeddable ? embeddable : null;
 
         if (getValidationMode(getEntityManager()) == ValidationMode.CALLBACK) {
             validator = CDI.current().select(Validator.class).get();
@@ -825,7 +829,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones.
+     * Get entities by the given IDs. The default ordering is by ID, descending. This does not include soft deleted ones. When there are more IDs than
+     * {@link Database#getMaxParameters()} allows in one query, they are got in several queries, and the entities are ordered by the natural ordering of the ID,
+     * descending, which may differ from the collation of the database for a string ID.
      *
      * @param ids Entity IDs to get entities by.
      * @return Found entities, or an empty set if there is none.
@@ -835,40 +841,63 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending.
+     * Get entities by the given IDs and set whether it may include soft deleted ones. The default ordering is by ID, descending. When there are more IDs than
+     * {@link Database#getMaxParameters()} allows in one query, they are got in several queries, and the entities are ordered by the natural ordering of the ID,
+     * descending, which may differ from the collation of the database for a string ID.
      *
      * @param ids Entity IDs to get entities by.
      * @param includeSoftDeleted Whether to include soft deleted ones in the search.
      * @return Found entities, optionally including soft deleted ones, or an empty set if there is none.
      */
     protected List<E> getByIds(Iterable<I> ids, boolean includeSoftDeleted) {
-        var copyOfIds = StreamSupport.stream(ids.spliterator(), false).toList();
+        var copyOfIds = StreamSupport.stream(ids.spliterator(), false).distinct().toList();
+        var maxIdsPerQuery = database.getMaxParameters() / (embeddableIdType == null ? 1 : embeddableIdType.getAttributes().size());
 
-        if (copyOfIds.isEmpty()) {
+        if (copyOfIds.size() <= maxIdsPerQuery) {
+            return getByIdsInOneQuery(copyOfIds, includeSoftDeleted);
+        }
+
+        var entities = new ArrayList<E>(copyOfIds.size());
+
+        for (var i = 0; i < copyOfIds.size(); i += maxIdsPerQuery) {
+            entities.addAll(getByIdsInOneQuery(copyOfIds.subList(i, Math.min(i + maxIdsPerQuery, copyOfIds.size())), includeSoftDeleted));
+        }
+
+        entities.sort(comparing(this::getId, reverseOrder()));
+        return entities;
+    }
+
+    private List<E> getByIdsInOneQuery(List<I> ids, boolean includeSoftDeleted) {
+        if (ids.isEmpty()) {
             return emptyList();
         }
 
-        String paramNames;
+        var id = "e." + idAttribute.getName();
+        var orOfEqualities = embeddableIdType != null && !provider.isEmbeddableInSupported();
+        String idPredicate;
         Map<String, Object> paramValues;
 
-        if (provider == ECLIPSELINK) {
-            paramNames = range(0, copyOfIds.size()).mapToObj(i -> ":id" + i).collect(joining(", "));
-            var map = new HashMap<String, Object>(copyOfIds.size());
-            range(0, copyOfIds.size()).forEach(i -> map.put("id" + i, copyOfIds.get(i)));
+        if (orOfEqualities || !provider.isCollectionParameterSupported()) {
+            var names = range(0, ids.size()).mapToObj(i -> ":id" + i);
+
+            if (orOfEqualities) {
+                idPredicate = names.map(name -> id + " = " + name).collect(joining(" OR ", "(", ")"));
+            }
+            else {
+                idPredicate = id + names.collect(joining(", ", " IN (", ")"));
+            }
+
+            var map = new HashMap<String, Object>(ids.size());
+            range(0, ids.size()).forEach(i -> map.put("id" + i, ids.get(i)));
             paramValues = map;
         }
         else {
-            paramNames = ":ids";
-            paramValues = Map.of("ids", copyOfIds);
+            idPredicate = id + " IN (:ids)";
+            paramValues = Map.of("ids", ids);
         }
 
         var whereClause = softDeleteData.getWhereClause(includeSoftDeleted);
-        return list(
-            select("")
-                + whereClause + (whereClause.isEmpty() ? " WHERE" : " AND") + " e." + idAttribute.getName() + " IN (" + paramNames + ")"
-                + orderByIdDescending(),
-            paramValues
-        );
+        return list(select("") + whereClause + (whereClause.isEmpty() ? " WHERE " : " AND ") + idPredicate + orderByIdDescending(), paramValues);
     }
 
     /**
@@ -879,7 +908,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     protected boolean exists(E entity) {
         var id = idGetter.apply(entity);
-        return id != null && createLongQuery("SELECT COUNT(e) FROM " + getEntityName() + " e WHERE e." + idAttribute.getName() + " = :id")
+        if (id == null) {
+            return false;
+        }
+
+        if (embeddableIdType != null && !provider.isEmbeddableComparisonSupported()) {
+            return getEntityManager().find(entityType, id) != null;
+        }
+
+        return createLongQuery("SELECT COUNT(e) FROM " + getEntityName() + " e WHERE e." + idAttribute.getName() + " = :id")
             .setParameter("id", id)
             .getSingleResult().intValue() > 0;
     }
@@ -1275,7 +1312,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var managed = getEntityManager().contains(entity);
             getEntityManager().remove(manage(entity));
 
-            if (!managed || provider == HIBERNATE) {
+            if (!managed || provider.isManagedIdMutable()) {
                 idUnsetter.accept(entity);
             }
         });
@@ -1559,8 +1596,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @SuppressWarnings("unchecked") // Unfortunately, @SafeVarargs cannot be used as it requires a final method.
     private E fetchPluralAttributes(E entity, java.util.function.Predicate<CollectionType> ofType, Function<E, ?>... getters) {
         if (isEmpty(getters)) {
-            for (var a : getMetamodel().getPluralAttributes()) {
-                if (ofType.test(a.getCollectionType())) {
+            for (var attribute : getMetamodel().getAttributes()) {
+                if (attribute instanceof PluralAttribute<?, ?, ?> a && ofType.test(a.getCollectionType())) {
                     ofNullable(invokeGetter(entity, a.getName())).ifPresent(c -> invokeMethod(c, "size"));
                 }
             }
@@ -1576,8 +1613,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
         var managed = getById((I) idGetter.apply(entity));
 
-        for (var a : getMetamodel().getSingularAttributes()) {
-            if (ofType.test(a.getJavaType())) {
+        for (var attribute : getMetamodel().getAttributes()) {
+            if (attribute instanceof SingularAttribute<?, ?> a && ofType.test(a.getJavaType())) {
                 var name = capitalize(a.getName());
                 invokeSetter(entity, name, invokeGetter(managed, name));
             }
@@ -1932,8 +1969,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
         var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver, new HashMap<>());
-        buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
-        return buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
+        var orderedBySubquery = buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
+        var typedQuery = buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
+
+        if (orderedBySubquery) {
+            provider.configureOrderBySubquery(typedQuery);
+        }
+
+        return typedQuery;
     }
 
     private <T extends E> TypedQuery<Long> buildCountQuery(PageBuilder<T> pageBuilder, CriteriaBuilder criteriaBuilder) {
@@ -1961,7 +2004,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 countSubquery.where(
                     conjunctRestrictionsIfNecessary(
                         criteriaBuilder, countSubquery.getRestriction(),
-                        criteriaBuilder.equal(countSubqueryRoot.get(idAttribute.getName()), countRoot.get(idAttribute.getName()))
+                        buildIdEqualPredicate(criteriaBuilder, countSubqueryRoot.get(idAttribute.getName()), countRoot.get(idAttribute.getName()))
                     )
                 )
             )
@@ -2015,8 +2058,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             !entities.isEmpty() && pageBuilder.getEntityQueryRoot() instanceof PostponedFetchRoot<?> postponedFetchRoot
                 && postponedFetchRoot.hasPostponedFetches()
         ) {
+            var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
-                pageBuilder.getPage(), getEntityManager(), entityType, idAttribute.getName(), idGetter, entities
+                pageBuilder.getPage(), getEntityManager(), entityType,
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, entities
             );
         }
 
@@ -2113,7 +2158,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var mapping = pageBuilder.getQueryBuilder().build(criteriaBuilder, query, root);
 
         if (query instanceof Subquery<T> subQuery) {
-            subQuery.select(root.get(idAttribute.getName()));
+            subQuery.select(buildSubquerySelection(root));
         }
 
         if (!isEmpty(mapping)) { // mapping is not empty when getPage(..., MappedQueryBuilder) is used.
@@ -2149,6 +2194,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
+    /**
+     * Returns the ID of given root to select in an <code>EXISTS</code> subquery, or one basic attribute of it when the ID is an embeddable, because OpenJPA
+     * cannot select an embeddable as a whole in a subquery.
+     */
+    private <T> Path<T> buildSubquerySelection(Root<E> root) {
+        Path<T> id = root.get(idAttribute.getName());
+
+        if (embeddableIdType == null) {
+            return id;
+        }
+
+        return embeddableIdType.getSingularAttributes().stream()
+            .filter(idPart -> idPart.getType().getPersistenceType() == BASIC)
+            .findFirst()
+            .map(idPart -> id.<T>get(idPart.getName()))
+            .orElse(id);
+    }
+
     private <T extends E> void buildRange(PageBuilder<T> pageBuilder, Query query, Root<E> root) {
         if (root == null) {
             return;
@@ -2170,7 +2233,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     // Sorting actions ------------------------------------------------------------------------------------------------
 
-    private <T extends E> void buildOrderBy(
+    /**
+     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection.
+     */
+    private <T extends E> boolean buildOrderBy(
         PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
     )
     {
@@ -2178,13 +2244,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var ordering = page.getOrdering();
 
         if (ordering.isEmpty() || pageBuilder.getIds() != null) { // The entities restricted to IDs are put in the order of the IDs afterwards.
-            return;
+            return false;
         }
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
         var root = pathResolver.get(null);
         var orders = new ArrayList<Order>(ordering.size() + 1);
         Entry<String, Boolean> lastCollectionOrder = null;
+        var orderedBySubquery = false;
 
         for (var order : ordering.entrySet()) {
             var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
@@ -2204,11 +2271,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             }
             else {
                 orders.add(buildCollectionOrder(order, collectionPath, page, criteriaQuery, criteriaBuilder, pathResolver, parameters));
+                orderedBySubquery = true;
             }
         }
 
         addIdTiebreakerIfNecessary(orders, ordering, lastCollectionOrder, criteriaBuilder, pathResolver);
         criteriaQuery.orderBy(orders);
+        return orderedBySubquery;
     }
 
     /**
@@ -2274,7 +2343,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var joins = new HashMap<String, From<?, ?>>();
         var predicates = new ArrayList<Predicate>();
-        predicates.add(criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
+        predicates.add(buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
         predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page, criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
@@ -2431,7 +2500,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!(query instanceof Subquery) && pageBuilder.getIds() != null) {
-            restriction = conjunctRestrictionsIfNecessary(criteriaBuilder, restriction, pathResolver.get(idAttribute.getName()).in(pageBuilder.getIds()));
+            restriction = conjunctRestrictionsIfNecessary(
+                criteriaBuilder, restriction, buildIdInPredicate(criteriaBuilder, pathResolver.get(idAttribute.getName()), pageBuilder.getIds())
+            );
         }
 
         if (restriction != null) {
@@ -2648,12 +2719,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether a nested correlated subquery is supported in given query. It is not in the count query of OpenJPA, which correlates a nested subquery
-     * with an extra cross-joined entity instead of the counted one, as it incorrectly declares the root of the enclosing subquery once more when the nested
-     * subquery refers to it.
+     * Returns whether a nested correlated subquery is supported in given query.
      */
     private boolean isNestedSubquerySupported(AbstractQuery<?> query) {
-        return provider != OPENJPA || !(query instanceof Subquery);
+        return provider.isNestedSubqueryInSubquerySupported() || !(query instanceof Subquery);
     }
 
     /**
@@ -2706,6 +2775,34 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
+     * Builds an <code>IN</code> predicate on given values when the type is a number or an enum and every value is a plain value of it, else returns
+     * {@code null}. Such values compare by equality, and one <code>IN</code> keeps a long list flat, because EclipseLink renders an <code>OR</code> of many
+     * comparisons as deeply nested parentheses, which overflow the stack of the H2 parser.
+     */
+    private Predicate buildEqualityInPredicate(Expression<?> path, Class<?> type, Object value, ParameterBuilder parameterBuilder) {
+        if (!type.isEnum() && !Numeric.is(type)) {
+            return null;
+        }
+
+        var parameters = new ArrayList<Expression<?>>();
+
+        for (var item : (Iterable<?>) stream(value)::iterator) {
+            if (item == null || item instanceof Criteria || isEntity(item)) {
+                return null;
+            }
+
+            try {
+                parameters.add(parameterBuilder.create(createTypedCriteria(type, item).getValue()));
+            }
+            catch (IllegalArgumentException e) {
+                return null; // An unparseable item matches nothing, which the comparison per item handles.
+            }
+        }
+
+        return path.in(parameters.toArray(Expression<?>[]::new));
+    }
+
+    /**
      * Builds a predicate on multiple values, or on a value of a field nested in a <code>@OneToMany</code>. A negation is applied on the comparisons and not
      * around the predicate, because OpenJPA cannot render a <code>NOT</code> around a comparison with a correlated subquery.
      */
@@ -2723,6 +2820,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!oneToManyField && !elementCollections.test(field)) {
+            var in = buildEqualityInPredicate(path, type, value, parameterBuilder);
+
+            if (in != null) {
+                return negated ? negate(in, false, path, criteriaBuilder) : in;
+            }
+
             var predicates = stream(value).map(item -> buildTypedPredicate(path, type, field, item, query, criteriaBuilder, pathResolver, parameterBuilder))
                 .filter(Objects::nonNull)
                 .toList();
@@ -2803,7 +2906,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var count = subquery.select(criteriaBuilder.countDistinct(fieldPath))
             .where(
                 criteriaBuilder.or(toArray(predicates)),
-                criteriaBuilder.equal(subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()))
+                buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()))
             );
 
         if (anyMatch) {
@@ -2945,6 +3048,33 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     // Helpers --------------------------------------------------------------------------------------------------------
+
+    /**
+     * Returns a predicate which compares given IDs, per attribute when the ID is an embeddable, because OpenJPA cannot compare an embeddable as a whole.
+     */
+    private Predicate buildIdEqualPredicate(CriteriaBuilder criteriaBuilder, Expression<?> id, Expression<?> otherId) {
+        if (embeddableIdType == null) {
+            return criteriaBuilder.equal(id, otherId);
+        }
+
+        return criteriaBuilder.and(
+            embeddableIdType.getAttributes().stream()
+                .map(idPart -> criteriaBuilder.equal(((Path<?>) id).get(idPart.getName()), ((Path<?>) otherId).get(idPart.getName())))
+                .toArray(Predicate[]::new)
+        );
+    }
+
+    /**
+     * Returns a predicate which matches given ID against given IDs, as an OR of equalities when the ID is an embeddable which the provider cannot put in an
+     * <code>IN</code>.
+     */
+    private Predicate buildIdInPredicate(CriteriaBuilder criteriaBuilder, Expression<?> id, Collection<?> ids) {
+        if (embeddableIdType == null || provider.isEmbeddableInSupported()) {
+            return id.in(ids);
+        }
+
+        return criteriaBuilder.or(ids.stream().map(otherId -> criteriaBuilder.equal(id, otherId)).toArray(Predicate[]::new));
+    }
 
     private static Predicate[] toArray(List<Predicate> predicates) {
         return predicates.toArray(new Predicate[predicates.size()]);

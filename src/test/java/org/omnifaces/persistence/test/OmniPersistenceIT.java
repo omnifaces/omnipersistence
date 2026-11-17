@@ -19,6 +19,7 @@ import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
+import static org.omnifaces.persistence.Database.H2;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.ROWS_PER_PAGE;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_PHONES_PER_PERSON_0;
 import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_RECORDS;
@@ -33,6 +35,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_REC
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -61,6 +64,7 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.archive.importer.MavenImporter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIf;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
@@ -78,6 +82,7 @@ import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
+import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
@@ -103,6 +108,7 @@ import org.omnifaces.utils.data.Range;
 public abstract class OmniPersistenceIT {
 
     static final String PROFILE_ID = "profile.id";
+    static final String TEST_DATABASE = "test.database";
     private static final String READ_COMMITTED = "<isolation-level>TRANSACTION_READ_COMMITTED</isolation-level>";
     private static final String DB2_USER = "db2inst1";
     private static final String DB2_PASSWORD = "PassW0rd!";
@@ -110,6 +116,8 @@ public abstract class OmniPersistenceIT {
     static final String OPENJPA = ".*-openjpa";
     static final String ECLIPSELINK = ".*-eclipselink";
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
+    private static final String ECLIPSELINK_H2_TIME = "EclipseLink binds a LocalTime and an OffsetTime as a TIMESTAMP on 1970-01-01, which H2 compares to a TIME column"
+        + " on the current date";
     static final String HIBERNATE_FORMULA = "Address.string is a Hibernate specific @Formula";
     static final String OPENJPA_COUNT = "OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one,"
         + " so this criteria is left out of the count query";
@@ -125,7 +133,7 @@ public abstract class OmniPersistenceIT {
 
     protected static WebArchive createDeployment(Class<?> testClass, Class<?> excludedStartupService) {
         var persistenceUnitName = testClass.getSimpleName();
-        var database = Database.valueOf(getProperty("test.database").toUpperCase());
+        var database = getTestRunDatabase();
         var wildFlyDB2 = database == DB2 && getProperty(PROFILE_ID).startsWith("wildfly-");
         var jtaDataSource = (wildFlyDB2 ? "java:jboss/datasources/" : "java:app/") + persistenceUnitName;
         var maven = Maven.resolver();
@@ -304,6 +312,28 @@ public abstract class OmniPersistenceIT {
 
     protected static boolean isEclipseLink() {
         return getenv("MAVEN_CMD_LINE_ARGS").contains("-eclipselink");
+    }
+
+    /**
+     * Returns the name of the test database from the system properties of the test run, or {@code null} in the container.
+     */
+    private static String getTestRunDatabaseName() {
+        return getProperty(TEST_DATABASE);
+    }
+
+    /**
+     * Returns the test database from the system properties of the test run, which only the test client has.
+     */
+    private static Database getTestRunDatabase() {
+        return Database.valueOf(getTestRunDatabaseName().toUpperCase());
+    }
+
+    /**
+     * Returns whether the test runs on EclipseLink with H2. This is evaluated by the test client via {@link DisabledIf}, because Arquillian reports a failed
+     * assumption in the container as an error. Without the system properties of the test run, as in the container, this returns {@code false}.
+     */
+    static boolean isEclipseLinkOnH2() {
+        return isEclipseLink() && H2.name().equalsIgnoreCase(getTestRunDatabaseName());
     }
 
     protected static boolean isOpenJPA() {
@@ -662,6 +692,38 @@ public abstract class OmniPersistenceIT {
         }
     }
 
+    /**
+     * {@link Order} and {@link Between} on each date-time type include their bounds. An offset based value matches the same instant at another offset.
+     */
+    @Test
+    void testPageWithOrderAndBetweenOnEachDateTimeTypeOfAppointment() {
+        var latest = latestAppointment();
+        assertAll(
+            () -> assertOrderAndBetweenOnAppointment("startLocalDateTime", Appointment::getStartLocalDateTime, latest.getStartLocalDateTime()),
+            () -> assertOrderAndBetweenOnAppointment("startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime()),
+            () -> assertOrderAndBetweenOnAppointment(
+                "startOffsetDateTime", Appointment::getStartOffsetDateTime, latest.getStartOffsetDateTime().withOffsetSameInstant(ZoneOffset.ofHours(2))
+            )
+        );
+    }
+
+    /**
+     * {@link Order} and {@link Between} on each time-of-day type include their bounds.
+     */
+    @Test
+    @DisabledIf(value = "isEclipseLinkOnH2", disabledReason = ECLIPSELINK_H2_TIME)
+    void testPageWithOrderAndBetweenOnEachTimeOfDayTypeOfAppointment() {
+        var latest = latestAppointment();
+        assertAll(
+            () -> assertOrderAndBetweenOnAppointment("startLocalTime", Appointment::getStartLocalTime, latest.getStartLocalTime()),
+            () -> assertOrderAndBetweenOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, latest.getStartOffsetTime())
+        );
+    }
+
+    private Appointment latestAppointment() {
+        return appointmentService().list().stream().max(Comparator.comparing(Appointment::getStartLocalDateTime)).orElseThrow();
+    }
+
     @Test
     void testPageWithBetweenOfHalfOpenRangeAgreesWithApplies() {
         for (var range : List.of(Range.of(10L, 20L), Range.of(10L, 20L).withMinInclusive(false).withMaxInclusive(true))) {
@@ -672,13 +734,10 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithBetweenDates() {
-        var start = LocalDate.of(1950, 1, 1);
-        var end = LocalDate.of(1960, 12, 31);
-        var result = personService().getPage(Page.with().allMatch(Map.of("dateOfBirth", Between.range(start, end))).build(), true);
-        result.forEach(p -> {
-            assertFalse(p.getDateOfBirth().isBefore(start), "Date of birth is not before start");
-            assertFalse(p.getDateOfBirth().isAfter(end), "Date of birth is not after end");
-        });
+        var persons = personService().list();
+        var datesOfBirth = persons.stream().map(Person::getDateOfBirth).sorted().toList();
+        var between = Between.range(datesOfBirth.get(datesOfBirth.size() / 4), datesOfBirth.get(datesOfBirth.size() / 2));
+        assertPage(persons, person -> between.applies(person.getDateOfBirth()), Map.of("dateOfBirth", between), Map.of(), personService()::getPage, true);
     }
 
     @Test
@@ -873,7 +932,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithServiceInvocationInQueryBuilderBuildsLikeCriteria() {
         var page = Page.with().allMatch(Map.of("email", Like.contains("name1"))).build();
-        assertEquals(ids(personService().getPageViaQueryBuilder(page)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
+        assertEquals(ids(personService().getPageViaQueryBuilder(page, false)), ids(personService().getPageViaQueryBuilderInvokingService(page)));
     }
 
     @Test
@@ -1138,6 +1197,35 @@ public abstract class OmniPersistenceIT {
             BiFunction<Integer, Integer, Page> page = (offset, limit) -> Page.with().range(offset, limit).orderBy("groups", ascending).build();
             assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPage(page.apply(offset, limit), false));
             assertOrderedAcrossPages(all, key, ascending, (offset, limit) -> personService().getPageWithGroups(page.apply(offset, limit), false));
+        }
+    }
+
+    /**
+     * An ordering on a field of a <code>@OneToMany</code> followed by an ordering on a field of the entity orders by both and then by the ID, also with a fetch
+     * of the collection and with a {@link QueryBuilder}. Paging from ordering values falls back to paging by offset under an ordering on a collection.
+     */
+    @Test
+    void testPageOrderedByOneToManyThenByFieldAndId() {
+        var all = personService().getAllWithPhones();
+
+        for (var ascending : List.of(true, false)) {
+            Function<Person, Phone.Type> extremePhoneType = person -> {
+                Stream<String> names = person.getPhones().stream().map(phone -> phone.getType().name()); // @Enumerated(STRING)
+                return Phone.Type.valueOf(extreme(names, ascending));
+            };
+            var ordering = new LinkedHashMap<String, Boolean>();
+            ordering.put("phones.type", ascending);
+            ordering.put("email", !ascending);
+            Comparator<Person> order = byKey((Person person) -> extremePhoneType.apply(person).name(), ascending)
+                .thenComparing(byKey(Person::getEmail, !ascending));
+            Function<Person, Map<String, Object>> orderingValues = person -> Map
+                .of("phones.type", extremePhoneType.apply(person), "email", person.getEmail(), Page.ID, person.getId());
+
+            for (var getPage : List.<BiFunction<Page, Boolean, PartialResultList<Person>>>of(
+                personService()::getPage, personService()::getPageWithPhones, personService()::getPageViaQueryBuilder
+            )) {
+                assertOrderedPages(all, person -> true, Map.of(), ordering, order, orderingValues, getPage);
+            }
         }
     }
 
@@ -1714,6 +1802,29 @@ public abstract class OmniPersistenceIT {
         );
     }
 
+    /**
+     * Asserts that {@link Order} and {@link Between} on given field of the appointments include their bounds, and that given value equals the value of the
+     * latest appointment, as stored by the database.
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private void assertOrderAndBetweenOnAppointment(String field, Function<Appointment, Comparable> getter, Comparable value) {
+        var appointments = appointmentService().list().stream().sorted(Comparator.comparing(Appointment::getStartLocalDateTime)).toList();
+        var earliest = List.of(appointments.get(0).getId());
+        var latest = List.of(appointments.get(appointments.size() - 1).getId());
+        assertAll(
+            () -> assertEquals(latest, appointmentIds(field, Between.range(value, value)), field + " between value and value"),
+            () -> assertEquals(latest, appointmentIds(field, Order.greaterThanOrEqualTo(value)), field + " greater than or equal to value"),
+            () -> assertEquals(earliest, appointmentIds(field, Order.lessThan(value)), field + " less than value"),
+            () -> assertEquals(
+                earliest, appointmentIds(field, Order.lessThanOrEqualTo(getter.apply(appointments.get(0)))), field + " less than or equal to earliest"
+            )
+        );
+    }
+
+    private List<Long> appointmentIds(String field, Object criteria) {
+        return ids(appointmentService().getPage(Page.with().allMatch(Map.of(field, criteria)).build(), false));
+    }
+
     private void assertPageWithLikeOnAppointment(String field, Function<Appointment, Object> getter, String term) {
         assertPage(
             appointmentService().list(), appointment -> likes(term, getter.apply(appointment)), Map.of(field, Like.contains(term)), Map.of(),
@@ -1836,10 +1947,14 @@ public abstract class OmniPersistenceIT {
 
     // Page with DTO mapping ------------------------------------------------------------------------------------------
 
+    /**
+     * The person cards of {@link PersonService#getPageOfPersonCards(Page, boolean)} and of the OptimusFaces query shape agree, card by card.
+     */
     @Test
     void testPageOfPersonCards() {
         var result = personService().getAllPersonCards();
         assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
+        assertEquals(cardValues(result), cardValues(personService().getPageOfPersonCardsAsOptimusFaces(Page.ALL, false)), "Person cards of OptimusFaces shape");
         result.forEach(card -> {
             assertNotNull(card.getId(), "Card has ID");
             assertNotNull(card.getEmail(), "Card has email");
@@ -1850,54 +1965,76 @@ public abstract class OmniPersistenceIT {
         });
     }
 
+    private static List<List<Object>> cardValues(List<PersonCard> cards) {
+        return cards.stream().map(card -> List.<Object>of(card.getId(), card.getEmail(), card.getAddressString(), card.getTotalPhones())).toList();
+    }
+
     @Test
     void testPageOfPersonCardsWithPagination() {
-        var page = personService().getPageOfPersonCards(Page.of(0, 5), true);
-        assertEquals(5, page.size(), "Page returns 5 cards");
-        assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        for (var getPage : personCardLoaders()) {
+            var page = getPage.apply(Page.of(0, 5), true);
+            assertEquals(5, page.size(), "Page returns 5 cards");
+            assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Total count is correct");
+        }
+    }
+
+    /**
+     * Returns the loaders of person cards: in the query shape of OmniPersistence, and in that of OptimusFaces.
+     */
+    private List<BiFunction<Page, Boolean, PartialResultList<PersonCard>>> personCardLoaders() {
+        return List.of(personService()::getPageOfPersonCards, personService()::getPageOfPersonCardsAsOptimusFaces);
     }
 
     @Test
     void testPageOfPersonCardsWithCriteriaAndOrderingOnExpression() {
         var all = personService().getAllPersonCards();
 
-        for (var ascending : List.of(true, false)) {
-            assertOrderedPages(
-                all, card -> likes("street1", card.getAddressString()), Map.of("addressString", Like.contains("street1")), ordering("addressString", ascending),
-                byKey(PersonCard::getAddressString, ascending), card -> orderingValues("addressString", card.getAddressString(), card),
-                personService()::getPageOfPersonCards
-            );
+        for (var getPage : personCardLoaders()) {
+            for (var ascending : List.of(true, false)) {
+                assertOrderedPages(
+                    all, card -> likes("street1", card.getAddressString()), Map.of("addressString", Like.contains("street1")),
+                    ordering("addressString", ascending),
+                    byKey(PersonCard::getAddressString, ascending), card -> orderingValues("addressString", card.getAddressString(), card),
+                    getPage
+                );
+            }
         }
     }
 
     @Test
     void testPageOfPersonCardsWithNegatedCriteriaOnExpressionAndAggregate() {
         var all = personService().getAllPersonCards();
-        var notStreet1 = Not.value(Like.contains("street1"));
-        assertPage(
-            all, card -> notStreet1.applies(card.getAddressString()), Map.of("addressString", notStreet1), Map.of(), personService()::getPageOfPersonCards, true
-        );
-        var notTotalPhones = Not.value(TOTAL_PHONES);
-        assertPage(
-            all, card -> notTotalPhones.applies(card.getTotalPhones()), Map.of("totalPhones", notTotalPhones), Map.of(), personService()::getPageOfPersonCards,
-            true
-        );
+
+        for (var getPage : personCardLoaders()) {
+            var notStreet1 = Not.value(Like.contains("street1"));
+            assertPage(
+                all, card -> notStreet1.applies(card.getAddressString()), Map.of("addressString", notStreet1), Map.of(), getPage, true
+            );
+            var notTotalPhones = Not.value(TOTAL_PHONES);
+            assertPage(
+                all, card -> notTotalPhones.applies(card.getTotalPhones()), Map.of("totalPhones", notTotalPhones), Map.of(), getPage,
+                true
+            );
+        }
     }
 
     @Test
     void testPageOfPersonCardsWithCriteriaAndOrderingOnAggregate() {
         var all = personService().getAllPersonCards();
-        assertPage(
-            all, card -> card.getTotalPhones() == TOTAL_PHONES, Map.of("totalPhones", String.valueOf(TOTAL_PHONES)), Map.of(),
-            personService()::getPageOfPersonCards, true
-        );
 
-        for (var ascending : List.of(true, false)) {
-            assertOrderedPages(
-                all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
-                byKey(PersonCard::getTotalPhones, ascending),
-                card -> orderingValues("totalPhones", card.getTotalPhones(), card), personService()::getPageOfPersonCards
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> card.getTotalPhones() == TOTAL_PHONES, Map.of("totalPhones", String.valueOf(TOTAL_PHONES)), Map.of(),
+                getPage, true
             );
+
+            for (var ascending : List.of(true, false)) {
+                assertOrderedPages(
+                    all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
+                    byKey(PersonCard::getTotalPhones, ascending),
+                    card -> orderingValues("totalPhones", card.getTotalPhones(), card), getPage
+                );
+            }
         }
     }
 
@@ -2028,6 +2165,25 @@ public abstract class OmniPersistenceIT {
         assertEquals(allIds.subList(9, 19), page.stream().map(Person::getId).toList(), "Page is ordered by default ordering");
     }
 
+    /**
+     * A page which is not cacheable reads a change which was made behind the second level cache, after a cacheable page has put the entity in there.
+     */
+    @Test
+    void testPageWithoutCacheReadsChangeMadeBehindSecondLevelCache() {
+        var id = 1L;
+        var page = Page.with().allMatch(Map.of("id", id)).build();
+        var nickname = personService().getPage(page, false).get(0).nickname();
+
+        try {
+            personService().updateNicknameViaNativeSql(id, "uncached");
+            assertEquals("uncached", personService().getPageWithoutCache(page).get(0).nickname(), "Nickname read without cache");
+        }
+        finally {
+            personService().updateNicknameViaNativeSql(id, nickname);
+            personService().getPageWithoutCache(page); // Puts the restored nickname back in the second level cache.
+        }
+    }
+
     @Test
     void testPageOfOneIsOrderedByGivenOrdering() {
         var page = personService().getPage(Page.with().range(0, 1).orderBy("id", false).build(), false);
@@ -2070,7 +2226,8 @@ public abstract class OmniPersistenceIT {
         var pageOffset = 20;
         var boundaryOffset = 12;
         var boundaryId = getIdOfPersonAtOffset(boundaryOffset);
-        var page = personService().getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, false).orderBy("id", true).build());
+        var page = personService()
+            .getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, false).orderBy("id", true).build(), false);
         var offsetPage = personService().getPage(Page.with().range(pageOffset, 10).orderBy("id", true).build(), false);
 
         assertEquals(
