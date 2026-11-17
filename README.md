@@ -432,7 +432,11 @@ public class Comment extends GeneratedIdEntity<Long> {
 }
 ```
 
-All read methods (`findById`, `list`, `getPage`, …) automatically exclude soft-deleted rows. Dedicated methods operate on the soft-deleted side:
+All read methods (`findById`, `list`, `getPage`, …) automatically exclude soft-deleted rows.
+This includes `list`, `find` and `findFirst` with a `CriteriaQueryBuilder`.
+A custom JPQL query passed to `list`, `find` or `findFirst` is not filtered.
+A page with criteria on the `@SoftDeletable` field returns the rows matching those criteria, so `Map.of("deleted", true)` pages through the soft-deleted rows.
+Dedicated methods operate on the soft-deleted side:
 
 ```java
 commentRepository.softDelete(comment);                   // mark deleted
@@ -891,7 +895,7 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On EclipseLink with H2, `Order` and `Between` on a `LocalTime` or `OffsetTime` field match the wrong rows, because EclipseLink binds a time as a `TIMESTAMP` on 1970-01-01, and H2 compares it to the time on the current date.
 - On EclipseLink, a collection of enums needs an explicit `@Enumerated`. Without it, EclipseLink maps the collection to a `VARCHAR` column while it binds the ordinal, so a criteria on it fails on strict databases such as PostgreSQL.
 - On EclipseLink and OpenJPA, `delete()` of a managed entity does not unset its ID, because they do not allow modifying the ID of a managed entity.
-- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany`, and a negated criteria or a `Criteria` such as `Like` on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
+- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany`, and a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.

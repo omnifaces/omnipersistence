@@ -22,6 +22,7 @@ import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.reverseOrder;
+import static java.util.Locale.ROOT;
 import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
@@ -55,6 +56,7 @@ import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -581,6 +583,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * Optional&lt;Foo&gt; foo = find("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
@@ -607,6 +611,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * Optional&lt;Foo&gt; foo = find("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
@@ -630,6 +636,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, also when the query builder restricts the soft deletable field. Use
+     * {@link #listSoftDeleted()} or a JPQL query for those.
      *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
@@ -669,6 +678,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
@@ -695,6 +706,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * Optional&lt;Foo&gt; foo = findFirst("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
@@ -718,6 +731,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, also when the query builder restricts the soft deletable field. Use
+     * {@link #listSoftDeleted()} or a JPQL query for those.
      *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
@@ -780,16 +796,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     @Nullable
     protected E getById(I id, boolean includeSoftDeleted) {
         var entity = getEntityManager().find(entityType, id);
-
-        if (entity != null && !includeSoftDeleted && softDeleteData.isSoftDeleted(entity)) {
-            return null;
-        }
-
-        return entity;
+        return includeSoftDeleted ? entity : excludeSoftDeleted(entity);
     }
 
     /**
      * Get entity by the given ID and entity graph name.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded.
      *
      * @param id Entity ID to get entity by.
      * @param entityGraphName Entity graph name.
@@ -803,7 +816,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             properties.put(QUERY_HINT_LOAD_GRAPH, entityGraph);
             properties.put(QUERY_HINT_CACHE_RETRIEVE_MODE, BYPASS);
 
-            return getEntityManager().find(entityType, id, properties);
+            return excludeSoftDeleted(getEntityManager().find(entityType, id, properties));
         });
     }
 
@@ -820,11 +833,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             softDeleteData.checkSoftDeletable();
             var entity = getEntityManager().find(entityType, id);
 
-            if (entity != null && !softDeleteData.isSoftDeleted(entity)) {
-                return null;
-            }
-
-            return entity;
+            return entity != null && isSoftDeleted(entity) ? entity : null;
         });
     }
 
@@ -977,6 +986,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * List&lt;Foo&gt; foos = list("WHERE bar = ?1 AND baz = ?2", bar, baz);
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The positional query parameters, if any.
@@ -1002,6 +1013,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * List&lt;Foo&gt; foos = list("WHERE bar = :bar AND baz = :baz", Map.of("bar", bar, "baz", baz));
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are not excluded.
      *
      * @param jpql The Java Persistence Query Language statement.
      * @param parameters The mapped query parameters.
@@ -1024,6 +1037,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *         Map.of("foo", Type.FOO)
      * );
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, also when the query builder restricts the soft deletable field. Use
+     * {@link #listSoftDeleted()} or a JPQL query for those.
      *
      * @param queryBuilder This creates the Jakarta Persistence criteria query.
      * @param parameters The mapped query parameters.
@@ -1084,6 +1100,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var criteriaQuery = criteriaBuilder.createQuery(entityType);
         var root = criteriaQuery.from(entityType);
         queryBuilder.build(criteriaBuilder, criteriaQuery, root);
+        restrictNotSoftDeleted(criteriaQuery, root, criteriaBuilder);
 
         var query = getEntityManager().createQuery(criteriaQuery);
         setMappedParameters(query, parameters);
@@ -1778,6 +1795,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Page first10RecordsMatchingCriteriaOrderedByBar = Page.with().allMatch(criteria).orderBy("bar", true).range(0, 10);
      * PartialResultList&lt;Foo&gt; foos = getPage(first10RecordsMatchingCriteriaOrderedByBar, true);
      * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1817,6 +1836,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
      * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
      * call {@link EntityManager#flush()} before when there are any.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1839,6 +1860,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * The fetch fields over collections are fetched by a second query on the returned entities, if any. The persistence context is cleared afterwards. All
      * entities which were managed by the {@link EntityManager}, including the returned ones, are then detached. Changes which are not flushed yet are lost, so
      * call {@link EntityManager#flush()} before when there are any.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1868,6 +1891,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page} and {@link QueryBuilder}. This will by default cache the results.
      * <p>
      * Usage example: see {@link QueryBuilder}.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1885,6 +1910,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link QueryBuilder}.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
      * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
@@ -1907,6 +1934,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, result type and {@link MappedQueryBuilder}. This will by default cache the results.
      * <p>
      * Usage example: see {@link MappedQueryBuilder}.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -1927,6 +1956,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Returns a partial result list based on given {@link Page}, entity type and {@link QueryBuilder} with the option whether to cache the results or not.
      * <p>
      * Usage example: see {@link MappedQueryBuilder}.
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -1969,6 +2000,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         pageBuilder.setEntityQueryRoot(entityQueryRoot);
         var pathResolver = buildSelection(pageBuilder, entityQuery, entityQueryRoot, criteriaBuilder);
         var parameters = buildRestrictions(pageBuilder, entityQuery, criteriaBuilder, pathResolver, new HashMap<>());
+        restrictNotSoftDeleted(entityQuery, entityQueryRoot, pageBuilder.getPage(), criteriaBuilder);
         var orderedBySubquery = buildOrderBy(pageBuilder, entityQuery, criteriaBuilder, pathResolver, parameters);
         var typedQuery = buildTypedQuery(pageBuilder, entityQuery, entityQueryRoot, parameters);
 
@@ -1986,6 +2018,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var parameters = pageBuilder.shouldBuildCountSubquery()
             ? buildCountSubquery(pageBuilder, countQuery, countQueryRoot, criteriaBuilder, new HashMap<>())
             : Collections.<String, Object>emptyMap();
+        restrictNotSoftDeleted(countQuery, countQueryRoot, pageBuilder.getPage(), criteriaBuilder);
         return buildTypedQuery(pageBuilder, countQuery, null, parameters);
     }
 
@@ -2113,6 +2146,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var pathResolver = new RootPathResolver(idQueryRoot, idAttribute.getName(), elementCollections, manyOrOneToOnes);
         buildRestrictions(pageBuilder, idQuery, criteriaBuilder, pathResolver, parameters);
+        restrictNotSoftDeleted(idQuery, idQueryRoot, page, criteriaBuilder);
         var id = (Expression<I>) pathResolver.get(idAttribute.getName());
         var elementPredicates = new ArrayList<Predicate>();
         var groupBy = new ArrayList<Expression<?>>(List.of(id));
@@ -2727,10 +2761,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns whether the predicate for an <code>@ElementCollection</code> is built as plain <code>IN</code> by {@link #buildInPredicate}, which is only so
-     * where a nested subquery is not supported, and which cannot express a negation or a {@link Criteria}.
+     * where a nested subquery is not supported, and which cannot express a negation, a {@link Criteria} or a nested multi-valued item.
      */
     private boolean isElementCollectionInPredicate(AbstractQuery<?> query, Object value, boolean negated) {
-        return !isNestedSubquerySupported(query) && !negated && !containsCriteria(value);
+        return !isNestedSubquerySupported(query) && !negated && stream(value).noneMatch(item -> item instanceof Criteria || isMultiValued(item));
     }
 
     /**
@@ -2744,8 +2778,24 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return negated || !(query instanceof Subquery);
     }
 
-    private static boolean containsCriteria(Object value) {
-        return stream(value).anyMatch(Criteria.class::isInstance);
+    /**
+     * Restricts given query on given root to entities which are not soft deleted, unless the criteria of given page are on the soft deletable field.
+     */
+    private void restrictNotSoftDeleted(AbstractQuery<?> query, Root<E> root, Page page, CriteriaBuilder criteriaBuilder) {
+        if (!softDeleteData.isRestrictedBy(page.getRequiredCriteria()) && !softDeleteData.isRestrictedBy(page.getOptionalCriteria())) {
+            restrictNotSoftDeleted(query, root, criteriaBuilder);
+        }
+    }
+
+    /**
+     * Restricts given query on given root to entities which are not soft deleted.
+     */
+    private void restrictNotSoftDeleted(AbstractQuery<?> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
+        var notSoftDeletedPredicate = softDeleteData.buildNotSoftDeletedPredicate(root, criteriaBuilder);
+
+        if (notSoftDeletedPredicate != null) {
+            query.where(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getRestriction(), notSoftDeletedPredicate));
+        }
     }
 
     private static boolean isNegated(Object criteria) {
@@ -2762,7 +2812,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     )
     {
         var ignoreCase = String.class.equals(type);
-        var values = stream(value).map(item -> createElementCollectionCriteria(type, item).getValue()).filter(Objects::nonNull).toList();
+        var values = distinctBy(
+            stream(value).map(item -> createElementCollectionCriteria(type, item).getValue()).filter(Objects::nonNull).toList(),
+            BaseEntityService::toDistinctKey
+        );
 
         if (values.isEmpty()) {
             return null;
@@ -2771,7 +2824,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var in = values.stream().map(item -> ignoreCase ? criteriaBuilder.lower(parameterBuilder.create(item)) : parameterBuilder.create(item)).toList();
 
         alias.in(in.size());
-        return (ignoreCase ? lower(criteriaBuilder, (Expression<String>) path) : path).in(in.toArray(Expression<?>[]::new));
+        return lowerIfString(path, type, criteriaBuilder).in(in.toArray(Expression<?>[]::new));
     }
 
     /**
@@ -2894,7 +2947,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var subquery = query.subquery(Long.class);
         Root<E> subqueryRoot = subquery.from(entityType);
         var fieldPath = getCollectionFieldPath(subqueryRoot, field, pathResolver);
-        var predicates = items.stream()
+        var distinctItems = distinctBy(
+            items, item -> item == null || isEntity(item) || isMultiValued(item) ? item : toDistinctKey(createElementCollectionCriteria(type, item).getValue())
+        );
+        var predicates = distinctItems.stream()
             .map(item -> buildElementPredicate(fieldPath, type, item, criteriaBuilder, parameterBuilder))
             .filter(Objects::nonNull)
             .toList();
@@ -2903,7 +2959,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var count = subquery.select(criteriaBuilder.countDistinct(fieldPath))
+        var count = subquery.select(criteriaBuilder.countDistinct(lowerIfString(fieldPath, type, criteriaBuilder)))
             .where(
                 criteriaBuilder.or(toArray(predicates)),
                 buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()))
@@ -3006,6 +3062,43 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return isMultiValued(unwrapped) && stream(unwrapped).allMatch(BaseEntityService::isEmptyMultiValue);
     }
 
+    /**
+     * Returns given element, lowercased when the type is a String, which a plain criteria value matches case insensitively.
+     */
+    @SuppressWarnings("unchecked")
+    private static Expression<?> lowerIfString(Expression<?> element, Class<?> type, CriteriaBuilder criteriaBuilder) {
+        return String.class.equals(type) ? lower(criteriaBuilder, (Expression<String>) element) : element;
+    }
+
+    /**
+     * Returns the key by which given criteria value matches the same elements as another criteria value: a String compares case insensitively, and a decimal
+     * number by its numeric value.
+     */
+    private static Object toDistinctKey(Object criteriaValue) {
+        if (criteriaValue instanceof String string) {
+            return string.toLowerCase(ROOT);
+        }
+        else if (criteriaValue instanceof BigDecimal bigDecimal) {
+            return bigDecimal.stripTrailingZeros();
+        }
+        else if (criteriaValue instanceof Double || criteriaValue instanceof Float) {
+            return ((Number) criteriaValue).doubleValue() + 0.0; // IEEE 754: -0.0 + 0.0 is 0.0.
+        }
+        else {
+            return criteriaValue;
+        }
+    }
+
+    private static <T> List<T> distinctBy(List<T> items, Function<T, Object> key) {
+        var distinctItems = new LinkedHashMap<Object, T>();
+
+        for (var item : items) {
+            distinctItems.putIfAbsent(key.apply(item), item);
+        }
+
+        return new ArrayList<>(distinctItems.values());
+    }
+
     private static Criteria<?> createElementCollectionCriteria(Class<?> type, Object value) {
         if (value instanceof Criteria<?> criteria) {
             return criteria;
@@ -3096,7 +3189,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         if (fieldAndCount.getValue() > 1) {
             Expression<?> join = pathResolver.get(pathResolver.join(fieldAndCount.getKey()));
-            var countPredicate = criteriaBuilder.equal(criteriaBuilder.countDistinct(join), fieldAndCount.getValue());
+            var countPredicate = criteriaBuilder
+                .equal(criteriaBuilder.countDistinct(lowerIfString(join, join.getJavaType(), criteriaBuilder)), fieldAndCount.getValue());
             Alias.setHaving(inPredicate, countPredicate);
             groupByIfNecessary(query, pathResolver.get(fieldAndCount.getKey()));
             return countPredicate;
@@ -3145,6 +3239,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static boolean hasFetches(From<?, ?> from) {
         return from.getFetches().stream().anyMatch(Path.class::isInstance)
             || from instanceof PostponedFetchRoot<?> postponedFetchRoot && postponedFetchRoot.hasPostponedFetches();
+    }
+
+    /**
+     * Returns whether given entity is soft deleted. A proxy is dereferenced first, because its own fields do not hold the loaded state.
+     */
+    private boolean isSoftDeleted(E entity) {
+        return softDeleteData.isSoftDeleted(provider.dereferenceProxy(entity));
+    }
+
+    private E excludeSoftDeleted(E entity) {
+        return entity != null && isSoftDeleted(entity) ? null : entity;
     }
 
     private boolean isEntity(Object value) {

@@ -18,7 +18,6 @@ import static org.omnifaces.utils.Lang.isOneOf;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 
 import jakarta.annotation.Nullable;
@@ -108,7 +107,22 @@ public final class Numeric extends Criteria<Number> {
 
     @Override
     public boolean applies(@Nullable Object modelValue) {
-        return modelValue != null && Objects.equals(parseNumber(modelValue, getValue().getClass()), getValue());
+        return modelValue != null && compare(modelValue instanceof Number number ? number : toBigDecimal(modelValue), getValue()) == 0;
+    }
+
+    /**
+     * Compares given numbers by their numeric value, regardless of their type and scale. A NaN or an infinity compares as double.
+     */
+    static int compare(Number left, Number right) {
+        return isFinite(left) && isFinite(right) ? toBigDecimal(left).compareTo(toBigDecimal(right)) : Double.compare(left.doubleValue(), right.doubleValue());
+    }
+
+    private static boolean isFinite(Number number) {
+        return !(number instanceof Double || number instanceof Float) || Double.isFinite(number.doubleValue());
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        return (BigDecimal) parseNumber(value, BigDecimal.class);
     }
 
     private static Number parseNumber(Object searchValue, Class<?> targetType) {

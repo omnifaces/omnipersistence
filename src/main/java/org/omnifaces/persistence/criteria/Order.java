@@ -169,19 +169,21 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
             return false;
         }
 
-        T typedValue = (T) value;
+        var comparison = value instanceof Number number && getValue() instanceof Number criteriaNumber
+            ? Numeric.compare(number, criteriaNumber)
+            : ((T) value).compareTo(getValue());
 
         if (greaterThan()) {
-            return typedValue.compareTo(getValue()) > 0;
+            return comparison > 0;
         }
         else if (greaterThanOrEqualTo()) {
-            return typedValue.compareTo(getValue()) >= 0;
+            return comparison >= 0;
         }
         else if (lessThan()) {
-            return typedValue.compareTo(getValue()) < 0;
+            return comparison < 0;
         }
         else {
-            return typedValue.compareTo(getValue()) <= 0;
+            return comparison <= 0;
         }
     }
 
