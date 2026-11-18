@@ -21,8 +21,11 @@ import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 
 import java.beans.IntrospectionException;
 import java.beans.PropertyDescriptor;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,11 +68,19 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * against the values of the previous flush. The {@link Audit} fields must be of a basic type, such as a string, number, date or enum, and not an entity or
  * collection, because the values are kept until the entity instance itself is released.
  * <p>
+ * A value is changed when it is not equal to the previous value, also by content for an array. When one value is an instance of the class of the other and that
+ * class is {@link Comparable}, it is changed only when {@link Comparable#compareTo(Object)} does not return 0, so that a <code>Timestamp</code> loaded for a
+ * <code>Date</code> of the same instant, or a <code>BigDecimal</code> of another scale, is no change. A value type whose <code>compareTo</code> returns 0 for
+ * values which are not equal is thus not audited for that difference. A mutable value such as a <code>Date</code>, <code>Calendar</code> or array is kept as a
+ * copy, so that a change in place is audited.
+ * <p>
  * Only updates are audited. For persist and delete, observe the CDI events {@link Created} and {@link Deleted} instead. {@link BaseEntityListener} fires them
  * for every entity extending {@code BaseEntity}, and for any other entity which declares it in {@link EntityListeners}.
  * <p>
  * The values of the {@link Audit} fields and the ID are read via reflection during {@link PreUpdate}. When reading fails, for example because reflective access
  * is refused, an {@link IllegalStateException} is thrown, which aborts the flush.
+ * <p>
+ * Outside a CDI container no event is fired. The CDI lookup is then retried on every callback, so that events are fired once CDI becomes available.
  * <p>
  * Entity example:
  *
@@ -134,8 +145,6 @@ public class AuditListener {
 
     @Inject
     private BeanManager beanManager;
-
-    private Optional<BeanManager> optionalBeanManager;
 
     /**
      * Default constructor.
@@ -208,12 +217,16 @@ public class AuditListener {
         for (var newValue : newValues.entrySet()) {
             var oldValue = oldValues.get(newValue.getKey());
 
-            if (!Objects.equals(oldValue, newValue.getValue())) {
+            if (!isSameValue(oldValue, newValue.getValue())) {
                 if (changes.isEmpty()) {
                     entityId = ID_GETTERS.get(entity.getClass()).apply(entity);
                 }
 
-                changes.add(new AuditedChange(entity, entityId, Provider.getEntityName(entity.getClass()), newValue.getKey(), oldValue, newValue.getValue()));
+                changes.add(
+                    new AuditedChange(
+                        entity, entityId, Provider.getEntityName(entity.getClass()), newValue.getKey(), oldValue, copyIfMutable(newValue.getValue())
+                    )
+                );
             }
         }
 
@@ -265,10 +278,48 @@ public class AuditListener {
         var values = new LinkedHashMap<String, Object>(properties.size());
 
         for (var property : properties) {
-            values.put(property.getName(), invokeMethod(entity, property.getReadMethod()));
+            values.put(property.getName(), copyIfMutable(invokeMethod(entity, property.getReadMethod())));
         }
 
         return values;
+    }
+
+    private static Object copyIfMutable(Object value) {
+        if (value instanceof Date date) {
+            return date.clone();
+        }
+        else if (value instanceof Calendar calendar) {
+            return calendar.clone();
+        }
+        else if (value != null && value.getClass().isArray()) {
+            var length = Array.getLength(value);
+            var copy = Array.newInstance(value.getClass().getComponentType(), length);
+            System.arraycopy(value, 0, copy, 0, length);
+            return copy;
+        }
+        else {
+            return value;
+        }
+    }
+
+    /**
+     * Compares by {@link Comparable#compareTo(Object)} when one value is an instance of the class of the other: a provider may load a <code>Date</code> as a
+     * <code>Timestamp</code>, and <code>BigDecimal</code> equals takes the scale into account.
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static boolean isSameValue(Object oldValue, Object newValue) {
+        if (Objects.deepEquals(oldValue, newValue)) {
+            return true;
+        }
+        else if (oldValue instanceof Comparable comparable && oldValue.getClass().isInstance(newValue)) {
+            return comparable.compareTo(newValue) == 0;
+        }
+        else if (newValue instanceof Comparable comparable && newValue.getClass().isInstance(oldValue)) {
+            return comparable.compareTo(oldValue) == 0;
+        }
+        else {
+            return false;
+        }
     }
 
     private void fireAuditedChangeEvent(AuditedChange change) {
@@ -276,14 +327,6 @@ public class AuditListener {
     }
 
     private Optional<BeanManager> findBeanManager() {
-        if (optionalBeanManager == null) {
-            optionalBeanManager = Optional.ofNullable(getBeanManager());
-        }
-
-        return optionalBeanManager;
-    }
-
-    private BeanManager getBeanManager() {
         if (beanManager == null) {
             try {
                 beanManager = CDI.current().getBeanManager(); // Work around for CDI @Inject not working in JPA EntityListener (as observed in OpenJPA).
@@ -293,7 +336,7 @@ public class AuditListener {
             }
         }
 
-        return beanManager;
+        return Optional.ofNullable(beanManager);
     }
 
 }

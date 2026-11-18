@@ -29,12 +29,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import jakarta.annotation.Nullable;
 import jakarta.enterprise.inject.Typed;
@@ -49,20 +49,15 @@ import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.ValidationMode;
 import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Bindable;
-import jakarta.persistence.metamodel.CollectionAttribute;
+import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
-import jakarta.persistence.metamodel.ListAttribute;
-import jakarta.persistence.metamodel.MapAttribute;
+import jakarta.persistence.metamodel.IdentifiableType;
 import jakarta.persistence.metamodel.PluralAttribute;
-import jakarta.persistence.metamodel.SetAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Criteria.ParameterBuilder;
@@ -303,6 +298,10 @@ public final class JPA {
     /**
      * Returns count of all foreign key references to entity of given entity type with given ID of given identifier type. This is particularly useful in case
      * you intend to check if the given entity is still referenced elsewhere in database.
+     * <p>
+     * A reference is an association whose target is the given entity type or a supertype of it, also a singular association nested in an embeddable, but not a
+     * plural association nested in an embeddable. Each association counts once per referencing row, also in an entity hierarchy, and a plural association
+     * counts each row of its join. Give the actual class of the entity, because an association to a subclass of the given entity type is not counted.
      *
      * @param <T> The generic result type.
      * @param <I> The generic identifier type.
@@ -314,54 +313,82 @@ public final class JPA {
      */
     public static <T, I> long countForeignKeyReferences(EntityManager entityManager, Class<T> entityType, Class<I> identifierType, I id) {
         var metamodel = entityManager.getMetamodel();
-        SingularAttribute<? super T, I> idAttribute = metamodel.entity(entityType).getId(identifierType);
-        return metamodel.getEntities().stream()
-            .flatMap(entity -> getAttributesOfType(entity, entityType))
-            .distinct()
-            .mapToLong(attribute -> countReferencesTo(entityManager, attribute, idAttribute, id))
-            .sum();
+        var idName = metamodel.entity(entityType).getId(identifierType).getName();
+        var count = 0L;
+
+        for (var entity : metamodel.getEntities()) {
+            for (var reference : findReferences(entity, entityType)) {
+                count += countReferences(entityManager, entity, reference, idName, id);
+            }
+        }
+
+        return count;
     }
 
-    private static <E, T> Stream<Attribute<?, ?>> getAttributesOfType(EntityType<E> entity, Class<T> entityType) {
-        return entity.getAttributes().stream()
-            .filter(attribute -> entityType.equals(getJavaType(attribute)))
-            .map(attribute -> attribute);
+    /**
+     * Returns the attribute paths of given entity which reference given entity type, skipping those which the query on an entity supertype already counts.
+     */
+    private static List<List<Attribute<?, ?>>> findReferences(EntityType<?> entity, Class<?> entityType) {
+        var references = new ArrayList<List<Attribute<?, ?>>>();
+
+        for (var attribute : entity.getAttributes()) {
+            if (!isInheritedFromEntity(entity, attribute)) {
+                collectReferences(List.of(attribute), entityType, references);
+            }
+        }
+
+        return references;
     }
 
-    private static <E> Class<?> getJavaType(Attribute<? super E, ?> attribute) {
-        return attribute instanceof PluralAttribute
-            ? ((PluralAttribute<?, ?, ?>) attribute).getElementType().getJavaType()
-            : attribute.getJavaType();
+    private static boolean isInheritedFromEntity(EntityType<?> entity, Attribute<?, ?> attribute) {
+        for (IdentifiableType<?> supertype = entity.getSupertype(); supertype != null; supertype = supertype.getSupertype()) {
+            if (supertype instanceof EntityType && supertype.getAttributes().stream().anyMatch(inherited -> inherited.getName().equals(attribute.getName()))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    @SuppressWarnings("unchecked")
-    private static <E, T, I> Long countReferencesTo(EntityManager entityManager, Attribute<E, ?> attribute, SingularAttribute<? super T, I> idAttribute, I id) {
+    private static void collectReferences(List<Attribute<?, ?>> path, Class<?> entityType, List<List<Attribute<?, ?>>> references) {
+        var attribute = path.get(path.size() - 1);
+        var target = attribute instanceof PluralAttribute<?, ?, ?> plural ? plural.getElementType() : ((SingularAttribute<?, ?>) attribute).getType();
+
+        if (target instanceof EntityType && target.getJavaType().isAssignableFrom(entityType)) {
+            references.add(path);
+        }
+        else if (target instanceof EmbeddableType<?> embeddable && attribute instanceof SingularAttribute) {
+            for (var nested : embeddable.getAttributes()) {
+                if (nested instanceof SingularAttribute) {
+                    var nestedPath = new ArrayList<>(path);
+                    nestedPath.add(nested);
+                    collectReferences(nestedPath, entityType, references);
+                }
+            }
+        }
+    }
+
+    private static long countReferences(EntityManager entityManager, EntityType<?> entity, List<Attribute<?, ?>> reference, String idName, Object id) {
         var criteriaBuilder = entityManager.getCriteriaBuilder();
-        CriteriaQuery<Long> query = criteriaBuilder.createQuery(Long.class);
-        Root<E> root = query.from(attribute.getDeclaringType().getJavaType());
-        Join<E, T> join;
+        var query = criteriaBuilder.createQuery(Long.class);
+        var root = query.from(entity);
+        var last = reference.size() - 1;
+        Path<?> referenced;
 
-        // Explicit casts: javac rejects a generic type pattern here as unsafe, and a raw type pattern loses the type arguments.
-        if (attribute instanceof SingularAttribute) {
-            join = root.join((SingularAttribute<E, T>) attribute);
-        }
-        else if (attribute instanceof ListAttribute) {
-            join = root.join((ListAttribute<E, T>) attribute);
-        }
-        else if (attribute instanceof SetAttribute) {
-            join = root.join((SetAttribute<E, T>) attribute);
-        }
-        else if (attribute instanceof MapAttribute) {
-            join = root.join((MapAttribute<E, ?, T>) attribute);
-        }
-        else if (attribute instanceof CollectionAttribute) {
-            join = root.join((CollectionAttribute<E, T>) attribute);
+        if (last == 0) {
+            referenced = root.join(reference.get(last).getName());
         }
         else {
-            return 0L; // Unknown attribute type, just return 0.
+            Path<?> embedded = root;
+
+            for (var attribute : reference.subList(0, last)) {
+                embedded = embedded.get(attribute.getName());
+            }
+
+            referenced = embedded.get(reference.get(last).getName());
         }
 
-        query.select(criteriaBuilder.count(root)).where(criteriaBuilder.equal(join.get(idAttribute), id));
+        query.select(criteriaBuilder.count(root)).where(criteriaBuilder.equal(referenced.get(idName), id));
         return entityManager.createQuery(query).getSingleResult();
     }
 
@@ -410,7 +437,7 @@ public final class JPA {
      * @since 2.0
      */
     public static String escapeLike(String value) {
-        return escape(value, LIKE_SPECIAL_CHARACTERS + requireCurrentBaseEntityService("escapeLike").getDatabase().getLikeSpecialCharacters());
+        return escape(value, LIKE_SPECIAL_CHARACTERS + getDatabaseLikeSpecialCharacters("escapeLike"));
     }
 
     /**
@@ -424,25 +451,34 @@ public final class JPA {
      * @since 2.0
      */
     public static String escapeLikePattern(String pattern) {
-        var specialCharacters = requireCurrentBaseEntityService("escapeLikePattern").getDatabase().getLikeSpecialCharacters();
+        var specialCharacters = getDatabaseLikeSpecialCharacters("escapeLikePattern");
+        var escapedCharacters = LIKE_SPECIAL_CHARACTERS + specialCharacters;
         var escaped = new StringBuilder(pattern.length());
 
         for (var i = 0; i < pattern.length(); i++) {
             var character = pattern.charAt(i);
 
             if (character == LIKE_ESCAPE) {
-                escaped.append(LIKE_ESCAPE).append(i + 1 < pattern.length() ? pattern.charAt(++i) : LIKE_ESCAPE);
+                appendEscapedIfNecessary(escaped, i + 1 < pattern.length() ? pattern.charAt(++i) : LIKE_ESCAPE, escapedCharacters);
             }
             else {
-                if (specialCharacters.indexOf(character) >= 0) {
-                    escaped.append(LIKE_ESCAPE);
-                }
-
-                escaped.append(character);
+                appendEscapedIfNecessary(escaped, character, specialCharacters);
             }
         }
 
         return escaped.toString();
+    }
+
+    private static String getDatabaseLikeSpecialCharacters(String methodName) {
+        return requireCurrentBaseEntityService(methodName).getDatabase().getLikeSpecialCharacters();
+    }
+
+    private static void appendEscapedIfNecessary(StringBuilder escaped, char character, String charactersToEscape) {
+        if (charactersToEscape.indexOf(character) >= 0) {
+            escaped.append(LIKE_ESCAPE);
+        }
+
+        escaped.append(character);
     }
 
     /**
@@ -641,11 +677,7 @@ public final class JPA {
         var escaped = new StringBuilder(value.length());
 
         for (var character : value.toCharArray()) {
-            if (specialCharacters.indexOf(character) >= 0) {
-                escaped.append(LIKE_ESCAPE);
-            }
-
-            escaped.append(character);
+            appendEscapedIfNecessary(escaped, character, specialCharacters);
         }
 
         return escaped.toString();

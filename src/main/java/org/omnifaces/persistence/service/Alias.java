@@ -32,7 +32,6 @@ class Alias {
     private static final String AS = "as_";
     private static final String WHERE = "where_";
     private static final String HAVING = "having_";
-    private static final String IN = "_in";
 
     private String value;
 
@@ -49,8 +48,12 @@ class Alias {
         return new Alias((provider.isAggregation(expression) ? HAVING : WHERE) + field.replace('.', '$'));
     }
 
+    /**
+     * Puts the count directly after the prefix: a field name cannot start with a digit, so {@link #isIn(Predicate)} cannot mistake a field name for it.
+     */
     public void in(int count) {
-        value += "_" + count + IN;
+        var fieldStart = fieldStart(value);
+        value = value.substring(0, fieldStart) + count + "_" + value.substring(fieldStart);
     }
 
     public void set(Predicate predicate) {
@@ -62,7 +65,9 @@ class Alias {
     }
 
     public static boolean isIn(Predicate predicate) {
-        return predicate.getAlias().endsWith(IN);
+        var alias = predicate.getAlias();
+        var fieldStart = fieldStart(alias);
+        return fieldStart < alias.length() && Character.isDigit(alias.charAt(fieldStart));
     }
 
     public static boolean isHaving(Predicate predicate) {
@@ -70,15 +75,21 @@ class Alias {
     }
 
     public static Entry<String, Long> getFieldAndCount(Predicate inPredicate) {
-        String alias = inPredicate.getAlias();
-        String fieldAndCount = alias.substring(alias.indexOf('_') + 1, alias.lastIndexOf('_'));
-        String field = fieldAndCount.substring(0, fieldAndCount.lastIndexOf('_')).replace('$', '.');
-        long count = Long.parseLong(fieldAndCount.substring(field.length() + 1));
+        var alias = inPredicate.getAlias();
+        var countAndField = alias.substring(fieldStart(alias));
+        var countEnd = countAndField.indexOf('_');
+        var count = Long.parseLong(countAndField.substring(0, countEnd));
+        var field = countAndField.substring(countEnd + 1).replace('$', '.');
         return new SimpleEntry<>(field, count);
     }
 
     public static void setHaving(Predicate inPredicate, Predicate countPredicate) {
-        countPredicate.alias(HAVING + inPredicate.getAlias().substring(inPredicate.getAlias().indexOf('_') + 1));
+        var alias = inPredicate.getAlias();
+        countPredicate.alias(HAVING + alias.substring(fieldStart(alias)));
+    }
+
+    private static int fieldStart(String alias) {
+        return alias.indexOf('_') + 1;
     }
 
 }

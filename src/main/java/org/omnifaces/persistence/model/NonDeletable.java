@@ -15,6 +15,7 @@ package org.omnifaces.persistence.model;
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
@@ -23,8 +24,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
 
 /**
  * <p>
- * When put on an entity, then any attempt to {@link BaseEntityService#delete(Object)} will throw {@link NonDeletableEntityException}. This is useful for
- * entities that should never be hard-deleted, e.g. because they are referenced by other entities or represent immutable records.
+ * When put on an entity, then any attempt to {@link BaseEntityService#delete(Object)} will throw {@link NonDeletableEntityException}, also on a subclass or a
+ * proxy of the entity. This is useful for entities that should never be hard-deleted, e.g. because they are referenced by other entities or represent immutable
+ * records.
  * <p>
  * Usage example:
  *
@@ -43,6 +45,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  */
 @Target(TYPE)
 @Retention(RUNTIME)
+@Inherited
 public @interface NonDeletable {
     //
 }

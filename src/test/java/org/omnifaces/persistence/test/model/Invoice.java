@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.test.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 public class Invoice extends Document {
@@ -21,12 +22,23 @@ public class Invoice extends Document {
 
     private Integer amount;
 
+    @ManyToOne
+    private Letter coverLetter;
+
     public Integer getAmount() {
         return amount;
     }
 
     public void setAmount(Integer amount) {
         this.amount = amount;
+    }
+
+    public Letter getCoverLetter() {
+        return coverLetter;
+    }
+
+    public void setCoverLetter(Letter coverLetter) {
+        this.coverLetter = coverLetter;
     }
 
 }

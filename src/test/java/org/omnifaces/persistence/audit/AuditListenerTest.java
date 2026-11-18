@@ -21,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.util.Date;
 import java.util.List;
 
 import jakarta.persistence.EmbeddedId;
@@ -30,6 +33,7 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.MappedSuperclass;
 
 import org.junit.jupiter.api.Test;
+import org.omnifaces.persistence.RecordingCDIProvider;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
 /**
@@ -40,6 +44,7 @@ class AuditListenerTest {
 
     private static final int RELEASED_ENTITIES = 1000;
     private static final long RELEASE_TIMEOUT_MILLIS = 10_000;
+    private static final long INSTANT = 1_700_000_000_000L;
 
     private final AuditListener listener = new AuditListener();
 
@@ -236,6 +241,92 @@ class AuditListenerTest {
         assertTrue(AuditListener.SNAPSHOTS.size() <= snapshotsBefore, "Snapshots of unreachable entities are released");
     }
 
+    @Test
+    void timestampLoadedForDateIsNotAChangeWhenSetToDateOfSameInstant() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setDate(new Timestamp(INSTANT));
+        listener.beforeUpdate(entity);
+        entity.setDate(new Date(INSTANT));
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void dateMutatedInPlaceIsAChange() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setDate(new Date(INSTANT));
+        listener.beforeUpdate(entity);
+        entity.getDate().setTime(INSTANT + 1);
+        assertEquals(List.of("date"), changedProperties(entity));
+    }
+
+    @Test
+    void byteArrayWithSameContentIsNotAChange() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setBytes(new byte[] { 1, 2 });
+        listener.beforeUpdate(entity);
+        entity.setBytes(new byte[] { 1, 2 });
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void byteArrayMutatedInPlaceIsAChange() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setBytes(new byte[] { 1, 2 });
+        listener.beforeUpdate(entity);
+        entity.getBytes()[0] = 3;
+        assertEquals(List.of("bytes"), changedProperties(entity));
+    }
+
+    @Test
+    void mutatingNewValueOfAuditedChangeDoesNotAlterSnapshot() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setBytes(new byte[] { 1, 2 });
+        listener.beforeUpdate(entity);
+        entity.setBytes(new byte[] { 3, 4 });
+        var change = AuditListener.detectChanges(entity).get(0);
+        ((byte[]) change.getNewValue())[0] = 5;
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void bigDecimalWithOtherScaleIsNotAChange() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setAmount(new BigDecimal("5.0"));
+        listener.beforeUpdate(entity);
+        entity.setAmount(new BigDecimal("5.00"));
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void bigDecimalWithOtherValueIsAChange() {
+        var entity = new ValueTypesAuditedEntity();
+        entity.setAmount(new BigDecimal("5.0"));
+        listener.beforeUpdate(entity);
+        entity.setAmount(new BigDecimal("5.01"));
+        assertEquals(List.of("amount: 5.0 -> 5.01"), changes(entity));
+    }
+
+    /**
+     * An {@link AuditedChange} is fired as soon as CDI is available, also when it was not available during an earlier update.
+     */
+    @Test
+    void auditedChangeIsFiredOnceCdiBecomesAvailable() {
+        var cdi = RecordingCDIProvider.install();
+
+        try {
+            var entity = loaded(new AuditedEntity(), "old");
+            entity.setValue("first");
+            listener.afterUpdate(entity);
+            cdi.setAvailable(true);
+            entity.setValue("second");
+            listener.afterUpdate(entity);
+            assertEquals(List.of("value: first -> second"), cdi.getFiredEvents().stream().map(change -> describe((AuditedChange) change)).toList());
+        }
+        finally {
+            cdi.setAvailable(false);
+        }
+    }
+
     static boolean isExplicitGcDisabled() {
         return getRuntimeMXBean().getInputArguments().contains("-XX:+DisableExplicitGC");
     }
@@ -256,9 +347,15 @@ class AuditListenerTest {
     }
 
     private static List<String> changes(Object entity) {
-        return AuditListener.detectChanges(entity).stream()
-            .map(change -> change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue())
-            .toList();
+        return AuditListener.detectChanges(entity).stream().map(AuditListenerTest::describe).toList();
+    }
+
+    private static List<String> changedProperties(Object entity) {
+        return AuditListener.detectChanges(entity).stream().map(AuditedChange::getPropertyName).toList();
+    }
+
+    private static String describe(AuditedChange change) {
+        return change.getPropertyName() + ": " + change.getOldValue() + " -> " + change.getNewValue();
     }
 
     @Entity
@@ -441,6 +538,44 @@ class AuditListenerTest {
 
         public void setValue(String value) {
             this.value = value;
+        }
+
+    }
+
+    @Entity
+    public static class ValueTypesAuditedEntity extends CodedEntity {
+
+        @Audit
+        private Date date;
+
+        @Audit
+        private byte[] bytes;
+
+        @Audit
+        private BigDecimal amount;
+
+        public Date getDate() {
+            return date;
+        }
+
+        public void setDate(Date date) {
+            this.date = date;
+        }
+
+        public byte[] getBytes() {
+            return bytes;
+        }
+
+        public void setBytes(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        public BigDecimal getAmount() {
+            return amount;
+        }
+
+        public void setAmount(BigDecimal amount) {
+            this.amount = amount;
         }
 
     }
