@@ -11,17 +11,21 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Service layer for Jakarta Persistence entities.
+ * Services for Jakarta Persistence entities.
  * <p>
- * The sole public entry point is {@link BaseEntityService}, a generic CRUD service that supports lookup, persist, update, delete, soft-delete, batch
- * operations, JPQL shortcuts, lazy collection fetching, and cursor- and offset-based pagination via {@link org.omnifaces.persistence.model.dto.Page}. Extend it
- * and annotate with {@code @Stateless} or {@code @ApplicationScoped} to get a fully functional service for any
- * {@link org.omnifaces.persistence.model.BaseEntity} subclass.
- * <p>
+ * This package contains:
+ * <ul>
+ * <li>{@link BaseEntityService} - generic service with find, list, persist, update, save, delete, soft delete, batch and paging actions; extend it and annotate
+ * it with {@code @Stateless} or {@code @ApplicationScoped}</li>
+ * <li>{@link EntityRepository} - offers the actions of {@link BaseEntityService} for a given entity type without extending it; inject it with concrete type
+ * arguments</li>
+ * <li>{@link EntityRepositoryExtension} - CDI extension which makes the {@link EntityRepository} injection work on OpenWebBeans</li>
+ * <li>{@link RootWrapper} - wrapper of a {@link jakarta.persistence.criteria.Root}, to decorate it</li>
+ * <li>{@link FetchWrapper} - wrapper of a {@link jakarta.persistence.criteria.Fetch}, to decorate it</li>
+ * </ul>
  * All other types in this package are package-private implementation helpers.
  *
- * @see BaseEntityService
  * @see org.omnifaces.persistence.model.BaseEntity
- * @see org.omnifaces.persistence.model.dto.Page
+ * @see org.omnifaces.persistence.query
  */
 package org.omnifaces.persistence.service;

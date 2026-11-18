@@ -11,13 +11,15 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Jakarta Persistence entity listener that bridges Jakarta Persistence lifecycle callbacks to CDI events.
+ * Jakarta Persistence entity listener which fires the lifecycle callbacks as CDI events.
  * <p>
- * {@link BaseEntityListener} is registered automatically on all {@link org.omnifaces.persistence.model.BaseEntity} subclasses via {@code @EntityListeners} and
- * fires qualified CDI events ({@link org.omnifaces.persistence.event.Created}, {@link org.omnifaces.persistence.event.Updated},
- * {@link org.omnifaces.persistence.event.Deleted}) on the corresponding Jakarta Persistence lifecycle callbacks.
+ * This package contains:
+ * <ul>
+ * <li>{@link BaseEntityListener} - fires a CDI event qualified with {@link org.omnifaces.persistence.event.Created},
+ * {@link org.omnifaces.persistence.event.Updated} or {@link org.omnifaces.persistence.event.Deleted} after the entity is persisted, updated or removed</li>
+ * </ul>
+ * It is registered on all {@link org.omnifaces.persistence.model.BaseEntity} subclasses via {@code @EntityListeners}.
  *
- * @see BaseEntityListener
  * @see org.omnifaces.persistence.event
  */
 package org.omnifaces.persistence.listener;

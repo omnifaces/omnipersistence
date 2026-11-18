@@ -11,30 +11,37 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Mapped superclass hierarchy and associated model annotations.
+ * Mapped superclasses for entities, and the model annotations.
  * <p>
- * Extend the appropriate base class depending on which columns your entity needs:
+ * Extend the base class which provides the columns the entity needs:
  * <ul>
- * <li>{@link BaseEntity} — identity only; {@code @Id} must be defined manually.
- * <li>{@link GeneratedIdEntity} — adds auto-generated {@code id}.
- * <li>{@link TimestampedBaseEntity} — adds {@code created} and {@code lastModified}; {@code @Id} manual.
- * <li>{@link TimestampedEntity} — adds auto-generated {@code id}, {@code created} and {@code lastModified}.
- * <li>{@link VersionedBaseEntity} — adds {@code @Version} on top of {@link TimestampedBaseEntity}; {@code @Id} manual.
- * <li>{@link VersionedEntity} — adds {@code @Version} on top of {@link TimestampedEntity}.
- * <li>{@link LockedBaseEntity} — adds {@code @Version} on top of {@link BaseEntity}; {@code @Id} manual.
- * <li>{@link LockedEntity} — adds {@code @Version} on top of {@link GeneratedIdEntity}.
+ * <li>{@link BaseEntity} - identity only; {@code @Id} manual</li>
+ * <li>{@link GeneratedIdEntity} - adds a generated {@code id}</li>
+ * <li>{@link TimestampedBaseEntity} - adds {@code created} and {@code lastModified}; {@code @Id} manual</li>
+ * <li>{@link TimestampedEntity} - adds a generated {@code id}, {@code created} and {@code lastModified}</li>
+ * <li>{@link VersionedBaseEntity} - adds {@code @Version} on top of {@link TimestampedBaseEntity}; {@code @Id} manual</li>
+ * <li>{@link VersionedEntity} - adds {@code @Version} on top of {@link TimestampedEntity}</li>
+ * <li>{@link LockedBaseEntity} - adds {@code @Version} on top of {@link BaseEntity}; {@code @Id} manual</li>
+ * <li>{@link LockedEntity} - adds {@code @Version} on top of {@link GeneratedIdEntity}</li>
+ * </ul>
+ * "{@code @Id} manual" means that the entity must declare its own {@code @Id}.
+ * <p>
+ * All base classes implement {@code equals}, {@code hashCode}, {@code compareTo} and {@code toString} based on the entity ID, which
+ * {@link BaseEntity#identityGetters()} can override.
+ * <p>
+ * The base interfaces:
+ * <ul>
+ * <li>{@link Timestamped} - implemented by the timestamped base classes</li>
+ * <li>{@link Versioned} - implemented by the versioned and locked base classes</li>
  * </ul>
  * <p>
- * All base classes provide correct {@code equals}, {@code hashCode}, {@code compareTo} and {@code toString} based on entity ID by default, overridable via
- * {@link BaseEntity#identityGetters()}.
- * <p>
- * Supporting model annotations:
+ * The model annotations:
  * <ul>
- * <li>{@link SoftDeletable} — marks the boolean field used for logical deletion.
- * <li>{@link NonDeletable} — prevents hard deletes at the service level.
+ * <li>{@link SoftDeletable} - marks the boolean field or getter which holds the deleted or active state, for soft delete and undelete</li>
+ * <li>{@link NonDeletable} - makes {@link org.omnifaces.persistence.service.BaseEntityService#delete(Object)} throw
+ * {@link org.omnifaces.persistence.exception.NonDeletableEntityException}</li>
  * </ul>
  *
- * @see BaseEntity
  * @see org.omnifaces.persistence.service.BaseEntityService
  */
 package org.omnifaces.persistence.model;

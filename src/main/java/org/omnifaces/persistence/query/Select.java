@@ -24,7 +24,6 @@ import jakarta.persistence.Query;
 import jakarta.persistence.criteria.Root;
 
 import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.model.dto.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 

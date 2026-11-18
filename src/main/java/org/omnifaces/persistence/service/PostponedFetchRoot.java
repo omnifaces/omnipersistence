@@ -62,7 +62,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Not;
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 
 /**
  * Root which postpones all issued fetches, except for singular associations, until after the paged query has run. The Jakarta Persistence specification leaves

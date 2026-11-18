@@ -11,12 +11,18 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Root package of OmniPersistence.
+ * Core utilities complementing the Jakarta Persistence API.
  * <p>
- * Contains {@link org.omnifaces.persistence.JPA}, a static utility class complementing the Jakarta Persistence Criteria API, and the
- * {@link org.omnifaces.persistence.Provider} and {@link org.omnifaces.persistence.Database} enums representing the Jakarta Persistence provider and underlying
- * database detected at runtime by {@link org.omnifaces.persistence.service.BaseEntityService}.
+ * This package contains:
+ * <ul>
+ * <li>{@link JPA} - static utilities for optional and first results, result maps, foreign key reference counts, validation mode and criteria expressions</li>
+ * <li>{@link Provider} - the Jakarta Persistence provider (Hibernate, EclipseLink, OpenJPA) and its provider specific behavior</li>
+ * <li>{@link Database} - the database (H2, MySQL or MariaDB, PostgreSQL, SQL Server, DB2, or UNKNOWN when not detected) and its database specific behavior</li>
+ * </ul>
+ * {@link org.omnifaces.persistence.service.BaseEntityService} detects the provider and the database at runtime.
  *
- * @see org.omnifaces.persistence.service.BaseEntityService
+ * @see org.omnifaces.persistence.service
+ * @see org.omnifaces.persistence.model
+ * @see org.omnifaces.persistence.query
  */
 package org.omnifaces.persistence;

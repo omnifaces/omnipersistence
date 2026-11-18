@@ -31,7 +31,7 @@ import jakarta.transaction.Transactional;
 
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
