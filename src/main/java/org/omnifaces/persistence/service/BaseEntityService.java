@@ -147,6 +147,7 @@ import org.omnifaces.persistence.model.TimestampedEntity;
 import org.omnifaces.persistence.model.VersionedBaseEntity;
 import org.omnifaces.persistence.model.VersionedEntity;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Select;
 import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
 
@@ -593,7 +594,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching the given query and positional parameters.
      */
     protected Optional<E> find(String jpql, Object... parameters) {
-        return findSingleResult(list(jpql, parameters));
+        return find(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -621,7 +622,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching the given query and mapped parameters.
      */
     protected Optional<E> find(String jpql, Map<String, Object> parameters) {
-        return findSingleResult(list(jpql, parameters));
+        return find(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -647,7 +648,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @throws NonUniqueResultException When more than one entity is found matching given query and mapped parameters.
      */
     protected Optional<E> find(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
-        return findSingleResult(list(queryBuilder, parameters));
+        return find(Select.criteria(queryBuilder, parameters).build());
+    }
+
+    /**
+     * Find entity by the given {@link Select}, if any.
+     * <p>
+     * Usage example:
+     *
+     * <pre>
+     *
+     * Optional&lt;Foo&gt; foo = find(Select.jpql("WHERE e.bar = ?1 AND e.baz = ?2", bar, baz).cacheable(true).build());
+     * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded as described in {@link Select}.
+     *
+     * @param select The select.
+     * @return Found entity matching the given select, if any.
+     * @throws NonUniqueResultException When more than one entity is found matching the given select.
+     * @since 2.0
+     */
+    protected Optional<E> find(Select select) {
+        return findSingleResult(list(select));
     }
 
     private Optional<E> findSingleResult(List<E> results) {
@@ -687,7 +709,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching the given query and positional parameters, if any.
      */
     protected Optional<E> findFirst(String jpql, Object... parameters) {
-        return findFirstResult(createQuery(select(jpql), parameters));
+        return findFirst(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -715,7 +737,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching the given query and mapped parameters, if any.
      */
     protected Optional<E> findFirst(String jpql, Map<String, Object> parameters) {
-        return findFirstResult(createQuery(select(jpql), parameters));
+        return findFirst(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -741,7 +763,28 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return Found entity matching {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
     protected Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
-        return findFirstResult(createQuery(queryBuilder, parameters));
+        return findFirst(Select.criteria(queryBuilder, parameters).build());
+    }
+
+    /**
+     * Find first entity by the given {@link Select}, if any. The difference with {@link #find(Select)} is that it doesn't throw
+     * {@link NonUniqueResultException} when there are multiple matches.
+     * <p>
+     * Usage example:
+     *
+     * <pre>
+     *
+     * Optional&lt;Foo&gt; foo = findFirst(Select.jpql("WHERE e.bar = ?1 ORDER BY e.baz", bar).cacheable(true).build());
+     * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded as described in {@link Select}.
+     *
+     * @param select The select.
+     * @return Found entity matching the given select, if any.
+     * @since 2.0
+     */
+    protected Optional<E> findFirst(Select select) {
+        return findFirstResult(createQuery(select));
     }
 
     /**
@@ -947,11 +990,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return List of all entities, optionally including soft deleted ones.
      */
     protected List<E> list(boolean includeSoftDeleted) {
-        return list(
-            select("")
-                + softDeleteData.getWhereClause(includeSoftDeleted)
-                + orderByIdDescending()
-        );
+        return list(Select.jpql(selectAll(includeSoftDeleted)).build());
     }
 
     /**
@@ -995,7 +1034,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return List of entities matching the given query and positional parameters, if any.
      */
     protected List<E> list(String jpql, Object... parameters) {
-        return createQuery(select(jpql), parameters).getResultList();
+        return list(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -1022,7 +1061,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return List of entities matching the given query and mapped parameters, if any.
      */
     protected List<E> list(String jpql, Map<String, Object> parameters) {
-        return createQuery(select(jpql), parameters).getResultList();
+        return list(Select.jpql(jpql, parameters).build());
     }
 
     /**
@@ -1047,7 +1086,31 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @return List of entities matching the {@link CriteriaQueryBuilder} and mapped parameters, if any.
      */
     protected List<E> list(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
-        return createQuery(queryBuilder, parameters).getResultList();
+        return list(Select.criteria(queryBuilder, parameters).build());
+    }
+
+    /**
+     * List entities matching the given {@link Select}.
+     * <p>
+     * Usage example:
+     *
+     * <pre>
+     *
+     * List&lt;Foo&gt; foos = list(Select.all().cacheable(true).build());
+     * </pre>
+     * <p>
+     * Soft deleted entities, see {@link SoftDeletable}, are excluded as described in {@link Select}.
+     *
+     * @param select The select.
+     * @return List of entities matching the given select.
+     * @since 2.0
+     */
+    protected List<E> list(Select select) {
+        return createQuery(select).getResultList();
+    }
+
+    private String selectAll(boolean includeSoftDeleted) {
+        return select("") + softDeleteData.getWhereClause(includeSoftDeleted) + orderByIdDescending();
     }
 
     private String select(String jpql) {
@@ -1082,6 +1145,36 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var query = getEntityManager().createQuery(jpql, entityType);
         setMappedParameters(query, parameters);
         return query;
+    }
+
+    private TypedQuery<E> createQuery(Select select) {
+        TypedQuery<E> query;
+
+        if (select.isAll()) {
+            query = createQuery(selectAll(false), Map.of());
+        }
+        else if (select.getCriteriaQueryBuilder() != null) {
+            query = createQuery(criteriaQueryBuilderOf(select), select.getMappedParameters());
+        }
+        else if (select.getMappedParameters() != null) {
+            query = createQuery(select(select.getJpql()), select.getMappedParameters());
+        }
+        else {
+            query = createQuery(select(select.getJpql()), select.getPositionalParameters());
+        }
+
+        var cacheable = select.getCacheable();
+
+        if (cacheable != null) {
+            provider.configureSecondLevelCache(query, cacheable);
+        }
+
+        return query;
+    }
+
+    @SuppressWarnings("unchecked")
+    private CriteriaQueryBuilder<E> criteriaQueryBuilderOf(Select select) {
+        return (CriteriaQueryBuilder<E>) select.getCriteriaQueryBuilder();
     }
 
     private Query createUpdateQuery(String jpql, Object... parameters) {

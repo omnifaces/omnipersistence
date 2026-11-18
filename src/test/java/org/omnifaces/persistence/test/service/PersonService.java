@@ -34,6 +34,7 @@ import jakarta.persistence.criteria.Subquery;
 
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Person;
@@ -235,6 +236,21 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public PartialResultList<Person> getPageWithoutCache(Page page) {
         return getPage(page, false, false);
+    }
+
+    @Override
+    public Optional<Person> find(Select select) {
+        return super.find(select);
+    }
+
+    @Override
+    public Optional<Person> findFirst(Select select) {
+        return super.findFirst(select);
+    }
+
+    @Override
+    public List<Person> list(Select select) {
+        return super.list(select);
     }
 
     /**

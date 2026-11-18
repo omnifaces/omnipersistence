@@ -32,6 +32,7 @@ import jakarta.transaction.Transactional;
 import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
@@ -337,6 +338,16 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
     }
 
     /**
+     * See {@link BaseEntityService#find(Select)}.
+     *
+     * @param select The select.
+     * @return Found entity matching the given select, if any.
+     */
+    public Optional<E> find(Select select) {
+        return service().find(select);
+    }
+
+    /**
      * See {@link BaseEntityService#findFirst(String, Object...)}.
      *
      * @param jpql The Java Persistence Query Language statement.
@@ -367,6 +378,16 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      */
     public Optional<E> findFirst(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return service().findFirst(queryBuilder, parameters);
+    }
+
+    /**
+     * See {@link BaseEntityService#findFirst(Select)}.
+     *
+     * @param select The select.
+     * @return Found entity matching the given select, if any.
+     */
+    public Optional<E> findFirst(Select select) {
+        return service().findFirst(select);
     }
 
     /**
@@ -536,6 +557,16 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      */
     public List<E> list(CriteriaQueryBuilder<E> queryBuilder, Map<String, Object> parameters) {
         return service().list(queryBuilder, parameters);
+    }
+
+    /**
+     * See {@link BaseEntityService#list(Select)}.
+     *
+     * @param select The select.
+     * @return List of entities matching the given select.
+     */
+    public List<E> list(Select select) {
+        return service().list(select);
     }
 
     // Insert actions -------------------------------------------------------------------------------------------------

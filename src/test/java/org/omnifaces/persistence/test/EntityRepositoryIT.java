@@ -75,6 +75,7 @@ import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.model.BaseEntity;
 import org.omnifaces.persistence.model.VersionedBaseEntity;
 import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
@@ -969,6 +970,41 @@ public class EntityRepositoryIT {
         var firstIds = allIds.subList(0, allIds.size() / 2);
         var notFirst = personRepository.getPage(Page.with().allMatch(Map.of("id", Not.value(firstIds))).build(), false);
         assertEquals(allIds.subList(firstIds.size(), allIds.size()), notFirst.stream().map(Person::getId).sorted().toList(), "Page of persons not by IDs");
+    }
+
+    /**
+     * An all {@link Select} and a criteria {@link Select} exclude soft deleted entities, like <code>list()</code> and a {@link CriteriaQueryBuilder}. A JPQL
+     * {@link Select} returns them, like a JPQL query.
+     */
+    @Test
+    void testSelectExcludesSoftDeletedUnlessByJpql() {
+        var activeId = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        var softDeletedId = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(softDeletedId)));
+            var ids = List.of(activeId, softDeletedId);
+
+            assertEquals(idsOf(textRepository.list()), idsOf(textRepository.list(Select.all().build())), "All select");
+            assertEquals(
+                List.of(activeId), idsOf(
+                    textRepository.list(
+                        Select.<Text>criteria(
+                            (criteriaBuilder, query, root) -> query.where(root.get("id").in(ids)),
+                            Map.of()
+                        ).build()
+                    )
+                ),
+                "Criteria select"
+            );
+            assertEquals(
+                List.of(softDeletedId, activeId),
+                idsOf(textRepository.list(Select.jpql("WHERE e.id IN (?1, ?2) ORDER BY e.id DESC", activeId, softDeletedId).build())), "JPQL select"
+            );
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeId, softDeletedId), true).forEach(textRepository::delete));
+        }
     }
 
     /**
