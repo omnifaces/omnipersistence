@@ -128,6 +128,16 @@ List<Person> list  = personRepository.list("WHERE e.gender = :g", Map.of("g", MA
 int affected       = personRepository.update("SET e.active = false WHERE e.lastLogin < ?1", cutoff);
 ```
 
+**Query options** — wrap the query in a `Select` to set options such as caching the results in the 2nd level cache:
+
+```java
+List<Country> countries = countryRepository.list(Select.all().cacheable(true).build());
+Optional<Person> p      = personRepository.find(Select.jpql("WHERE e.email = ?1", email).cacheable(true).build());
+```
+
+Without `cacheable(...)` the 2nd level cache settings of the persistence unit apply.
+With `cacheable(false)` the results are read from the DB and the cache is refreshed.
+
 **Lazy collections**
 
 ```java
