@@ -28,6 +28,7 @@ import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.partitioningBy;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -2506,13 +2507,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var page = pageBuilder.getPage();
         var requiredPredicates = buildPredicates(page.getRequiredCriteria(), query, criteriaBuilder, pathResolver, parameters);
-        var optionalPredicates = buildPredicates(page.getOptionalCriteria(), query, criteriaBuilder, pathResolver, parameters);
-        Predicate restriction = null;
-
-        if (!optionalPredicates.isEmpty()) {
-            pageBuilder.shouldBuildCountSubquery(true);
-            restriction = criteriaBuilder.or(toArray(optionalPredicates));
-        }
+        var restriction = buildOptionalRestriction(pageBuilder, query, criteriaBuilder, pathResolver, parameters);
 
         if (!requiredPredicates.isEmpty()) {
             pageBuilder.shouldBuildCountSubquery(true);
@@ -2535,8 +2530,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var havingPredicates = requiredPredicates.stream().filter(Alias::isHaving).toList();
 
             if (!havingPredicates.isEmpty()) {
-                groupByIfNecessary(query, pathResolver.get(null));
-                query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), havingPredicates));
+                addHaving(query, criteriaBuilder, pathResolver, criteriaBuilder.and(toArray(havingPredicates)));
             }
         }
 
@@ -2560,6 +2554,52 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         return parameters;
+    }
+
+    /**
+     * Returns the disjunction of the optional predicates of given page for the <code>WHERE</code> clause, or <code>null</code> when there are none or when any
+     * of them is on an aggregate. This method then adds the disjunction to the <code>HAVING</code> clause of given query itself. There, each predicate built by
+     * {@link #buildArrayPredicate} is kept as is, because its correlated subquery on the root matches per entity, and SQL Server does not accept a subquery in
+     * an aggregate. Each other non-aggregate predicate matches when it matches any row of the group. The <code>GROUP BY</code> is not affected by the optional
+     * predicates.
+     */
+    private <T extends E> Predicate buildOptionalRestriction(
+        PageBuilder<T> pageBuilder, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
+    )
+    {
+        var criteriaOnRoot = stream(pageBuilder.getPage().getOptionalCriteria()).collect(
+            partitioningBy(
+                criteria -> isBuiltAsArrayPredicate(criteria.getKey(), criteria.getValue(), query),
+                toMap(Entry::getKey, Entry::getValue, (l, r) -> l, LinkedHashMap::new)
+            )
+        );
+        var rootPredicates = buildPredicates(criteriaOnRoot.get(true), query, criteriaBuilder, pathResolver, parameters);
+        var rowPredicates = buildPredicates(criteriaOnRoot.get(false), query, criteriaBuilder, pathResolver, parameters);
+
+        if (rootPredicates.isEmpty() && rowPredicates.isEmpty()) {
+            return null;
+        }
+
+        pageBuilder.shouldBuildCountSubquery(true);
+        var predicates = new ArrayList<>(rootPredicates);
+
+        if (rowPredicates.stream().noneMatch(Alias::isHaving)) {
+            predicates.addAll(rowPredicates);
+            return criteriaBuilder.or(toArray(predicates));
+        }
+
+        rowPredicates.forEach(predicate -> predicates.add(Alias.isHaving(predicate) ? predicate : buildAnyRowMatchesPredicate(predicate, criteriaBuilder)));
+        addHaving(query, criteriaBuilder, pathResolver, criteriaBuilder.or(toArray(predicates)));
+        return null;
+    }
+
+    private static void addHaving(AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Predicate having) {
+        groupByIfNecessary(query, pathResolver.get(null));
+        query.having(conjunctRestrictionsIfNecessary(criteriaBuilder, query.getGroupRestriction(), having));
+    }
+
+    private static Predicate buildAnyRowMatchesPredicate(Predicate predicate, CriteriaBuilder criteriaBuilder) {
+        return criteriaBuilder.equal(criteriaBuilder.max(criteriaBuilder.<Integer>selectCase().when(predicate, 1).otherwise(0)), 1);
     }
 
     @SuppressWarnings("unchecked")

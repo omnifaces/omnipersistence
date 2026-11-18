@@ -2039,12 +2039,23 @@ public abstract class OmniPersistenceIT {
         Function<E, Map<String, Object>> orderingValues, BiFunction<Page, Boolean, PartialResultList<E>> getPage
     )
     {
+        assertOrderedPages(all, expected, required, Map.of(), ordering, order, orderingValues, getPage);
+    }
+
+    /**
+     * Asserts the same as {@link #assertOrderedPages(List, Predicate, Map, Map, Comparator, Function, BiFunction)}, with also the given optional criteria.
+     */
+    private static <E extends BaseEntity<Long>> void assertOrderedPages(
+        List<E> all, Predicate<E> expected, Map<String, Object> required, Map<String, Object> optional, Map<String, Boolean> ordering, Comparator<E> order,
+        Function<E, Map<String, Object>> orderingValues, BiFunction<Page, Boolean, PartialResultList<E>> getPage
+    )
+    {
         var expectedEntities = all.stream().filter(expected).sorted(order.thenComparing(E::getId, Comparator.reverseOrder())).toList();
         assertTrue(expectedEntities.size() > ORDERED_PAGES * ROWS_PER_PAGE, "More than " + ORDERED_PAGES + " pages of entities match");
         var expectedIds = ids(expectedEntities);
-        var description = "entities matching " + required + " ordered by " + ordering;
+        var description = "entities matching " + required + " and any of " + optional + " ordered by " + ordering;
         BiFunction<Page.Builder, Boolean, PartialResultList<E>> getOrderedPage = (builder, count) -> getPage
-            .apply(orderingOf(criteriaOf(builder, required, Map.of()), ordering).build(), count);
+            .apply(orderingOf(criteriaOf(builder, required, optional), ordering).build(), count);
         var offsetIds = new ArrayList<Long>();
 
         for (var offset = 0; offset < ORDERED_PAGES * ROWS_PER_PAGE; offset += ROWS_PER_PAGE) {
@@ -2120,10 +2131,16 @@ public abstract class OmniPersistenceIT {
             var secondPage = getPage.apply(Page.of(5, 5), false);
             assertConsecutivePages(ids(getPage.apply(Page.ALL, false)), 5, page, secondPage);
 
-            var allCards = personService().getAllPersonCards().stream().collect(toMap(PersonCard::getId, card -> cardValues(List.of(card)).get(0)));
-            var expectedCards = Stream.concat(page.stream(), secondPage.stream()).map(card -> allCards.get(card.getId())).toList();
-            assertEquals(expectedCards, cardValues(Stream.concat(page.stream(), secondPage.stream()).toList()), "Card values of the pages");
+            assertCardValues(personService().getAllPersonCards(), Stream.concat(page.stream(), secondPage.stream()).toList());
         }
+    }
+
+    /**
+     * Asserts that each card of the page has the same values as the card with the same ID in <code>all</code>.
+     */
+    private static void assertCardValues(List<PersonCard> all, List<PersonCard> page) {
+        var allCards = all.stream().collect(toMap(PersonCard::getId, card -> cardValues(List.of(card)).get(0)));
+        assertEquals(page.stream().map(card -> allCards.get(card.getId())).toList(), cardValues(page), "Card values of the page");
     }
 
     /**
@@ -2180,6 +2197,82 @@ public abstract class OmniPersistenceIT {
                 assertOrderedPages(
                     all, card -> likes("1", card.getEmail()), Map.of("email", Like.contains("1")), ordering("totalPhones", ascending),
                     byKey(PersonCard::getTotalPhones, ascending),
+                    card -> orderingValues("totalPhones", card.getTotalPhones(), card), getPage
+                );
+            }
+        }
+    }
+
+    /**
+     * A global search over a DTO page matches a card when any optional criteria matches, also when one of them is on an aggregate.
+     */
+    @Test
+    void testPageOfPersonCardsWithOptionalCriteriaOnAggregate() {
+        var all = personService().getAllPersonCards();
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> likes("1", card.getEmail()) || likes("1", card.getTotalPhones()),
+                Map.of(), Map.of("email", Like.contains("1"), "totalPhones", Like.contains("1")), getPage, true
+            );
+            assertPage(all, card -> card.getTotalPhones() == 1, Map.of(), Map.of("totalPhones", 1L), getPage, true);
+        }
+    }
+
+    /**
+     * An optional criteria on a to-many path next to one on an aggregate matches a card when any of its elements matches, and does not split the group, so that
+     * the aggregate still counts all elements.
+     */
+    @Test
+    void testPageOfPersonCardsWithOptionalCriteriaOnAggregateAndToManyPath() {
+        var all = personService().getAllPersonCards();
+        var phoneTypes = personService().getAllWithPhones().stream().collect(toMap(Person::getId, OmniPersistenceIT::phoneTypes));
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> card.getTotalPhones() == 1 || phoneTypes.get(card.getId()).contains(Phone.Type.MOBILE),
+                Map.of(), Map.of("totalPhones", 1L, "phones.type", Phone.Type.MOBILE), getPage, true
+            );
+            assertCardValues(all, getPage.apply(Page.with().anyMatch(Map.of("totalPhones", 1L, "phones.type", Phone.Type.MOBILE)).build(), false));
+        }
+    }
+
+    /**
+     * An optional criteria on an expression next to one on an aggregate matches a card when either matches.
+     */
+    @Test
+    void testPageOfPersonCardsWithOptionalCriteriaOnAggregateAndExpression() {
+        var all = personService().getAllPersonCards();
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> card.getTotalPhones() == 1 || likes("street1", card.getAddressString()),
+                Map.of(), Map.of("totalPhones", 1L, "addressString", Like.contains("street1")), getPage, true
+            );
+        }
+    }
+
+    /**
+     * Optional criteria on an aggregate combine with required criteria in <code>WHERE</code> and in <code>HAVING</code>, and with an ordering on the aggregate.
+     */
+    @Test
+    void testPageOfPersonCardsWithRequiredCriteriaAndOptionalCriteriaOnAggregate() {
+        var all = personService().getAllPersonCards();
+        Predicate<PersonCard> anyOptional = card -> card.getTotalPhones() == 1 || likes("street1", card.getAddressString());
+        var optional = Map.<String, Object>of("totalPhones", 1L, "addressString", Like.contains("street1"));
+        var notTotalPhones = Not.value(TOTAL_PHONES);
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(all, card -> likes("1", card.getEmail()) && anyOptional.test(card), Map.of("email", Like.contains("1")), optional, getPage, true);
+            assertPage(
+                all, card -> notTotalPhones.applies(card.getTotalPhones()) && anyOptional.test(card), Map.of("totalPhones", notTotalPhones), optional,
+                getPage, true
+            );
+
+            for (var ascending : List.of(true, false)) {
+                assertOrderedPages(
+                    all, card -> likes("1", card.getEmail()) && anyOptional.test(card), Map.of("email", Like.contains("1")), optional,
+                    ordering("totalPhones", ascending), byKey(PersonCard::getTotalPhones, ascending),
                     card -> orderingValues("totalPhones", card.getTotalPhones(), card), getPage
                 );
             }
