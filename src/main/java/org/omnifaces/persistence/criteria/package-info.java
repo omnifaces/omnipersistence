@@ -11,22 +11,21 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Typed criteria value wrappers for use in {@link org.omnifaces.persistence.query.Page} search maps.
+ * Criteria values for use in {@link org.omnifaces.persistence.query.Page} search criteria maps.
  * <p>
- * Plain values in a criteria map produce exact-equality predicates. Wrap them in one of the concrete {@link Criteria} subclasses for richer matching:
+ * A plain value in a criteria map matches by equality. Wrap it in one of the {@link Criteria} subclasses for other matching:
  * <ul>
- * <li>{@link Like} — substring, prefix or suffix match (case-insensitive).
- * <li>{@link Between} — range match on any {@link Comparable}.
- * <li>{@link Order} — less-than or greater-than comparison.
- * <li>{@link Not} — negation wrapper around any other criteria value.
- * <li>{@link IgnoreCase} — case-insensitive exact match.
- * <li>{@link Enumerated} — case-insensitive enum name match.
- * <li>{@link Numeric} — coerces a string value to a number before matching.
- * <li>{@link Bool} — coerces truthy strings ({@code "1"}, {@code "true"}, …) to boolean.
+ * <li>{@link Like} - case-insensitive substring, prefix or suffix match</li>
+ * <li>{@link Between} - range match on any {@link Comparable}</li>
+ * <li>{@link Order} - less than or greater than comparison, with or without equality ({@code <}, {@code <=}, {@code >}, {@code >=})</li>
+ * <li>{@link Not} - negation of a plain value or of another criteria value</li>
+ * <li>{@link IgnoreCase} - case-insensitive exact match</li>
+ * <li>{@link Enumerated} - match on an enum constant, optionally parsed case-insensitively from a string</li>
+ * <li>{@link Numeric} - converts a string value to a number before matching</li>
+ * <li>{@link Bool} - converts a truthy string such as {@code "1"} or {@code "true"} to a boolean before matching</li>
  * </ul>
  * Custom criteria can be added by extending {@link Criteria}.
  *
- * @see Criteria
  * @see org.omnifaces.persistence.query.Page
  * @see org.omnifaces.persistence.service.BaseEntityService
  */

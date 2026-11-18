@@ -15,11 +15,9 @@
  * <p>
  * All exceptions extend {@link BaseEntityException}:
  * <ul>
- * <li>{@link IllegalEntityStateException} — entity is in an illegal state for the requested operation.
- * <li>{@link NonDeletableEntityException} — hard delete attempted on a {@link org.omnifaces.persistence.model.NonDeletable} entity.
- * <li>{@link NonSoftDeletableEntityException} — soft-delete operation attempted on an entity without {@link org.omnifaces.persistence.model.SoftDeletable}.
+ * <li>{@link IllegalEntityStateException} - the entity is in an illegal state for the requested action</li>
+ * <li>{@link NonDeletableEntityException} - a delete of a {@link org.omnifaces.persistence.model.NonDeletable} entity</li>
+ * <li>{@link NonSoftDeletableEntityException} - a soft delete action on an entity without a {@link org.omnifaces.persistence.model.SoftDeletable} field</li>
  * </ul>
- *
- * @see BaseEntityException
  */
 package org.omnifaces.persistence.exception;

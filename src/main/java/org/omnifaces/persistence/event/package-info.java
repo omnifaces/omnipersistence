@@ -11,11 +11,15 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * CDI qualifier annotations for entity lifecycle events fired by {@link org.omnifaces.persistence.listener.BaseEntityListener}.
+ * CDI qualifiers for the entity lifecycle events fired by {@link org.omnifaces.persistence.listener.BaseEntityListener}.
  * <p>
- * Observe {@code @}{@link Created}, {@code @}{@link Updated} or {@code @}{@link Deleted} to react to Jakarta Persistence {@code @PrePersist},
- * {@code @PreUpdate} and {@code @PreRemove} lifecycle callbacks respectively.
+ * This package contains:
+ * <ul>
+ * <li>{@link Created} - qualifies the event fired on the Jakarta Persistence {@code @PostPersist} callback</li>
+ * <li>{@link Updated} - qualifies the event fired on the Jakarta Persistence {@code @PostUpdate} callback</li>
+ * <li>{@link Deleted} - qualifies the event fired on the Jakarta Persistence {@code @PostRemove} callback</li>
+ * </ul>
  *
- * @see org.omnifaces.persistence.listener.BaseEntityListener
+ * @see org.omnifaces.persistence.listener
  */
 package org.omnifaces.persistence.event;

@@ -11,16 +11,16 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Switchable {@link javax.sql.DataSource} implementations driven by an external properties file.
+ * Switchable {@link javax.sql.DataSource} implementations configured by an external properties file.
  * <p>
- * Declare {@link SwitchableCommonDataSource} (or its XA variant {@link SwitchableXADataSource}) as a data source in {@code web.xml} or via
- * {@code @DataSourceDefinition} and point its {@code configFile} property at a properties file that specifies the real driver class and connection settings.
- * Swapping the file switches the target database without redeployment.
- * <p>
- * The properties-file loading strategy can be replaced by providing a custom {@link PropertiesFileLoader} SPI implementation.
- *
- * @see SwitchableCommonDataSource
- * @see SwitchableXADataSource
- * @see PropertiesFileLoader
+ * This package contains:
+ * <ul>
+ * <li>{@link SwitchableCommonDataSource} - data source which reads the real driver class and connection settings from a properties file</li>
+ * <li>{@link SwitchableXADataSource} - the XA variant of {@link SwitchableCommonDataSource}</li>
+ * <li>{@link CommonDataSourceWrapper} - wrapper which sets and gets the properties of any data source by name, via its getters and setters</li>
+ * <li>{@link PropertiesFileLoader} - SPI to replace how the properties file is loaded, registered via {@link java.util.ServiceLoader}</li>
+ * </ul>
+ * Declare the data source in {@code web.xml} or via {@code @DataSourceDefinition} and set its {@code configFile} property to the properties file. Swapping the
+ * file switches the target database without a change in the application.
  */
 package org.omnifaces.persistence.datasource;

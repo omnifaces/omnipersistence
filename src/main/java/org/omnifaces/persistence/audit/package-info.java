@@ -13,11 +13,14 @@
 /**
  * Field-level entity auditing via CDI events.
  * <p>
- * Annotate an entity with {@code @EntityListeners(AuditListener.class)} and mark individual fields with {@link Audit} to receive a CDI {@link AuditedChange}
- * event whenever a marked field changes value.
+ * This package contains:
+ * <ul>
+ * <li>{@link Audit} - marks an entity field whose changes must be audited</li>
+ * <li>{@link AuditListener} - Jakarta Persistence entity listener which detects the changes of the marked fields</li>
+ * <li>{@link AuditedChange} - CDI event fired on each change of a marked field, with the old and the new value</li>
+ * </ul>
+ * Register {@link AuditListener} on an entity via {@code @EntityListeners(AuditListener.class)} and observe {@link AuditedChange} in any CDI bean.
  *
- * @see Audit
- * @see AuditListener
- * @see AuditedChange
+ * @see org.omnifaces.persistence.listener
  */
 package org.omnifaces.persistence.audit;
