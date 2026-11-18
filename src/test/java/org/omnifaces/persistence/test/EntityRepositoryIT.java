@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -28,6 +29,7 @@ import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
 import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OPENJPA;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.HIBERNATE;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA_COUNT;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.PROFILE_ID;
@@ -703,6 +705,29 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * An update of a detached {@link VersionedBaseEntity} without changes keeps its version and last modified timestamp, and fires no updated event.
+     */
+    @Test
+    void testUpdateOfUnchangedVersionedEntityKeepsVersionAndLastModifiedAndFiresNoEvent() {
+        var remark = new Remark();
+        remark.setText("unchanged");
+        var id = transactionServiceCDI.call(() -> remarkRepository.persist(remark));
+
+        try {
+            var persisted = reloadRemark(id);
+            entityEvents.clear();
+            transactionServiceCDI.run(() -> remarkRepository.update(persisted));
+            var updated = reloadRemark(id);
+            assertEquals(persisted.getVersion(), updated.getVersion(), "Version");
+            assertEquals(persisted.getLastModified(), updated.getLastModified(), "Last modified");
+            assertEquals(List.of(), entityEvents.get(), "Fired events");
+        }
+        finally {
+            transactionServiceCDI.run(() -> remarkRepository.delete(remarkRepository.getById(id)));
+        }
+    }
+
+    /**
      * Returns the remark with given ID as stored after given change was updated in a transaction.
      */
     private Remark updateRemark(Long id, Consumer<Remark> change) {
@@ -986,6 +1011,48 @@ public class EntityRepositoryIT {
         assertNull(deleteLazyCategory("unset").getSlug(), "Slug is unset after delete");
     }
 
+    /**
+     * {@link EntityRepository#delete(Object)} unsets the ID of a detached entity on every provider.
+     */
+    @Test
+    void testDeleteUnsetsIdOfDetachedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        var detached = textRepository.getById(id);
+        transactionServiceCDI.run(() -> textRepository.delete(detached));
+        assertNull(detached.getId(), "ID of deleted detached text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    /**
+     * {@link EntityRepository#delete(Object)} unsets the ID of a managed entity on Hibernate.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = MANAGED_ID_IMMUTABLE)
+    void testDeleteUnsetsIdOfManagedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        assertNull(deleteManagedText(id).getId(), "ID of deleted managed text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    /**
+     * {@link EntityRepository#delete(Object)} keeps the ID of a managed entity on EclipseLink and OpenJPA, because they reject modifying it.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = HIBERNATE, disabledReason = "Hibernate unsets the ID of a managed entity")
+    void testDeleteKeepsIdOfManagedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        assertEquals(id, deleteManagedText(id).getId(), "ID of deleted managed text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    private Text deleteManagedText(Long id) {
+        return transactionServiceCDI.call(() -> {
+            var managed = textRepository.getById(id);
+            textRepository.delete(managed);
+            return managed;
+        });
+    }
+
     private Category deleteLazyCategory(String slug) {
         var category = newCategory(slug, slug);
         transactionServiceCDI.run(() -> categoryRepository.persist(category));
@@ -1181,6 +1248,37 @@ public class EntityRepositoryIT {
         }
         finally {
             transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeId, softDeletedId), true).forEach(textRepository::delete));
+        }
+    }
+
+    /**
+     * {@link EntityRepository#find(Select)} and {@link EntityRepository#findFirst(Select)} exclude a soft deleted entity when selecting by criteria or all, and
+     * not when selecting by JPQL, also when the select is cacheable or not.
+     */
+    @Test
+    void testFindAndFindFirstBySelectExcludeSoftDeletedUnlessByJpql() {
+        var softDeletedId = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(softDeletedId)));
+
+            for (var cacheable : List.of(false, true)) {
+                var byCriteria = Select
+                    .<Text>criteria((criteriaBuilder, query, root) -> query.where(criteriaBuilder.equal(root.get("id"), softDeletedId)), Map.of())
+                    .cacheable(cacheable)
+                    .build();
+                var byJpql = Select.jpql("WHERE e.id = ?1", softDeletedId).cacheable(cacheable).build();
+                var all = Select.all().cacheable(cacheable).build();
+
+                assertEquals(Optional.empty(), textRepository.find(byCriteria), "Find by criteria, cacheable " + cacheable);
+                assertEquals(Optional.empty(), textRepository.findFirst(byCriteria), "Find first by criteria, cacheable " + cacheable);
+                assertEquals(Optional.of(softDeletedId), textRepository.find(byJpql).map(Text::getId), "Find by JPQL, cacheable " + cacheable);
+                assertEquals(Optional.of(softDeletedId), textRepository.findFirst(byJpql).map(Text::getId), "Find first by JPQL, cacheable " + cacheable);
+                assertNotEquals(Optional.of(softDeletedId), textRepository.findFirst(all).map(Text::getId), "Find first of all, cacheable " + cacheable);
+            }
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(softDeletedId, true)));
         }
     }
 

@@ -39,6 +39,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_REC
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
@@ -54,6 +55,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
@@ -121,6 +123,7 @@ public abstract class OmniPersistenceIT {
     private static final String DB2_USER = "db2inst1";
     private static final String DB2_PASSWORD = "PassW0rd!";
     private static final String TEST_DATABASE_RESOURCE = "META-INF/test.database";
+    static final String HIBERNATE = ".*-hibernate";
     static final String OPENJPA = ".*-openjpa";
     static final String ECLIPSELINK = ".*-eclipselink";
     static final String ECLIPSELINK_OR_OPENJPA = ".*-(eclipselink|openjpa)";
@@ -133,6 +136,8 @@ public abstract class OmniPersistenceIT {
         + " so this criteria is left out of the count query";
     private static final Map<String, Object> UNPARSEABLE_PLAIN_ITEM_OF_ELEMENT_COLLECTION = Map.of("groups", List.of("USER", "abc"));
     private static final int ORDERED_PAGES = 3;
+    private static final LocalDateTime ORDERED_APPOINTMENTS_START = LocalDateTime.of(2024, 1, 1, 0, 0);
+    private static final long ORDERED_APPOINTMENTS_INTERVAL_MINUTES = 37;
     private static final int STRING_IDS = 3;
     private static final long MIN_ID = 10;
     private static final long MAX_ID = 190;
@@ -758,6 +763,55 @@ public abstract class OmniPersistenceIT {
             () -> assertOrderAndBetweenOnAppointment("startLocalTime", Appointment::getStartLocalTime, latest.getStartLocalTime()),
             () -> assertOrderAndBetweenOnAppointment("startOffsetTime", Appointment::getStartOffsetTime, latest.getStartOffsetTime())
         );
+    }
+
+    /**
+     * Paging by the ordering values of the last entity of a page agrees with paging by offset, when ordered by each date-time type.
+     */
+    @Test
+    void testPageOrderedByEachDateTimeTypeOfAppointmentPagesByOrderingValuesAsByOffset() {
+        assertOrderedPagesOfAppointments(
+            Map.of("startLocalDateTime", Appointment::getStartLocalDateTime, "startOffsetDateTime", Appointment::getStartOffsetDateTime)
+        );
+    }
+
+    /**
+     * Paging by the ordering values of the last entity of a page agrees with paging by offset, when ordered by each time-of-day type.
+     */
+    @Test
+    @DisabledIf(value = "isEclipseLinkOnH2", disabledReason = ECLIPSELINK_H2_TIME)
+    void testPageOrderedByEachTimeOfDayTypeOfAppointmentPagesByOrderingValuesAsByOffset() {
+        assertOrderedPagesOfAppointments(Map.of("startLocalTime", Appointment::getStartLocalTime, "startOffsetTime", Appointment::getStartOffsetTime));
+    }
+
+    /**
+     * Persists more appointments than fit on the ordered pages, with each start occurring twice, and asserts the ordered pages for each given field in both
+     * directions.
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private void assertOrderedPagesOfAppointments(Map<String, Function<Appointment, Comparable>> fields) {
+        var distinctStarts = (ORDERED_PAGES * ROWS_PER_PAGE) / 2 + 1;
+        var appointments = IntStream.range(0, distinctStarts * 2)
+            .mapToObj(i -> Appointment.startingAt(ORDERED_APPOINTMENTS_START.plusMinutes(ORDERED_APPOINTMENTS_INTERVAL_MINUTES * (i % distinctStarts))))
+            .toList();
+
+        try {
+            appointments.forEach(appointmentService()::persist);
+            var all = appointmentService().list();
+
+            fields.forEach((field, getter) -> {
+                for (var ascending : List.of(true, false)) {
+                    Comparator<Appointment> order = byKey(getter, ascending);
+                    assertOrderedPages(
+                        all, appointment -> true, Map.of(), Map.of(field, ascending), order,
+                        appointment -> Map.of(field, getter.apply(appointment), Page.ID, appointment.getId()), appointmentService()::getPage
+                    );
+                }
+            });
+        }
+        finally {
+            appointments.stream().filter(appointment -> appointment.getId() != null).forEach(appointmentService()::delete);
+        }
     }
 
     private Appointment latestAppointment() {
@@ -1868,6 +1922,41 @@ public abstract class OmniPersistenceIT {
         }
     }
 
+    /**
+     * A page at or beyond the end is empty, and its count is still the total: by offset, by the ordering values of the last entity, and reversed by the
+     * ordering values of the first entity. Also when the last entity has a null ordering value.
+     */
+    @Test
+    void testPagesAtOrBeyondTheEndAreEmptyWithExactCount() {
+        var lastNicknames = new ArrayList<Object>();
+
+        for (var ascending : List.of(true, false)) {
+            var direction = ascending ? "ascending" : "descending";
+            BiFunction<Page.Builder, Boolean, PartialResultList<Person>> getPage = (builder, count) -> personService()
+                .getPage(orderingOf(builder, ordering("nickname", ascending)).build(), count);
+            var all = getPage.apply(Page.with().range(0, TOTAL_RECORDS), false);
+            var first = nicknameOrderingValues(all.get(0));
+            var last = nicknameOrderingValues(all.get(TOTAL_RECORDS - 1));
+            lastNicknames.add(last.get("nickname"));
+
+            for (var offset : List.of(TOTAL_RECORDS, TOTAL_RECORDS + ROWS_PER_PAGE)) {
+                assertEmptyPageWithTotalCount(getPage.apply(Page.with().range(offset, ROWS_PER_PAGE), true), "Offset " + offset + ", " + direction);
+            }
+
+            assertEmptyPageWithTotalCount(getPage.apply(Page.with().range(0, ROWS_PER_PAGE, last, false), true), "After the last " + last + ", " + direction);
+            assertEmptyPageWithTotalCount(
+                getPage.apply(Page.with().range(0, ROWS_PER_PAGE, first, true), true), "Before the first " + first + ", " + direction
+            );
+        }
+
+        assertTrue(lastNicknames.contains(null), "Last entity has a null nickname in one direction");
+    }
+
+    private static void assertEmptyPageWithTotalCount(PartialResultList<Person> page, String description) {
+        assertEquals(List.of(), ids(page), description);
+        assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Count of " + description);
+    }
+
     private static Map<String, Object> nicknameOrderingValues(Person person) {
         return orderingValues("nickname", person.nickname(), person);
     }
@@ -2216,6 +2305,47 @@ public abstract class OmniPersistenceIT {
                 Map.of(), Map.of("email", Like.contains("1"), "totalPhones", Like.contains("1")), getPage, true
             );
             assertPage(all, card -> card.getTotalPhones() == 1, Map.of(), Map.of("totalPhones", 1L), getPage, true);
+        }
+    }
+
+    /**
+     * An optional criteria on an aggregate next to one on a column also matches by {@link Not}, by multiple values, by {@link Order} and by {@link Between}.
+     */
+    @Test
+    void testPageOfPersonCardsWithOptionalNotMultiValuedOrderAndBetweenCriteriaOnAggregate() {
+        var all = personService().getAllPersonCards();
+        var anyOf = List.of(1L, 3L);
+        var between = Between.range(2L, 3L);
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(
+                all, card -> likes("1", card.getEmail()) || card.getTotalPhones() != 1, Map.of(),
+                Map.of("email", Like.contains("1"), "totalPhones", Not.value(1L)), getPage, true
+            );
+            assertPage(
+                all, card -> likes("1", card.getEmail()) || anyOf.contains(card.getTotalPhones()), Map.of(),
+                Map.of("email", Like.contains("1"), "totalPhones", anyOf), getPage, true
+            );
+            assertPage(
+                all, card -> likes("1", card.getEmail()) || card.getTotalPhones() >= 3, Map.of(),
+                Map.of("email", Like.contains("1"), "totalPhones", Order.greaterThanOrEqualTo(3L)), getPage, true
+            );
+            assertPage(
+                all, card -> likes("1", card.getEmail()) || between.applies(card.getTotalPhones()), Map.of(),
+                Map.of("email", Like.contains("1"), "totalPhones", between), getPage, true
+            );
+        }
+    }
+
+    /**
+     * An optional criteria with an unparseable value next to one on an aggregate matches nothing by itself, so the page matches by the aggregate only.
+     */
+    @Test
+    void testPageOfPersonCardsWithOptionalUnparseableCriteriaNextToAggregateMatchesByAggregateOnly() {
+        var all = personService().getAllPersonCards();
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(all, card -> card.getTotalPhones() == 1, Map.of(), Map.of("totalPhones", 1L, "id", "abc"), getPage, true);
         }
     }
 

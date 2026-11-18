@@ -97,18 +97,20 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * }
  * </pre>
  * <p>
+ * The {@link AuditedChange} event is fired during the flush, from a {@link PreUpdate} callback. Jakarta Persistence, section "Lifecycle Callback Methods", says
+ * that a portable lifecycle method should not invoke {@link EntityManager} operations within the same persistence context. Its footnote extends this to objects
+ * injected into an entity listener, and an observer of this event runs on behalf of the listener in the same way. So an observer must not invoke
+ * {@link EntityManager} operations in the persistence context being flushed.
+ * <p>
  * Observer example:
  *
  * <pre>
  *
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
- *     YourAuditLog log = new YourAuditLog();
- *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(change.getEntityId());
- *     log.setPropertyName(change.getPropertyName());
- *     log.setOldValue(Objects.toString(change.getOldValue(), null));
- *     log.setNewValue(Objects.toString(change.getNewValue(), null));
- *     yourAuditLogService.persist(log);
+ *     logger.info(
+ *         change.getEntityName() + " " + change.getEntityId() + " " + change.getPropertyName() + ": " + change.getOldValue() + " -&gt; "
+ *             + change.getNewValue()
+ *     );
  * }
  * </pre>
  *
