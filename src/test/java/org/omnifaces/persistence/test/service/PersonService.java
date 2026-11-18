@@ -33,7 +33,7 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Subquery;
 
 import org.omnifaces.persistence.Provider;
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;

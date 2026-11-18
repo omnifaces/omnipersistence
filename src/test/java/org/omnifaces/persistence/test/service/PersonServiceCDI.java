@@ -17,7 +17,7 @@ import static jakarta.transaction.Transactional.TxType.REQUIRED;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.utils.collection.PartialResultList;
 

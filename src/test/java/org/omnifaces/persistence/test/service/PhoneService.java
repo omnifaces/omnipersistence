@@ -14,7 +14,7 @@ package org.omnifaces.persistence.test.service;
 
 import java.util.Map;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.utils.collection.PartialResultList;

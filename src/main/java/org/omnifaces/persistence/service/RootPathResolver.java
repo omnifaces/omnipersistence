@@ -14,7 +14,7 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.metamodel.Type.PersistenceType.EMBEDDABLE;
 import static java.lang.String.format;
-import static org.omnifaces.persistence.model.dto.Page.ID;
+import static org.omnifaces.persistence.query.Page.ID;
 import static org.omnifaces.utils.reflect.Reflections.findField;
 import static org.omnifaces.utils.reflect.Reflections.findGetter;
 

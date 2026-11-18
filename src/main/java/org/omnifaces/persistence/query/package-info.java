@@ -13,11 +13,17 @@
 /**
  * Query definitions which {@link org.omnifaces.persistence.service.BaseEntityService} executes.
  * <p>
+ * Contains {@link org.omnifaces.persistence.query.Page}, an immutable value object that bundles a pagination range, ordering directives and search criteria
+ * maps for use with {@link org.omnifaces.persistence.service.BaseEntityService#getPage(Page, boolean)}. Build instances via
+ * {@link org.omnifaces.persistence.query.Page#with()}.
+ * <p>
  * Contains {@link org.omnifaces.persistence.query.Select}, an immutable value object that bundles a JPQL statement, a criteria query builder or all entities
  * with query options. It is used by {@link org.omnifaces.persistence.service.BaseEntityService#list(Select)} and its <code>find</code> and
  * <code>findFirst</code> siblings. Build instances via {@link org.omnifaces.persistence.query.Select#jpql(String, Object...)} and its siblings.
  *
+ * @see org.omnifaces.persistence.query.Page
  * @see org.omnifaces.persistence.query.Select
  * @see org.omnifaces.persistence.service.BaseEntityService
+ * @see org.omnifaces.persistence.criteria
  */
 package org.omnifaces.persistence.query;

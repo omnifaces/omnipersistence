@@ -35,7 +35,7 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 
 /**

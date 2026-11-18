@@ -87,7 +87,7 @@ import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.exception.NonSoftDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.test.model.Address;

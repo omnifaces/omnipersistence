@@ -14,7 +14,7 @@
  * Service layer for Jakarta Persistence entities.
  * <p>
  * The sole public entry point is {@link BaseEntityService}, a generic CRUD service that supports lookup, persist, update, delete, soft-delete, batch
- * operations, JPQL shortcuts, lazy collection fetching, and cursor- and offset-based pagination via {@link org.omnifaces.persistence.model.dto.Page}. Extend it
+ * operations, JPQL shortcuts, lazy collection fetching, and cursor- and offset-based pagination via {@link org.omnifaces.persistence.query.Page}. Extend it
  * and annotate with {@code @Stateless} or {@code @ApplicationScoped} to get a fully functional service for any
  * {@link org.omnifaces.persistence.model.BaseEntity} subclass.
  * <p>
@@ -22,6 +22,6 @@
  *
  * @see BaseEntityService
  * @see org.omnifaces.persistence.model.BaseEntity
- * @see org.omnifaces.persistence.model.dto.Page
+ * @see org.omnifaces.persistence.query.Page
  */
 package org.omnifaces.persistence.service;

@@ -25,7 +25,7 @@ import org.jboss.arquillian.junit5.ArquillianExtension;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.service.PersonServiceCDI;

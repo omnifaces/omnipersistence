@@ -17,7 +17,7 @@ import static jakarta.ejb.TransactionAttributeType.NOT_SUPPORTED;
 import jakarta.ejb.Stateless;
 import jakarta.ejb.TransactionAttribute;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.utils.collection.PartialResultList;
 

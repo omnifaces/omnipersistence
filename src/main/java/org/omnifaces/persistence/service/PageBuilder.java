@@ -16,7 +16,7 @@ import java.util.List;
 
 import jakarta.persistence.criteria.Root;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.service.BaseEntityService.MappedQueryBuilder;
 
 /**

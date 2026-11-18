@@ -11,7 +11,7 @@
  * specific language governing permissions and limitations under the License.
  */
 /**
- * Typed criteria value wrappers for use in {@link org.omnifaces.persistence.model.dto.Page} search maps.
+ * Typed criteria value wrappers for use in {@link org.omnifaces.persistence.query.Page} search maps.
  * <p>
  * Plain values in a criteria map produce exact-equality predicates. Wrap them in one of the concrete {@link Criteria} subclasses for richer matching:
  * <ul>
@@ -27,7 +27,7 @@
  * Custom criteria can be added by extending {@link Criteria}.
  *
  * @see Criteria
- * @see org.omnifaces.persistence.model.dto.Page
+ * @see org.omnifaces.persistence.query.Page
  * @see org.omnifaces.persistence.service.BaseEntityService
  */
 package org.omnifaces.persistence.criteria;

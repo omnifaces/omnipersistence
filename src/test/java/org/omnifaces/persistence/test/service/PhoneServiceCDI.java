@@ -19,7 +19,7 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
-import org.omnifaces.persistence.model.dto.Page;
+import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.utils.collection.PartialResultList;
 
