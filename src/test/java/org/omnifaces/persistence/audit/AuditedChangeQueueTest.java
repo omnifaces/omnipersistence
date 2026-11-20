@@ -23,31 +23,50 @@ import org.junit.jupiter.api.Test;
 
 class AuditedChangeQueueTest {
 
+    private final List<List<String>> fired = new ArrayList<>();
+
     @Test
-    void firingsRunInOrderAfterCommit() {
-        var fired = new ArrayList<String>();
-        var queue = queueOf(fired, "first", "second");
+    void changesAreFiredInOrderOnceAfterCommit() {
+        var queue = new AuditedChangeQueue();
+        queue.addAll(List.of(change("first")), this::fire);
+        queue.addAll(List.of(change("second"), change("third")), this::fire);
         queue.beforeCompletion();
         assertEquals(List.of(), fired, "Nothing is fired before the completion");
         queue.afterCompletion(STATUS_COMMITTED);
-        assertEquals(List.of("first", "second"), fired);
+        assertEquals(List.of(List.of("first", "second", "third")), fired);
     }
 
     @Test
-    void firingsAreDroppedAfterRollback() {
-        var fired = new ArrayList<String>();
-        queueOf(fired, "first", "second").afterCompletion(STATUS_ROLLEDBACK);
+    void changesOfEachAdditionAreFiredByLastGivenFirer() {
+        var firedByFirst = new ArrayList<List<String>>();
+        var queue = new AuditedChangeQueue();
+        queue.addAll(List.of(change("first")), changes -> firedByFirst.add(List.of()));
+        queue.addAll(List.of(change("second")), this::fire);
+        queue.afterCompletion(STATUS_COMMITTED);
+        assertEquals(List.of(), firedByFirst);
+        assertEquals(List.of(List.of("first", "second")), fired);
+    }
+
+    @Test
+    void changesAreDroppedAfterRollback() {
+        var queue = new AuditedChangeQueue();
+        queue.addAll(List.of(change("first")), this::fire);
+        queue.afterCompletion(STATUS_ROLLEDBACK);
         assertEquals(List.of(), fired);
     }
 
-    private static AuditedChangeQueue queueOf(List<String> fired, String... names) {
-        var queue = new AuditedChangeQueue();
+    @Test
+    void nothingIsFiredAfterCommitWithoutChanges() {
+        new AuditedChangeQueue().afterCompletion(STATUS_COMMITTED);
+        assertEquals(List.of(), fired);
+    }
 
-        for (var name : names) {
-            queue.add(() -> fired.add(name));
-        }
+    private void fire(List<AuditedChange> changes) {
+        fired.add(changes.stream().map(AuditedChange::getPropertyName).toList());
+    }
 
-        return queue;
+    private static AuditedChange change(String propertyName) {
+        return new AuditedChange(new Object(), 1L, "Entity", propertyName, "old", "new");
     }
 
 }

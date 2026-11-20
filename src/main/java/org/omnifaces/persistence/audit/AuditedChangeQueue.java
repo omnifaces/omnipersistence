@@ -16,18 +16,22 @@ import static jakarta.transaction.Status.STATUS_COMMITTED;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import jakarta.transaction.Synchronization;
 
 /**
- * The firings of the {@link AuditedChange} events of one transaction, run in order after the transaction is committed, and dropped when it is not committed.
+ * The {@link AuditedChange} instances of one transaction, handed in order to the firer of the last {@link #addAll(List, Consumer)} after the transaction is
+ * committed, and dropped when it is not committed or has no changes.
  */
 class AuditedChangeQueue implements Synchronization {
 
-    private final List<Runnable> firings = new ArrayList<>();
+    private final List<AuditedChange> changes = new ArrayList<>();
+    private Consumer<List<AuditedChange>> firer;
 
-    void add(Runnable firing) {
-        firings.add(firing);
+    void addAll(List<AuditedChange> addedChanges, Consumer<List<AuditedChange>> changesFirer) {
+        changes.addAll(addedChanges);
+        firer = changesFirer;
     }
 
     @Override
@@ -37,8 +41,8 @@ class AuditedChangeQueue implements Synchronization {
 
     @Override
     public void afterCompletion(int status) {
-        if (status == STATUS_COMMITTED) {
-            firings.forEach(Runnable::run);
+        if (status == STATUS_COMMITTED && !changes.isEmpty()) {
+            firer.accept(changes);
         }
     }
 

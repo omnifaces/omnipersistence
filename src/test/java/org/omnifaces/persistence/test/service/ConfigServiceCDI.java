@@ -46,6 +46,12 @@ public class ConfigServiceCDI extends ConfigService {
 
     @Override
     @Transactional(REQUIRED)
+    public void updateValues(Long id, String newValue, Long otherId, String otherNewValue) {
+        super.updateValues(id, newValue, otherId, otherNewValue);
+    }
+
+    @Override
+    @Transactional(REQUIRED)
     public void updateValueTwice(Long id, String firstValue, String secondValue) {
         super.updateValueTwice(id, firstValue, secondValue);
     }

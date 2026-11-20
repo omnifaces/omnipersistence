@@ -21,12 +21,14 @@ import jakarta.enterprise.event.Observes;
 import jakarta.transaction.TransactionSynchronizationRegistry;
 
 import org.omnifaces.persistence.audit.AuditedChange;
+import org.omnifaces.persistence.audit.AuditedChanges;
 
 @ApplicationScoped
 public class TestAuditListener {
 
     private static final List<AuditedChange> CHANGES = new CopyOnWriteArrayList<>();
     private static final List<Integer> TRANSACTION_STATUSES = new CopyOnWriteArrayList<>();
+    private static final List<AuditedChanges> CHANGES_PER_TRANSACTION = new CopyOnWriteArrayList<>();
 
     @Resource
     private TransactionSynchronizationRegistry transactionSynchronizationRegistry;
@@ -34,6 +36,10 @@ public class TestAuditListener {
     public void onAuditedChange(@Observes AuditedChange change) {
         CHANGES.add(change);
         TRANSACTION_STATUSES.add(transactionSynchronizationRegistry.getTransactionStatus());
+    }
+
+    public void onAuditedChanges(@Observes AuditedChanges changes) {
+        CHANGES_PER_TRANSACTION.add(changes);
     }
 
     public static List<AuditedChange> getChanges() {
@@ -49,9 +55,19 @@ public class TestAuditListener {
         return TRANSACTION_STATUSES;
     }
 
+    /**
+     * Returns the observed {@link AuditedChanges} events, one per committed transaction.
+     *
+     * @return The observed {@link AuditedChanges} events.
+     */
+    public static List<AuditedChanges> getChangesPerTransaction() {
+        return CHANGES_PER_TRANSACTION;
+    }
+
     public static void clearChanges() {
         CHANGES.clear();
         TRANSACTION_STATUSES.clear();
+        CHANGES_PER_TRANSACTION.clear();
     }
 
 }

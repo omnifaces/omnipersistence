@@ -72,13 +72,13 @@ import org.omnifaces.persistence.service.BaseEntityService;
 /**
  * <p>
  * Jakarta Persistence entity listener that tracks changes to fields annotated with {@link Audit} and fires a CDI {@link AuditedChange} event for each detected
- * change after the transaction is committed.
+ * change after the transaction is committed, followed by one CDI {@link AuditedChanges} event with all changes of the transaction.
  * <p>
  * Usage:
  * <ol>
  * <li>Declare this listener as {@link EntityListeners} on your entity.
  * <li>Put {@link Audit} annotation on fields of interest. Each of them must have a getter.
- * <li>Observe the {@link AuditedChange} CDI event.
+ * <li>Observe the {@link AuditedChange} or {@link AuditedChanges} CDI event.
  * </ol>
  * <p>
  * Any entity can be audited, it does not need to extend {@code BaseEntity}. Only instances which went through {@link PostLoad} in the current persistence
@@ -116,13 +116,14 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * </pre>
  * <p>
  * The changes are detected during the flush, from a {@link PreUpdate} callback, and queued per JTA transaction via the
- * {@link TransactionSynchronizationRegistry}. The {@link AuditedChange} events are fired in order after the transaction is committed, and are not fired when it
- * is rolled back. So an observer can persist an audit log. It must then start a transaction of its own, for example via
- * {@link Transactional.TxType#REQUIRES_NEW}, because the audited transaction is already completed. The audit log is thus not written atomically with the
- * change: when writing it fails, the change stays committed. An exception of an observer is logged as a warning, and the other events of the transaction are
- * still fired. The entity may no longer be managed by then, so a lazy association of {@link AuditedChange#getEntity()} may not be loaded. The observer should
- * not extend {@link BaseEntityService}: its <code>@PostConstruct</code> uses the {@link EntityManager} before its own transaction is started, which a server
- * such as TomEE rejects when the observer is first created after the commit. Inject the service into the observer instead, as below.
+ * {@link TransactionSynchronizationRegistry}. The {@link AuditedChange} events are fired in order after the transaction is committed, followed by one
+ * {@link AuditedChanges} event with all of them, and none is fired when the transaction is rolled back. So an observer can persist an audit log. It must then
+ * start a transaction of its own, for example via {@link Transactional.TxType#REQUIRES_NEW}, because the audited transaction is already completed. The audit
+ * log is thus not written atomically with the change: when writing it fails, the change stays committed. An exception of an observer is logged as a warning,
+ * and the other events of the transaction are still fired. The entity may no longer be managed by then, so a lazy association of
+ * {@link AuditedChange#getEntity()} may not be loaded. The observer should not extend {@link BaseEntityService}: its <code>@PostConstruct</code> uses the
+ * {@link EntityManager} before its own transaction is started, which a server such as TomEE rejects when the observer is first created after the commit. Inject
+ * the service into the observer instead, as below.
  * <p>
  * Observer example:
  *
@@ -144,10 +145,11 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * The queue of a transaction is registered when an audited entity is loaded in it, or else when its change is flushed. When that is not possible, the event is
  * fired immediately, during the flush, and a warning is logged once per entity class and reason. This happens when there is no JTA transaction on the current
  * thread or no {@link TransactionSynchronizationRegistry}, as outside a Jakarta EE container, and when the transaction rejects the registration, as when an
- * entity which was not loaded in the current transaction is flushed at commit, for example via an extended or application-managed {@link EntityManager}. An
- * observer must then not invoke {@link EntityManager} operations in the persistence context being flushed: Jakarta Persistence, section "Lifecycle Callback
- * Methods", says that a portable lifecycle method should not invoke them, and its footnote extends this to objects injected into an entity listener. A change
- * flushed in a transaction which is marked for rollback or rolled back is not fired at all.
+ * entity which was not loaded in the current transaction is flushed at commit, for example via an extended or application-managed {@link EntityManager}. The
+ * {@link AuditedChanges} event then holds the changes of the flushed entity only, and is fired right after its {@link AuditedChange} events. An observer must
+ * then not invoke {@link EntityManager} operations in the persistence context being flushed: Jakarta Persistence, section "Lifecycle Callback Methods", says
+ * that a portable lifecycle method should not invoke them, and its footnote extends this to objects injected into an entity listener. A change flushed in a
+ * transaction which is marked for rollback or rolled back is not fired at all.
  * <p>
  * The queue follows the JTA transaction of the current thread, also for a <code>RESOURCE_LOCAL</code> persistence unit. A change of such a persistence unit
  * made while a JTA transaction is active is thus fired after the commit of that JTA transaction, or dropped with its rollback.
@@ -156,6 +158,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * @since 1.0
  * @see Audit
  * @see AuditedChange
+ * @see AuditedChanges
  */
 public class AuditListener {
 
@@ -164,10 +167,12 @@ public class AuditListener {
     private static final String TRANSACTION_SYNCHRONIZATION_REGISTRY = "java:comp/TransactionSynchronizationRegistry";
     private static final Object QUEUE_KEY = AuditedChangeQueue.class;
 
-    private static final String LOG_WARNING_FIRED_DURING_FLUSH = "AuditedChange of %s is fired during the flush instead of after the commit, because %s."
+    private static final String LOG_WARNING_FIRED_DURING_FLUSH = "AuditedChange and AuditedChanges of %s are fired during the flush instead of after the commit, because %s."
         + " An observer must then not use the EntityManager of the persistence context being flushed. This is logged once per entity class and reason.";
     private static final String LOG_WARNING_OBSERVER_FAILED = "Observer of AuditedChange of %s %s property %s failed after the commit."
         + " The change stays committed, and the other events of the transaction are still fired.";
+    private static final String LOG_WARNING_CHANGES_OBSERVER_FAILED = "Observer of AuditedChanges failed after the commit."
+        + " The changes stay committed, and their AuditedChange events are already fired.";
 
     /**
      * The entity class names and fallbacks which are warned about.
@@ -228,8 +233,8 @@ public class AuditListener {
 
     /**
      * Compares current values with the snapshot taken during {@link PostLoad} or the previous {@link PreUpdate} and queues an {@link AuditedChange} event for
-     * each difference, to be fired after the transaction is committed. When it cannot be queued, it is fired immediately, as described in the class
-     * documentation.
+     * each difference, to be fired after the transaction is committed, along with one {@link AuditedChanges} event. When it cannot be queued, it is fired
+     * immediately, as described in the class documentation.
      *
      * @param entity The entity being updated.
      */
@@ -240,7 +245,7 @@ public class AuditListener {
         if (!changes.isEmpty()) {
             enqueue(changes).ifPresent(fallback -> {
                 warnOnce(entity.getClass(), fallback);
-                changes.forEach(this::fireAuditedChangeEvent);
+                fireAuditedChangeEvents(changes);
             });
         }
     }
@@ -424,7 +429,7 @@ public class AuditListener {
     private Optional<Fallback> enqueue(TransactionSynchronizationRegistry foundRegistry, List<AuditedChange> changes) {
         try {
             var queue = getOrRegisterQueue(foundRegistry);
-            changes.forEach(change -> queue.add(() -> fireAuditedChangeEventAfterCommit(change)));
+            queue.addAll(changes, this::fireAuditedChangeEventsAfterCommit);
             return Optional.empty();
         }
         catch (IllegalStateException e) {
@@ -486,17 +491,31 @@ public class AuditListener {
         }
     }
 
-    private void fireAuditedChangeEventAfterCommit(AuditedChange change) {
+    private void fireAuditedChangeEvents(List<AuditedChange> changes) {
+        changes.forEach(this::fireEvent);
+        fireEvent(new AuditedChanges(changes));
+    }
+
+    private void fireAuditedChangeEventsAfterCommit(List<AuditedChange> changes) {
+        for (var change : changes) {
+            try {
+                fireEvent(change);
+            }
+            catch (RuntimeException e) {
+                logger.log(WARNING, e, () -> format(LOG_WARNING_OBSERVER_FAILED, change.getEntityName(), change.getEntityId(), change.getPropertyName()));
+            }
+        }
+
         try {
-            fireAuditedChangeEvent(change);
+            fireEvent(new AuditedChanges(changes));
         }
         catch (RuntimeException e) {
-            logger.log(WARNING, e, () -> format(LOG_WARNING_OBSERVER_FAILED, change.getEntityName(), change.getEntityId(), change.getPropertyName()));
+            logger.log(WARNING, LOG_WARNING_CHANGES_OBSERVER_FAILED, e);
         }
     }
 
-    private void fireAuditedChangeEvent(AuditedChange change) {
-        findBeanManager().ifPresent(beanManager -> beanManager.getEvent().fire(change));
+    private void fireEvent(Object event) {
+        findBeanManager().ifPresent(beanManager -> beanManager.getEvent().fire(event));
     }
 
     private Optional<BeanManager> findBeanManager() {

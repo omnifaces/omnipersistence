@@ -343,7 +343,7 @@ class AuditListenerTest {
             cdi.setAvailable(true);
             entity.setValue("second");
             listener.afterUpdate(entity);
-            assertEquals(List.of("value: first -> second"), cdi.getFiredEvents().stream().map(change -> describe((AuditedChange) change)).toList());
+            assertEquals(List.of("value: first -> second", "[value: first -> second]"), describeEvents(cdi.getFiredEvents()));
         }
         finally {
             cdi.setAvailable(false);
@@ -351,8 +351,9 @@ class AuditListenerTest {
     }
 
     /**
-     * The {@link AuditedChange} events are queued per JTA transaction and fired after its commit. When they cannot be queued, they are fired immediately,
-     * during the flush, with a warning which is logged once per entity class and reason, not on every change.
+     * The {@link AuditedChange} events are queued per JTA transaction and fired after its commit, followed by one {@link AuditedChanges} event with all of
+     * them. When they cannot be queued, they are fired immediately, during the flush, followed by one {@link AuditedChanges} event with the changes of the
+     * flushed entity, with a warning which is logged once per entity class and reason, not on every change.
      */
     @Nested
     class Queueing {
@@ -390,8 +391,33 @@ class AuditListenerTest {
             updateTwice(loaded(new AuditedEntity(), "old"));
             assertEquals(List.of(), firedEvents(), "Nothing is fired during the flush");
             registry.complete(STATUS_COMMITTED);
-            assertEquals(List.of("value: old -> first", "value: first -> second"), firedEvents(), "Each change is fired after the commit");
+            assertEquals(
+                List.of("value: old -> first", "value: first -> second", "[value: old -> first, value: first -> second]"), firedEvents(),
+                "Each change is fired after the commit, followed by all changes"
+            );
             assertEquals(List.of(), warnings);
+        }
+
+        @Test
+        void auditedChangesHoldsChangesOfAllEntitiesOfTransaction() {
+            var entity = loaded(new AuditedEntity(), "old");
+            var otherEntity = loaded(new AuditedEntity(), "other");
+            entity.setValue("new");
+            listener.afterUpdate(entity);
+            otherEntity.setValue("new");
+            listener.afterUpdate(otherEntity);
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(
+                List.of("value: old -> new", "value: other -> new", "[value: old -> new, value: other -> new]"), firedEvents(),
+                "One AuditedChanges is fired for all entities of the transaction"
+            );
+        }
+
+        @Test
+        void auditedChangesIsNotFiredAfterCommitWithoutChanges() {
+            loaded(new AuditedEntity(), "old");
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of(), firedEvents());
         }
 
         @Test
@@ -446,7 +472,7 @@ class AuditListenerTest {
             listener.afterUpdate(entity);
             assertEquals(2, lookups.get(), "Failed lookup is retried on flush");
             registry.complete(STATUS_COMMITTED);
-            assertEquals(List.of("value: old -> new"), firedEvents(), "Change is fired after the commit");
+            assertEquals(List.of("value: old -> new", "[value: old -> new]"), firedEvents(), "Change is fired after the commit");
         }
 
         @Test
@@ -458,16 +484,34 @@ class AuditListenerTest {
             entity.setValue("new");
             entity.setOther("new");
             listener.afterUpdate(entity);
-            cdi.setFailing(event -> "other".equals(((AuditedChange) event).getPropertyName()));
+            cdi.setFailing(event -> event instanceof AuditedChange change && "other".equals(change.getPropertyName()));
             registry.complete(STATUS_COMMITTED);
-            assertEquals(List.of("value: old -> new"), firedEvents(), "Change after the failing one is still fired");
+            assertEquals(
+                List.of("value: old -> new", "[other: old -> new, value: old -> new]"), firedEvents(),
+                "Change after the failing one is still fired, and so are all changes"
+            );
             assertEquals(1, warnings.size(), "Failure was logged: " + warnings);
             assertTrue(warnings.get(0).contains("property other failed after the commit"), "Warning names the change: " + warnings);
         }
 
+        @Test
+        void failingObserverOfAuditedChangesAfterCommitIsLogged() {
+            var entity = loaded(new AuditedEntity(), "old");
+            entity.setValue("new");
+            listener.afterUpdate(entity);
+            cdi.setFailing(AuditedChanges.class::isInstance);
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of("value: old -> new"), firedEvents(), "Change is still fired");
+            assertEquals(1, warnings.size(), "Failure was logged: " + warnings);
+            assertTrue(warnings.get(0).contains("Observer of AuditedChanges failed after the commit"), "Warning names the event: " + warnings);
+        }
+
         private void assertFiredDuringFlushWithOneWarning(AuditedEntity entity, String reason) {
             updateTwice(loaded(entity, "old"));
-            assertEquals(List.of("value: old -> first", "value: first -> second"), firedEvents(), "Each change is fired during the flush");
+            assertEquals(
+                List.of("value: old -> first", "[value: old -> first]", "value: first -> second", "[value: first -> second]"), firedEvents(),
+                "Each change is fired during the flush, followed by the changes of the flushed entity"
+            );
             assertEquals(1, warnings.size(), "Warning is logged once: " + warnings);
             assertTrue(warnings.get(0).contains(entity.getClass().getName()), "Warning names the entity class: " + warnings);
             assertTrue(warnings.get(0).contains(reason), "Warning names the reason: " + warnings);
@@ -481,7 +525,7 @@ class AuditListenerTest {
         }
 
         private List<String> firedEvents() {
-            return cdi.getFiredEvents().stream().map(change -> describe((AuditedChange) change)).toList();
+            return describeEvents(cdi.getFiredEvents());
         }
 
     }
@@ -511,6 +555,16 @@ class AuditListenerTest {
 
     private static List<String> changedProperties(Object entity) {
         return AuditListener.detectChanges(entity).stream().map(AuditedChange::getPropertyName).toList();
+    }
+
+    private static List<String> describeEvents(List<Object> events) {
+        return events.stream().map(AuditListenerTest::describeEvent).toList();
+    }
+
+    private static String describeEvent(Object event) {
+        return event instanceof AuditedChanges changes
+            ? changes.stream().map(AuditListenerTest::describe).toList().toString()
+            : describe((AuditedChange) event);
     }
 
     private static String describe(AuditedChange change) {
