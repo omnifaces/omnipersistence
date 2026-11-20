@@ -50,6 +50,7 @@ import java.util.logging.Logger;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
+import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
@@ -123,7 +124,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * and the other events of the transaction are still fired. The entity may no longer be managed by then, so a lazy association of
  * {@link AuditedChange#getEntity()} may not be loaded. The observer should not extend {@link BaseEntityService}: its <code>@PostConstruct</code> uses the
  * {@link EntityManager} before its own transaction is started, which a server such as TomEE rejects when the observer is first created after the commit. Inject
- * the service into the observer instead, as below.
+ * the service into the observer instead, as below. On GlassFish, a {@link Transactional.TxType#REQUIRES_NEW} observer can throw after its own transaction is
+ * committed, because it cannot resume the completed audited transaction, and CDI then does not notify the observers after it. Give such an observer a higher
+ * {@link Priority} than the other observers of the event, so that it is notified last.
  * <p>
  * Observer example:
  *

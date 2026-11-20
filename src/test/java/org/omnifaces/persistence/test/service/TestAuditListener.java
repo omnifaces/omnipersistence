@@ -12,9 +12,12 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import static jakarta.interceptor.Interceptor.Priority.APPLICATION;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import jakarta.annotation.Priority;
 import jakarta.annotation.Resource;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -33,12 +36,12 @@ public class TestAuditListener {
     @Resource
     private TransactionSynchronizationRegistry transactionSynchronizationRegistry;
 
-    public void onAuditedChange(@Observes AuditedChange change) {
+    public void onAuditedChange(@Observes @Priority(APPLICATION - 1) AuditedChange change) {
         CHANGES.add(change);
         TRANSACTION_STATUSES.add(transactionSynchronizationRegistry.getTransactionStatus());
     }
 
-    public void onAuditedChanges(@Observes AuditedChanges changes) {
+    public void onAuditedChanges(@Observes @Priority(APPLICATION - 1) AuditedChanges changes) {
         CHANGES_PER_TRANSACTION.add(changes);
     }
 
