@@ -26,7 +26,7 @@ import org.omnifaces.persistence.model.BaseEntity;
  * Persistence {@code @PreUpdate} lifecycle callback, and the event is fired after the JTA transaction is committed. An observer which persists an audit log
  * must start a transaction of its own, for example via {@link Transactional.TxType#REQUIRES_NEW}. When the event cannot be queued for the transaction, it is
  * fired during the flush, and an observer must then not invoke {@link EntityManager} operations in the persistence context being flushed. {@link AuditListener}
- * describes when this happens.
+ * describes when this happens. To observe all changes of a transaction at once, observe {@link AuditedChanges} instead.
  * <p>
  * Usage example:
  *
@@ -42,6 +42,7 @@ import org.omnifaces.persistence.model.BaseEntity;
  * @since 1.0
  * @see Audit
  * @see AuditListener
+ * @see AuditedChanges
  */
 public class AuditedChange {
 

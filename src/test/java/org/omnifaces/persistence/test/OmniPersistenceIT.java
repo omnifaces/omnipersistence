@@ -108,6 +108,7 @@ import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
 import org.omnifaces.persistence.test.service.AuditLogService;
+import org.omnifaces.persistence.test.service.AuditLogger;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -3189,11 +3190,27 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testAuditedChangesOfTransactionAreFiredOnceAfterCommit() {
+        var config = persistAuditedConfig("audit.changes.one", "original");
+        var otherConfig = persistAuditedConfig("audit.changes.other", "original");
+        configService().updateValues(config.getId(), "modified", otherConfig.getId(), "other");
+        var changesPerTransaction = TestAuditListener.getChangesPerTransaction();
+        assertEquals(1, changesPerTransaction.size(), "Changes were observed once: " + changesPerTransaction);
+        assertEquals(
+            Set.of(config.getId() + ": original -> modified", otherConfig.getId() + ": original -> other"),
+            changesPerTransaction.get(0).stream().map(change -> change.getEntityId() + ": " + change.getOldValue() + " -> " + change.getNewValue())
+                .collect(toSet()),
+            "Changes of both entities were observed together"
+        );
+    }
+
+    @Test
     void testAuditedChangeIsNotFiredWhenTransactionIsRolledBack() {
         var config = persistAuditedConfig("audit.rollback", "original");
         assertThrows(Exception.class, () -> configService().updateValueAndFail(config.getId(), "modified"));
         assertAll(
             () -> assertEquals(List.of(), auditedValueChanges(), "Flushed change of rolled back transaction was not observed"),
+            () -> assertEquals(List.of(), TestAuditListener.getChangesPerTransaction(), "Changes of rolled back transaction were not observed"),
             () -> assertEquals(List.of(), auditLogService.listValueChanges(config), "Flushed change of rolled back transaction was not logged")
         );
     }
@@ -3226,6 +3243,17 @@ public abstract class OmniPersistenceIT {
         var config = persistAuditedConfig("audit.log.plain", "original");
         plainConfigUpdater.updateValue(config.getId(), "plain");
         assertEquals(List.of("original -> plain"), auditLogService.listValueChanges(config), "Change via plain entity manager was logged");
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfAuditedChanges() {
+        var config = persistAuditedConfig(AuditLogger.LOGGED_PER_TRANSACTION + "one", "original");
+        var otherConfig = persistAuditedConfig(AuditLogger.LOGGED_PER_TRANSACTION + "other", "original");
+        configService().updateValues(config.getId(), "modified", otherConfig.getId(), "other");
+        assertAll(
+            () -> assertEquals(List.of("original -> modified"), auditLogService.listValueChanges(config), "Change of one entity was logged"),
+            () -> assertEquals(List.of("original -> other"), auditLogService.listValueChanges(otherConfig), "Change of other entity was logged")
+        );
     }
 
     @Test

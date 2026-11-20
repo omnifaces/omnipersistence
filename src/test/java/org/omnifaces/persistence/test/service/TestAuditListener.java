@@ -12,28 +12,37 @@
  */
 package org.omnifaces.persistence.test.service;
 
+import static jakarta.interceptor.Interceptor.Priority.APPLICATION;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import jakarta.annotation.Priority;
 import jakarta.annotation.Resource;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.transaction.TransactionSynchronizationRegistry;
 
 import org.omnifaces.persistence.audit.AuditedChange;
+import org.omnifaces.persistence.audit.AuditedChanges;
 
 @ApplicationScoped
 public class TestAuditListener {
 
     private static final List<AuditedChange> CHANGES = new CopyOnWriteArrayList<>();
     private static final List<Integer> TRANSACTION_STATUSES = new CopyOnWriteArrayList<>();
+    private static final List<AuditedChanges> CHANGES_PER_TRANSACTION = new CopyOnWriteArrayList<>();
 
     @Resource
     private TransactionSynchronizationRegistry transactionSynchronizationRegistry;
 
-    public void onAuditedChange(@Observes AuditedChange change) {
+    public void onAuditedChange(@Observes @Priority(APPLICATION - 1) AuditedChange change) {
         CHANGES.add(change);
         TRANSACTION_STATUSES.add(transactionSynchronizationRegistry.getTransactionStatus());
+    }
+
+    public void onAuditedChanges(@Observes @Priority(APPLICATION - 1) AuditedChanges changes) {
+        CHANGES_PER_TRANSACTION.add(changes);
     }
 
     public static List<AuditedChange> getChanges() {
@@ -49,9 +58,19 @@ public class TestAuditListener {
         return TRANSACTION_STATUSES;
     }
 
+    /**
+     * Returns the observed {@link AuditedChanges} events, one per committed transaction.
+     *
+     * @return The observed {@link AuditedChanges} events.
+     */
+    public static List<AuditedChanges> getChangesPerTransaction() {
+        return CHANGES_PER_TRANSACTION;
+    }
+
     public static void clearChanges() {
         CHANGES.clear();
         TRANSACTION_STATUSES.clear();
+        CHANGES_PER_TRANSACTION.clear();
     }
 
 }

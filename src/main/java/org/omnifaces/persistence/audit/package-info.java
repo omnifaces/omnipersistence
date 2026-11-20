@@ -18,8 +18,10 @@
  * <li>{@link Audit} - marks an entity field whose changes must be audited</li>
  * <li>{@link AuditListener} - Jakarta Persistence entity listener which detects the changes of the marked fields</li>
  * <li>{@link AuditedChange} - CDI event fired after the commit for each change of a marked field, with the old and the new value</li>
+ * <li>{@link AuditedChanges} - CDI event fired after the commit with all changes of the transaction</li>
  * </ul>
- * Register {@link AuditListener} on an entity via {@code @EntityListeners(AuditListener.class)} and observe {@link AuditedChange} in any CDI bean.
+ * Register {@link AuditListener} on an entity via {@code @EntityListeners(AuditListener.class)} and observe {@link AuditedChange} or {@link AuditedChanges} in
+ * any CDI bean.
  *
  * @see org.omnifaces.persistence.listener
  */

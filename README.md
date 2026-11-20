@@ -503,7 +503,7 @@ public class Config extends GeneratedIdEntity<Long> {
 
 ```java
 @ApplicationScoped
-public class AuditLog {
+public class AuditPrinter {
 
     public void onAuditedChange(@Observes AuditedChange change) {
         System.out.printf("[AUDIT] %s#%s.%s: %s → %s%n",
@@ -518,7 +518,29 @@ public class AuditLog {
 
 `AuditedChange` carries the full entity reference, entity ID, entity name, property name, old value and new value. The event is only fired when the value actually changes (old ≠ new).
 
-The event is fired during the flush, so an observer must not invoke `EntityManager` operations in the persistence context being flushed.
+The events are fired after the JTA transaction is committed, and none is fired when it is rolled back.
+First each `AuditedChange` is fired, then one `AuditedChanges` event with all changes of the transaction, in flush order.
+An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
+With `AuditedChanges`, the whole audit log of a transaction is persisted in one such transaction:
+
+```java
+@ApplicationScoped
+public class AuditLogger {
+
+    @Inject
+    private AuditLogService auditLogService;
+
+    @Transactional(REQUIRES_NEW)
+    public void onAuditedChanges(@Observes AuditedChanges changes) {
+        changes.forEach(change -> auditLogService.persist(new AuditLog(change)));
+    }
+}
+```
+
+When there is no JTA transaction, the events are fired during the flush, and a warning is logged once per entity class.
+`AuditedChanges` then holds the changes of the flushed entity only.
+An observer must then not invoke `EntityManager` operations in the persistence context being flushed.
+The javadoc of `AuditListener` describes all cases.
 
 ---
 
@@ -889,6 +911,7 @@ In the source, these changes need your attention:
 
 These changes in behavior need your attention as well:
 
+- `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
 - `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
 - An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
 - An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
