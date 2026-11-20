@@ -22,8 +22,10 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Lob;
 
+import org.omnifaces.persistence.model.SoftDeletable;
+
 /**
- * An entity with a lazy <code>Map</code> and a lazy <code>byte[]</code>.
+ * A soft deletable entity with a lazy <code>Map</code> and a lazy <code>byte[]</code>.
  */
 @Entity
 public class Attachment extends LocalGeneratedIdEntity {
@@ -36,6 +38,9 @@ public class Attachment extends LocalGeneratedIdEntity {
     @Lob
     @Basic(fetch = LAZY)
     private byte[] content;
+
+    @SoftDeletable
+    private boolean deleted;
 
     public Map<String, String> getProperties() {
         return properties;
@@ -51,6 +56,14 @@ public class Attachment extends LocalGeneratedIdEntity {
 
     public void setContent(byte[] content) {
         this.content = content;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
     }
 
 }

@@ -13,6 +13,7 @@
 package org.omnifaces.persistence.audit;
 
 import jakarta.persistence.EmbeddedId;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 
@@ -21,20 +22,17 @@ import org.omnifaces.persistence.model.BaseEntity;
 /**
  * <p>
  * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a Jakarta Persistence {@code @PreUpdate} lifecycle
- * callback.
+ * callback. The event is fired during the flush, so an observer must not invoke {@link EntityManager} operations in the persistence context being flushed.
  * <p>
  * Usage example:
  *
  * <pre>
  *
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
- *     YourAuditLog log = new YourAuditLog();
- *     log.setEntityName(change.getEntityName());
- *     log.setEntityId(change.getEntityId());
- *     log.setPropertyName(change.getPropertyName());
- *     log.setOldValue(Objects.toString(change.getOldValue(), null));
- *     log.setNewValue(Objects.toString(change.getNewValue(), null));
- *     yourAuditLogService.persist(log);
+ *     logger.info(
+ *         change.getEntityName() + " " + change.getEntityId() + " " + change.getPropertyName() + ": " + change.getOldValue() + " -&gt; "
+ *             + change.getNewValue()
+ *     );
  * }
  * </pre>
  *

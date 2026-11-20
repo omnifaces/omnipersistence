@@ -20,6 +20,7 @@ import java.util.Set;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Inheritance;
+import jakarta.persistence.ManyToOne;
 
 /**
  * The root of an entity hierarchy with a joined table per subclass.
@@ -35,6 +36,9 @@ public class Document extends LocalGeneratedIdEntity {
     @ElementCollection
     private Set<String> labels = new HashSet<>();
 
+    @ManyToOne
+    private Document inReplyTo;
+
     public String getTitle() {
         return title;
     }
@@ -49,6 +53,14 @@ public class Document extends LocalGeneratedIdEntity {
 
     public void setLabels(Set<String> labels) {
         this.labels = labels;
+    }
+
+    public Document getInReplyTo() {
+        return inReplyTo;
+    }
+
+    public void setInReplyTo(Document inReplyTo) {
+        this.inReplyTo = inReplyTo;
     }
 
 }

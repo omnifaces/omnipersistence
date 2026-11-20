@@ -124,6 +124,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 
 import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.JPA;
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
@@ -445,15 +446,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the metamodel of given entity.
+     * Returns the metamodel of given entity, also when it is a proxy.
      *
      * @param <T> The generic entity type of the given entity.
      * @param entity Entity to obtain metamodel for.
      * @return The metamodel of given entity.
      */
-    @SuppressWarnings("unchecked")
     public <T> EntityType<T> getMetamodel(T entity) {
-        return getEntityManager().getMetamodel().entity((Class<T>) entity.getClass());
+        return getEntityManager().getMetamodel().entity(provider.getEntityType(entity));
     }
 
     // Preparing actions ----------------------------------------------------------------------------------------------
@@ -1573,7 +1573,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Reset given entity. This will discard any changes in given entity. The given entity must be unmanaged/detached. The actual intent of this method is to
      * have the opportunity to completely reset the state of a given entity which might have been edited in the client, without changing the reference. This is
      * generally useful when the entity is in turn held in some collection and you'd rather not manually remove and reinsert it in the collection. This method
-     * supports proxied entities.
+     * supports proxied entities. An uninitialized proxy has no changes to discard, so it is left as is.
      *
      * @param entity Entity to reset.
      * @throws IllegalEntityStateException When entity is already managed, or has no ID.
@@ -1586,9 +1586,14 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 throw new IllegalEntityStateException(entity, "Only unmanaged entities can be resetted.");
             }
 
-            var managed = manage(entity);
+            if (provider.isProxyUninitialized(entity)) {
+                return;
+            }
+
+            var managed = provider.dereferenceProxy(manage(entity));
+            var target = provider.dereferenceProxy(entity);
             getMetamodel(entity).getAttributes().stream().map(Attribute::getJavaMember).filter(Field.class::isInstance)
-                .forEach(field -> map(field, managed, entity));
+                .forEach(field -> map(field, managed, target));
             // Note: EntityManager#refresh() is insuitable as it requires a managed entity and thus merge() could unintentionally persist changes before
             // resetting.
         });
@@ -1597,15 +1602,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Count actions --------------------------------------------------------------------------------------------------
 
     /**
-     * Returns count of all foreign key references to given entity. This is particularly useful in case you intend to check if the given entity is still
-     * referenced elsewhere in database.
+     * Returns count of all foreign key references to given entity, as described in {@link JPA#countForeignKeyReferences(EntityManager, Class, Class, Object)}.
+     * This is particularly useful in case you intend to check if the given entity is still referenced elsewhere in database.
      *
      * @param entity Entity to count all foreign key references for.
      * @return Count of all foreign key references to given entity.
      */
     @SuppressWarnings("unchecked")
     protected long countForeignKeyReferencesTo(E entity) {
-        return countForeignKeyReferences(getEntityManager(), entityType, identifierType, (I) idGetter.apply(manage(entity)));
+        var managed = manage(entity);
+        return countForeignKeyReferences(getEntityManager(), provider.getEntityType(managed), identifierType, (I) idGetter.apply(managed));
     }
 
     // Lazy fetching actions ------------------------------------------------------------------------------------------
@@ -1695,6 +1701,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param entity Entity instance to fetch all blobs on.
      * @return The same entity, useful if you want to continue using it immediately.
+     * @throws IllegalEntityStateException When entity has no ID.
+     * @throws EntityNotFoundException When entity has in meanwhile been deleted.
      */
     protected E fetchLazyBlobs(E entity) {
         return fetchSingularAttributes(entity, type -> type == byte[].class);
@@ -1705,6 +1713,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param entity Optional entity instance to fetch all blobs on.
      * @return The same optional entity, useful if you want to continue using it immediately.
+     * @throws IllegalEntityStateException When entity has no ID.
+     * @throws EntityNotFoundException When entity has in meanwhile been deleted.
      */
     protected Optional<E> fetchLazyBlobs(Optional<E> entity) {
         return entity.map(this::fetchLazyBlobs);
@@ -1726,9 +1736,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return entity;
     }
 
-    @SuppressWarnings("unchecked")
     private E fetchSingularAttributes(E entity, java.util.function.Predicate<Class<?>> ofType) {
-        var managed = getById((I) idGetter.apply(entity));
+        var managed = manage(entity);
 
         for (var attribute : getMetamodel().getAttributes()) {
             if (attribute instanceof SingularAttribute<?, ?> a && ofType.test(a.getJavaType())) {
@@ -2858,6 +2867,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = typedCriteria.build(path, criteriaBuilder, parameterBuilder);
             }
         }
+        catch (UnknownFieldException e) {
+            throw e;
+        }
         catch (IllegalArgumentException e) {
             logger.log(WARNING, e, () -> format(LOG_WARNING_ILLEGAL_CRITERIA_VALUE, field, type, criteria, criteria != null ? criteria.getClass() : null));
             predicate = matchNothing(criteriaBuilder, parameterBuilder);
@@ -3040,14 +3052,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var elementType = resolveElementType(type, field, query, pathResolver);
         parseElementCriteria(elementType, value);
         var plainItems = new ArrayList<>();
-        var criteriaItems = new ArrayList<Criteria<?>>();
+        var anyMatchItems = new ArrayList<>();
 
         for (var item : (Iterable<?>) stream(value)::iterator) {
-            if (!(item instanceof Criteria<?> criteria)) {
-                plainItems.add(item);
+            if (item instanceof Criteria<?> criteria && criteria.getValue() == null) {
+                continue;
             }
-            else if (criteria.getValue() != null) {
-                criteriaItems.add(criteria);
+            else if (item instanceof Criteria || isMultiValued(item)) {
+                anyMatchItems.add(item);
+            }
+            else {
+                plainItems.add(item);
             }
         }
 
@@ -3059,9 +3074,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             );
         }
 
-        for (var criteria : criteriaItems) {
+        for (var item : anyMatchItems) {
             predicates.add(
-                buildCollectionSubqueryPredicate(elementType, field, List.of(criteria), true, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
+                buildCollectionSubqueryPredicate(elementType, field, List.of(item), true, negated, query, criteriaBuilder, pathResolver, parameterBuilder)
             );
         }
 
@@ -3082,8 +3097,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Builds a correlated subquery which counts the distinct elements of given <code>@OneToMany</code>, <code>@ManyToMany</code> or
      * <code>@ElementCollection</code> field matching any of given items. This simulates an IN clause without a JOIN on the main query, so that the main query
      * still returns all elements of the field. Plain items are assumed to each match at most one distinct element, so all of them must match:
-     * <code>COUNT = items</code>. A {@link Criteria} item such as <code>Like</code> may match more than one element, so it gets its own subquery wherein at
-     * least one element must match: <code>COUNT &gt; 0</code>. When negated, the comparison is inverted.
+     * <code>COUNT = items</code>. A {@link Criteria} item such as <code>Like</code>, and a multi-valued item, may match more than one element, so it gets its
+     * own subquery wherein at least one element must match: <code>COUNT &gt; 0</code>. When negated, the comparison is inverted.
      */
     private Predicate buildCollectionSubqueryPredicate(
         Class<?> type, String field, List<?> items, boolean anyMatch, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,

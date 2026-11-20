@@ -36,6 +36,8 @@ import org.omnifaces.persistence.model.BaseEntity;
  * This is by default already registered on {@link BaseEntity}. On any other entity, register it via {@link EntityListeners}. It will fire CDI events
  * {@link Created}, {@link Updated} and {@link Deleted} which you can {@link Observes} on your entity.
  * <p>
+ * Outside a CDI container no event is fired. The CDI lookup is then retried on every callback, so that events are fired once CDI becomes available.
+ * <p>
  * Usage example:
  *
  * <pre>
@@ -63,8 +65,6 @@ public class BaseEntityListener {
 
     @Inject
     private BeanManager beanManager;
-
-    private Optional<BeanManager> optionalBeanManager;
 
     /**
      * Default constructor.
@@ -111,14 +111,6 @@ public class BaseEntityListener {
     }
 
     private Optional<BeanManager> findBeanManager() {
-        if (optionalBeanManager == null) {
-            optionalBeanManager = Optional.ofNullable(getBeanManager());
-        }
-
-        return optionalBeanManager;
-    }
-
-    private BeanManager getBeanManager() {
         if (beanManager == null) {
             try {
                 beanManager = CDI.current().getBeanManager(); // Work around for CDI @Inject not working in JPA EntityListener (as observed in OpenJPA).
@@ -128,7 +120,7 @@ public class BaseEntityListener {
             }
         }
 
-        return beanManager;
+        return Optional.ofNullable(beanManager);
     }
 
 }

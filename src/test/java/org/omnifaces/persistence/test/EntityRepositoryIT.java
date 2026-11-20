@@ -16,8 +16,10 @@ import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,6 +29,7 @@ import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
 import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK_OR_OPENJPA;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.HIBERNATE;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.OPENJPA_COUNT;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.PROFILE_ID;
@@ -53,9 +56,11 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import jakarta.ejb.EJB;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.NonUniqueResultException;
 import jakarta.persistence.TransactionRequiredException;
 
@@ -72,7 +77,9 @@ import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.criteria.Order;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
+import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
+import org.omnifaces.persistence.model.NonDeletable;
 import org.omnifaces.persistence.model.VersionedBaseEntity;
 import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.query.Select;
@@ -81,17 +88,21 @@ import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Attachment;
+import org.omnifaces.persistence.test.model.Badge;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Invoice;
 import org.omnifaces.persistence.test.model.Letter;
+import org.omnifaces.persistence.test.model.Locker;
 import org.omnifaces.persistence.test.model.Membership;
 import org.omnifaces.persistence.test.model.MembershipId;
 import org.omnifaces.persistence.test.model.Note;
 import org.omnifaces.persistence.test.model.Period;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Recipient;
 import org.omnifaces.persistence.test.model.Remark;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
@@ -143,6 +154,12 @@ public class EntityRepositoryIT {
     private EntityRepository<String, Note> noteRepository;
     @Inject
     private EntityRepository<Long, Document> documentRepository;
+    @Inject
+    private EntityRepository<Long, Config> configRepository;
+    @Inject
+    private EntityRepository<Long, Badge> badgeRepository;
+    @Inject
+    private EntityRepository<Long, Locker> lockerRepository;
     @Inject
     private TransactionServiceCDI transactionServiceCDI;
     @EJB
@@ -308,6 +325,67 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * {@link EntityRepository#countForeignKeyReferencesTo(Object)} also counts the rows referencing given entity via an association to a supertype of it, once
+     * per row of an entity hierarchy, via an association to the actual subclass of the entity when counted via the repository of its supertype, and via an
+     * association in an <code>@Embedded</code> value.
+     */
+    @Test
+    void testCountForeignKeyReferencesToCountsReferencesViaSupertypeAndEmbedded() {
+        var person = personRepository.getById(1L);
+        var phonesOfPerson = selectLong("SELECT COUNT(phone) FROM Phone phone WHERE phone.owner.id = ?1", person.getId());
+        var letter = (Letter) newDocument(new Letter(), "letter", "Ann");
+        var reply = (Letter) newDocument(new Letter(), "reply", "Bob");
+        var invoice = (Invoice) newDocument(new Invoice(), "invoice", 10);
+
+        try {
+            reply.setInReplyTo(letter);
+            reply.setRecipient(new Recipient(person));
+            invoice.setInReplyTo(letter);
+            invoice.setCoverLetter(letter);
+            Stream.of(letter, reply, invoice).forEach(document -> transactionServiceCDI.run(() -> documentRepository.persist(document)));
+            assertEquals(
+                3, documentRepository.countForeignKeyReferencesTo(letter), "References to letter via Document#inReplyTo and Invoice#coverLetter"
+            );
+            assertEquals(phonesOfPerson + 1, personRepository.countForeignKeyReferencesTo(person), "References to person via phones and Letter#recipient");
+        }
+        finally {
+            Stream.of(reply, invoice, letter).filter(document -> document.getId() != null)
+                .forEach(document -> transactionServiceCDI.run(() -> documentRepository.delete(documentRepository.getById(document.getId()))));
+        }
+    }
+
+    /**
+     * {@link EntityRepository#countForeignKeyReferencesTo(Object)} counts the rows referencing given entity via an association declared in a mapped superclass,
+     * once per entity extending it.
+     */
+    @Test
+    void testCountForeignKeyReferencesToCountsReferencesViaMappedSuperclassAssociation() {
+        var person = personRepository.getById(1L);
+        var phonesOfPerson = selectLong("SELECT COUNT(phone) FROM Phone phone WHERE phone.owner.id = ?1", person.getId());
+        var badge = new Badge();
+        var locker = new Locker();
+        badge.setHolder(person);
+        locker.setHolder(person);
+
+        try {
+            transactionServiceCDI.run(() -> {
+                badgeRepository.persist(badge);
+                lockerRepository.persist(locker);
+            });
+            assertEquals(phonesOfPerson + 2, personRepository.countForeignKeyReferencesTo(person), "References to person via phones and PersonalItem#holder");
+        }
+        finally {
+            if (badge.getId() != null) {
+                transactionServiceCDI.run(() -> badgeRepository.delete(badgeRepository.getById(badge.getId())));
+            }
+
+            if (locker.getId() != null) {
+                transactionServiceCDI.run(() -> lockerRepository.delete(lockerRepository.getById(locker.getId())));
+            }
+        }
+    }
+
+    /**
      * Runs given test with four persisted articles titled a, b, c and d, of which a is in category First, c in category Second, and b and d in no category.
      */
     private void withArticlesInOptionalCategories(Consumer<List<Article>> test) {
@@ -365,6 +443,23 @@ public class EntityRepositoryIT {
 
             assertEquals(List.of(articles.get(0).getCode()), codesOf(articlesTitled(Like.pattern(TITLE_PREFIX + "a\\_b"))), "Articles titled a_b");
             assertEquals(List.of(articles.get(3).getCode()), codesOf(articlesTitled(Like.pattern(TITLE_PREFIX + "a\\\\b"))), "Articles titled a\\b");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
+     * {@link Like#pattern(String)} matches a character after the escape character literally, also when it is an ordinary character, on every database.
+     */
+    @Test
+    void testLikePatternMatchesEscapedOrdinaryCharacterLiterally() {
+        var articles = new ArrayList<Article>();
+
+        try {
+            articles.add(persistArticle("ab", null));
+            articles.add(persistArticle("xb", null));
+            assertEquals(List.of(articles.get(0).getCode()), codesOf(articlesTitled(Like.pattern(TITLE_PREFIX + "\\ab"))), "Articles titled ab");
         }
         finally {
             deleteArticles(articles);
@@ -610,6 +705,29 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * An update of a detached {@link VersionedBaseEntity} without changes keeps its version and last modified timestamp, and fires no updated event.
+     */
+    @Test
+    void testUpdateOfUnchangedVersionedEntityKeepsVersionAndLastModifiedAndFiresNoEvent() {
+        var remark = new Remark();
+        remark.setText("unchanged");
+        var id = transactionServiceCDI.call(() -> remarkRepository.persist(remark));
+
+        try {
+            var persisted = reloadRemark(id);
+            entityEvents.clear();
+            transactionServiceCDI.run(() -> remarkRepository.update(persisted));
+            var updated = reloadRemark(id);
+            assertEquals(persisted.getVersion(), updated.getVersion(), "Version");
+            assertEquals(persisted.getLastModified(), updated.getLastModified(), "Last modified");
+            assertEquals(List.of(), entityEvents.get(), "Fired events");
+        }
+        finally {
+            transactionServiceCDI.run(() -> remarkRepository.delete(remarkRepository.getById(id)));
+        }
+    }
+
+    /**
      * Returns the remark with given ID as stored after given change was updated in a transaction.
      */
     private Remark updateRemark(Long id, Consumer<Remark> change) {
@@ -684,6 +802,29 @@ public class EntityRepositoryIT {
         finally {
             transactionServiceCDI.run(() -> attachmentRepository.delete(attachmentRepository.getById(id)));
         }
+    }
+
+    /**
+     * {@link EntityRepository#fetchLazyBlobs(Object)} fetches the blobs of a soft deleted entity, and throws {@link EntityNotFoundException} for an entity
+     * which has in meanwhile been deleted.
+     */
+    @Test
+    void testFetchLazyBlobsOfSoftDeletedAndOfDeletedEntity() {
+        var attachment = new Attachment();
+        attachment.setContent("content".getBytes(UTF_8));
+        var id = transactionServiceCDI.call(() -> attachmentRepository.persist(attachment));
+        var deleted = transactionServiceCDI.call(() -> attachmentRepository.getById(id));
+
+        try {
+            transactionServiceCDI.run(() -> attachmentRepository.softDelete(attachmentRepository.getById(id)));
+            var softDeleted = transactionServiceCDI.call(() -> attachmentRepository.fetchLazyBlobs(attachmentRepository.getSoftDeletedById(id)));
+            assertArrayEquals("content".getBytes(UTF_8), softDeleted.getContent(), "Content of soft deleted attachment");
+        }
+        finally {
+            transactionServiceCDI.run(() -> attachmentRepository.delete(attachmentRepository.getById(id, true)));
+        }
+
+        assertThrows(EntityNotFoundException.class, () -> transactionServiceCDI.call(() -> attachmentRepository.fetchLazyBlobs(deleted)), "Deleted attachment");
     }
 
     /**
@@ -870,6 +1011,48 @@ public class EntityRepositoryIT {
         assertNull(deleteLazyCategory("unset").getSlug(), "Slug is unset after delete");
     }
 
+    /**
+     * {@link EntityRepository#delete(Object)} unsets the ID of a detached entity on every provider.
+     */
+    @Test
+    void testDeleteUnsetsIdOfDetachedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        var detached = textRepository.getById(id);
+        transactionServiceCDI.run(() -> textRepository.delete(detached));
+        assertNull(detached.getId(), "ID of deleted detached text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    /**
+     * {@link EntityRepository#delete(Object)} unsets the ID of a managed entity on Hibernate.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = MANAGED_ID_IMMUTABLE)
+    void testDeleteUnsetsIdOfManagedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        assertNull(deleteManagedText(id).getId(), "ID of deleted managed text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    /**
+     * {@link EntityRepository#delete(Object)} keeps the ID of a managed entity on EclipseLink and OpenJPA, because they reject modifying it.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = HIBERNATE, disabledReason = "Hibernate unsets the ID of a managed entity")
+    void testDeleteKeepsIdOfManagedEntity() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+        assertEquals(id, deleteManagedText(id).getId(), "ID of deleted managed text");
+        assertNull(textRepository.getById(id, true), "Deleted text");
+    }
+
+    private Text deleteManagedText(Long id) {
+        return transactionServiceCDI.call(() -> {
+            var managed = textRepository.getById(id);
+            textRepository.delete(managed);
+            return managed;
+        });
+    }
+
     private Category deleteLazyCategory(String slug) {
         var category = newCategory(slug, slug);
         transactionServiceCDI.run(() -> categoryRepository.persist(category));
@@ -924,6 +1107,67 @@ public class EntityRepositoryIT {
         finally {
             deleteCategories(List.of(category));
         }
+    }
+
+    /**
+     * {@link NonDeletable} also applies to a reference to the entity, which is a proxy on Hibernate, and to a subclass of the entity.
+     */
+    @Test
+    void testNonDeletableCannotBeDeletedViaReferenceOrSubclass() {
+        var config = new Config();
+        config.setKey("nodelete.reference");
+        config.setValue("value");
+        var id = transactionServiceCDI.call(() -> configRepository.persist(config));
+
+        try {
+            assertThrows(
+                NonDeletableEntityException.class,
+                () -> transactionServiceCDI.run(() -> configRepository.delete(configRepository.getEntityManager().getReference(Config.class, id))),
+                "Reference"
+            );
+            assertNotNull(configRepository.getById(id), "Config still exists after failed delete via reference");
+            assertThrows(NonDeletableEntityException.class, () -> configRepository.delete(new Config() {
+
+                private static final long serialVersionUID = 1L;
+
+            }), "Subclass");
+        }
+        finally {
+            transactionServiceCDI.run(() -> {
+                var entityManager = configRepository.getEntityManager();
+                entityManager.remove(entityManager.find(Config.class, id));
+            });
+        }
+    }
+
+    /**
+     * {@link EntityRepository#reset(Object)} discards the changes of a detached entity, also when it is an initialized proxy, as a lazy association is on
+     * Hibernate, and also when the persistence context of the transaction already holds a proxy of it. An uninitialized proxy is left as is.
+     */
+    @Test
+    void testResetOfLazyAssociationDiscardsItsChanges() {
+        var phoneId = phoneRepository.getPage(Page.ONE, false).get(0).getId();
+        var owner = transactionServiceCDI.call(() -> {
+            var lazyOwner = phoneRepository.getById(phoneId).getOwner();
+            lazyOwner.getEmail();
+            return lazyOwner;
+        });
+        var email = owner.getEmail();
+        owner.setEmail("reset@example.com");
+        personRepository.reset(owner);
+        assertEquals(email, owner.getEmail(), "Email of owner after reset");
+
+        owner.setEmail("reset@example.com");
+        transactionServiceCDI.run(() -> {
+            phoneRepository.getById(phoneId).getOwner();
+            personRepository.reset(owner);
+        });
+        assertEquals(email, owner.getEmail(), "Email of owner after reset in transaction holding a proxy of it");
+
+        var reference = transactionServiceCDI.call(() -> personRepository.getEntityManager().getReference(Person.class, owner.getId()));
+        assertDoesNotThrow(() -> personRepository.reset(reference), "Reset of reference");
+        var provider = personRepository.getProvider();
+        assertTrue(!provider.isProxy(reference) || provider.isProxyUninitialized(reference), "Reference is left as is");
     }
 
     @Test
@@ -1004,6 +1248,37 @@ public class EntityRepositoryIT {
         }
         finally {
             transactionServiceCDI.run(() -> textRepository.getByIds(List.of(activeId, softDeletedId), true).forEach(textRepository::delete));
+        }
+    }
+
+    /**
+     * {@link EntityRepository#find(Select)} and {@link EntityRepository#findFirst(Select)} exclude a soft deleted entity when selecting by criteria or all, and
+     * not when selecting by JPQL, also when the select is cacheable or not.
+     */
+    @Test
+    void testFindAndFindFirstBySelectExcludeSoftDeletedUnlessByJpql() {
+        var softDeletedId = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+
+        try {
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(softDeletedId)));
+
+            for (var cacheable : List.of(false, true)) {
+                var byCriteria = Select
+                    .<Text>criteria((criteriaBuilder, query, root) -> query.where(criteriaBuilder.equal(root.get("id"), softDeletedId)), Map.of())
+                    .cacheable(cacheable)
+                    .build();
+                var byJpql = Select.jpql("WHERE e.id = ?1", softDeletedId).cacheable(cacheable).build();
+                var all = Select.all().cacheable(cacheable).build();
+
+                assertEquals(Optional.empty(), textRepository.find(byCriteria), "Find by criteria, cacheable " + cacheable);
+                assertEquals(Optional.empty(), textRepository.findFirst(byCriteria), "Find first by criteria, cacheable " + cacheable);
+                assertEquals(Optional.of(softDeletedId), textRepository.find(byJpql).map(Text::getId), "Find by JPQL, cacheable " + cacheable);
+                assertEquals(Optional.of(softDeletedId), textRepository.findFirst(byJpql).map(Text::getId), "Find first by JPQL, cacheable " + cacheable);
+                assertNotEquals(Optional.of(softDeletedId), textRepository.findFirst(all).map(Text::getId), "Find first of all, cacheable " + cacheable);
+            }
+        }
+        finally {
+            transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(softDeletedId, true)));
         }
     }
 
@@ -1192,6 +1467,52 @@ public class EntityRepositoryIT {
         finally {
             deleteArticles(articles);
         }
+    }
+
+    /**
+     * A nested multi-valued item of an element collection criteria matches when at least one of its values is an element, also when several of them are.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testCriteriaOnElementCollectionMatchesNestedMultiValuedItemWhenSeveralElementsMatchIt() {
+        var articles = List.of(
+            persistArticle("all rated", null, Set.of(1, 2, 3), Set.of()), persistArticle("two rated", null, Set.of(2, 3), Set.of()),
+            persistArticle("unrated three", null, Set.of(1, 2), Set.of())
+        );
+
+        try {
+            assertEquals(codesOf(articles.subList(0, 2)), codesOfRated(List.of(List.of(1, 2), 3)), "Nested multi-valued item and other item");
+            assertEquals(codesOf(articles), codesOfRated(List.of(List.of(1, 2))), "Nested multi-valued item alone");
+            assertEquals(
+                codesOf(articles.subList(2, 3)), codesOfRated(Not.value(List.of(List.of(1, 2), 3))), "Negated nested multi-valued item and other item"
+            );
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    private List<Long> codesOfRated(Object ratings) {
+        var criteria = new HashMap<>(TITLED);
+        criteria.put("ratings", ratings);
+        var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true);
+        assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + ratings);
+        return codesOf(page);
+    }
+
+    /**
+     * A criteria on an empty or an unknown field, and a fetch of an unknown field, are rejected with {@link IllegalArgumentException}.
+     */
+    @Test
+    void testPageWithEmptyOrUnknownFieldThrowsIllegalArgumentException() {
+        for (var field : List.of("", "nonexistent", "nonexistent.number", "phones.nonexistent", "phones.nonexistent.number")) {
+            assertThrows(
+                IllegalArgumentException.class, () -> personRepository.getPage(Page.with().allMatch(Map.of(field, "x")).build(), false), "Criteria on " + field
+            );
+        }
+
+        assertThrows(IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, "nonexistent"), "Fetch of nonexistent");
+        assertThrows(IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, "phones.nonexistent"), "Fetch of phones.nonexistent");
     }
 
     @Test

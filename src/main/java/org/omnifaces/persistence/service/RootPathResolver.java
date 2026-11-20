@@ -79,7 +79,7 @@ class RootPathResolver implements PathResolver {
         }
 
         path = root;
-        boolean explicitJoin = field.charAt(0) == '@';
+        boolean explicitJoin = field.startsWith("@");
         String originalField = explicitJoin ? field.substring(1) : ID.equals(field) ? idName : field;
         String[] attributes = originalField.split("\\.");
         int depth = attributes.length;
@@ -94,7 +94,12 @@ class RootPathResolver implements PathResolver {
                 path = path.get(attribute);
             }
             else if (i + 1 < depth || elementCollections.test(originalField)) {
-                path = explicitJoin || !joins.containsKey(joinPath) ? join(path, attribute) : joins.get(joinPath);
+                try {
+                    path = explicitJoin || !joins.containsKey(joinPath) ? join(path, attribute) : joins.get(joinPath);
+                }
+                catch (IllegalArgumentException e) {
+                    throw new UnknownFieldException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
+                }
             }
             else {
                 try {
@@ -112,7 +117,7 @@ class RootPathResolver implements PathResolver {
                     }
 
                     if (depth != 1 || path == null) {
-                        throw new IllegalArgumentException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
+                        throw new UnknownFieldException(format(ERROR_UNKNOWN_FIELD, field, root.getJavaType()), e);
                     }
                 }
             }

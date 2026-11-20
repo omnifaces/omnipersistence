@@ -518,6 +518,8 @@ public class AuditLog {
 
 `AuditedChange` carries the full entity reference, entity ID, entity name, property name, old value and new value. The event is only fired when the value actually changes (old ≠ new).
 
+The event is fired during the flush, so an observer must not invoke `EntityManager` operations in the persistence context being flushed.
+
 ---
 
 ## 9. Timestamps and optimistic locking

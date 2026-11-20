@@ -12,6 +12,7 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 
 @Entity
@@ -21,12 +22,23 @@ public class Letter extends Document {
 
     private String author;
 
+    @Embedded
+    private Recipient recipient;
+
     public String getAuthor() {
         return author;
     }
 
     public void setAuthor(String author) {
         this.author = author;
+    }
+
+    public Recipient getRecipient() {
+        return recipient;
+    }
+
+    public void setRecipient(Recipient recipient) {
+        this.recipient = recipient;
     }
 
 }
