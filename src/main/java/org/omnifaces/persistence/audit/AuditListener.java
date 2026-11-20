@@ -120,7 +120,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * is rolled back. So an observer can persist an audit log. It must then start a transaction of its own, for example via
  * {@link Transactional.TxType#REQUIRES_NEW}, because the audited transaction is already completed. The audit log is thus not written atomically with the
  * change: when writing it fails, the change stays committed. An exception of an observer is logged as a warning, and the other events of the transaction are
- * still fired. The entity may no longer be managed by then, so a lazy association of {@link AuditedChange#getEntity()} may not be loaded.
+ * still fired. The entity may no longer be managed by then, so a lazy association of {@link AuditedChange#getEntity()} may not be loaded. The observer should
+ * not extend {@link BaseEntityService}: its <code>@PostConstruct</code> uses the {@link EntityManager} before its own transaction is started, which a server
+ * such as TomEE rejects when the observer is first created after the commit. Inject the service into the observer instead, as below.
  * <p>
  * Observer example:
  *

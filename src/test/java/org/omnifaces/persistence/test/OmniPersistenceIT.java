@@ -15,6 +15,7 @@ package org.omnifaces.persistence.test;
 import static jakarta.persistence.SharedCacheMode.ALL;
 import static jakarta.persistence.SharedCacheMode.UNSPECIFIED;
 import static jakarta.transaction.Status.STATUS_COMMITTED;
+import static jakarta.transaction.Status.STATUS_NO_TRANSACTION;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -3181,7 +3182,10 @@ public abstract class OmniPersistenceIT {
     void testAuditedChangeIsFiredAfterCommit() {
         var config = persistAuditedConfig("audit.committed", "original");
         configService().updateValue(config.getId(), "modified");
-        assertEquals(List.of(STATUS_COMMITTED), TestAuditListener.getTransactionStatuses(), "Change was observed after the commit");
+        var statuses = TestAuditListener.getTransactionStatuses();
+        assertEquals(1, statuses.size(), "Change was observed once");
+        // GlassFish reports STATUS_NO_TRANSACTION in afterCompletion.
+        assertTrue(Set.of(STATUS_COMMITTED, STATUS_NO_TRANSACTION).contains(statuses.get(0)), "Change was observed after the commit: " + statuses);
     }
 
     @Test

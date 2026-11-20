@@ -12,29 +12,16 @@
  */
 package org.omnifaces.persistence.test.service;
 
-import static jakarta.transaction.Transactional.TxType.REQUIRES_NEW;
-
 import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
-import jakarta.transaction.Transactional;
 
-import org.omnifaces.persistence.audit.AuditedChange;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.AuditLog;
 import org.omnifaces.persistence.test.model.Config;
 
-/**
- * Persists an {@link AuditLog} for each {@link AuditedChange}, in a transaction of its own, the way an application observes it.
- */
 @ApplicationScoped
 public class AuditLogService extends BaseEntityService<Long, AuditLog> {
-
-    @Transactional(REQUIRES_NEW)
-    public void onAuditedChange(@Observes AuditedChange change) {
-        persist(new AuditLog(change));
-    }
 
     public List<String> listValueChanges(Config config) {
         return getEntityManager()
