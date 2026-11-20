@@ -17,6 +17,7 @@ import java.lang.reflect.Proxy;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.inject.Instance;
@@ -27,8 +28,8 @@ import jakarta.enterprise.util.TypeLiteral;
 
 /**
  * A {@link CDIProvider} for unit tests. {@link CDI#current()} throws {@link IllegalStateException}, as outside a CDI container, until it is made available. The
- * events fired via the {@link BeanManager} of its {@link CDI} are recorded. {@link CDI#setCDIProvider(CDIProvider)} cannot be undone, so a test sets it back to
- * unavailable when done.
+ * events fired via the {@link BeanManager} of its {@link CDI} are recorded, unless they are set to fail as a throwing observer would.
+ * {@link CDI#setCDIProvider(CDIProvider)} cannot be undone, so a test sets it back to unavailable when done.
  */
 public final class RecordingCDIProvider implements CDIProvider {
 
@@ -37,6 +38,7 @@ public final class RecordingCDIProvider implements CDIProvider {
     private final List<Object> firedEvents = new CopyOnWriteArrayList<>();
     private final CDI<Object> cdi = new RecordingCDI();
     private volatile boolean available;
+    private volatile Predicate<Object> failing = event -> false;
 
     private RecordingCDIProvider() {
         // Singleton.
@@ -49,6 +51,7 @@ public final class RecordingCDIProvider implements CDIProvider {
      */
     public static RecordingCDIProvider install() {
         INSTANCE.available = false;
+        INSTANCE.failing = event -> false;
         INSTANCE.firedEvents.clear();
         CDI.setCDIProvider(INSTANCE);
         return INSTANCE;
@@ -61,6 +64,15 @@ public final class RecordingCDIProvider implements CDIProvider {
      */
     public void setAvailable(boolean available) {
         this.available = available;
+    }
+
+    /**
+     * Sets which fired events throw {@link IllegalStateException}, as a throwing observer would. Those are not recorded.
+     *
+     * @param failing Which fired events throw.
+     */
+    public void setFailing(Predicate<Object> failing) {
+        this.failing = failing;
     }
 
     /**
@@ -100,6 +112,10 @@ public final class RecordingCDIProvider implements CDIProvider {
                     case "select" :
                         return proxy;
                     case "fire" :
+                        if (failing.test(args[0])) {
+                            throw new IllegalStateException("Observer failed.");
+                        }
+
                         firedEvents.add(args[0]);
                         return null;
                     default :

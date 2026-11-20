@@ -46,6 +46,13 @@ public abstract class ConfigService extends BaseEntityService<Long, Config> {
         config.setValue(newValue);
     }
 
+    public void updateValueAndFail(Long id, String newValue) {
+        var config = getById(id);
+        config.setValue(newValue);
+        getEntityManager().flush();
+        throw new IllegalStateException("Rolls back the flushed change.");
+    }
+
     public void updateValueTwice(Long id, String firstValue, String secondValue) {
         var config = getById(id);
         config.setValue(firstValue);

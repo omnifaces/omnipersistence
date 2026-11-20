@@ -12,8 +12,15 @@
  */
 package org.omnifaces.persistence.audit;
 
+import static jakarta.transaction.Status.STATUS_ACTIVE;
+import static jakarta.transaction.Status.STATUS_COMMITTED;
+import static jakarta.transaction.Status.STATUS_MARKED_ROLLBACK;
+import static jakarta.transaction.Status.STATUS_NO_TRANSACTION;
+import static jakarta.transaction.Status.STATUS_ROLLEDBACK;
+import static jakarta.transaction.Status.STATUS_ROLLING_BACK;
 import static java.lang.management.ManagementFactory.getRuntimeMXBean;
 import static java.util.Collections.singletonList;
+import static java.util.logging.Level.WARNING;
 import static java.util.stream.IntStream.range;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,16 +30,32 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.MappedSuperclass;
+import jakarta.transaction.Synchronization;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.omnifaces.persistence.RecordingCDIProvider;
 import org.omnifaces.persistence.model.GeneratedIdEntity;
 
@@ -327,6 +350,142 @@ class AuditListenerTest {
         }
     }
 
+    /**
+     * The {@link AuditedChange} events are queued per JTA transaction and fired after its commit. When they cannot be queued, they are fired immediately,
+     * during the flush, with a warning which is logged once per entity class and reason, not on every change.
+     */
+    @Nested
+    class Queueing {
+
+        private final List<String> warnings = new CopyOnWriteArrayList<>();
+        private final WarningRecorder warningRecorder = new WarningRecorder(warnings);
+        private final Logger logger = Logger.getLogger(AuditListener.class.getName());
+        private final StubRegistry registry = new StubRegistry();
+        private RecordingCDIProvider cdi;
+
+        @BeforeEach
+        void setUp() {
+            cdi = RecordingCDIProvider.install();
+            cdi.setAvailable(true);
+            AuditListener.WARNED_FALLBACKS.clear();
+            AuditListener.useRegistryLookup(() -> registry);
+            logger.addHandler(warningRecorder);
+        }
+
+        @AfterEach
+        void tearDown() {
+            logger.removeHandler(warningRecorder);
+            AuditListener.useRegistryLookup(AuditListener::lookupRegistry);
+            cdi.setAvailable(false);
+        }
+
+        @Test
+        void queueIsRegisteredWhenAuditedEntityIsLoadedInActiveTransaction() {
+            loaded(new AuditedEntity(), "old");
+            assertEquals(1, registry.synchronizations.size());
+        }
+
+        @Test
+        void auditedChangeInActiveTransactionIsFiredOnlyAfterCommit() {
+            updateTwice(loaded(new AuditedEntity(), "old"));
+            assertEquals(List.of(), firedEvents(), "Nothing is fired during the flush");
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of("value: old -> first", "value: first -> second"), firedEvents(), "Each change is fired after the commit");
+            assertEquals(List.of(), warnings);
+        }
+
+        @Test
+        void auditedChangeInActiveTransactionIsNotFiredAfterRollback() {
+            updateTwice(loaded(new AuditedEntity(), "old"));
+            registry.complete(STATUS_ROLLEDBACK);
+            assertEquals(List.of(), firedEvents());
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = { STATUS_MARKED_ROLLBACK, STATUS_ROLLING_BACK, STATUS_ROLLEDBACK })
+        void auditedChangeInTransactionWhichWillNotCommitIsDropped(int status) {
+            var entity = loaded(new AuditedEntity(), "old");
+            registry.status = status;
+            updateTwice(entity);
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of(), firedEvents());
+            assertEquals(List.of(), warnings);
+        }
+
+        @Test
+        void auditedChangeIsFiredDuringFlushWithOneWarningWhenNoTransactionSynchronizationRegistry() {
+            AuditListener.useRegistryLookup(() -> null);
+            assertFiredDuringFlushWithOneWarning(new NoRegistryAuditedEntity(), "no TransactionSynchronizationRegistry");
+        }
+
+        @Test
+        void auditedChangeIsFiredDuringFlushWithOneWarningWhenNoTransaction() {
+            registry.status = STATUS_NO_TRANSACTION;
+            assertFiredDuringFlushWithOneWarning(new NoTransactionAuditedEntity(), "no active JTA transaction");
+        }
+
+        @Test
+        void auditedChangeIsFiredDuringFlushWithOneWarningWhenRegistrationIsRejected() {
+            registry.rejecting = true;
+            assertFiredDuringFlushWithOneWarning(new RejectedAuditedEntity(), "rejected the registration");
+        }
+
+        @Test
+        void failedRegistryLookupIsRetriedOnFlushOnly() {
+            var lookups = new AtomicInteger();
+            var found = new AtomicReference<TransactionSynchronizationRegistry>();
+            AuditListener.useRegistryLookup(() -> {
+                lookups.incrementAndGet();
+                return found.get();
+            });
+            loaded(new AuditedEntity(), "other");
+            var entity = loaded(new AuditedEntity(), "old");
+            assertEquals(1, lookups.get(), "Failed lookup is not retried on load");
+            found.set(registry);
+            entity.setValue("new");
+            listener.afterUpdate(entity);
+            assertEquals(2, lookups.get(), "Failed lookup is retried on flush");
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of("value: old -> new"), firedEvents(), "Change is fired after the commit");
+        }
+
+        @Test
+        void failingObserverAfterCommitDoesNotSuppressOtherAuditedChanges() {
+            var entity = new TwoAuditedFieldsEntity();
+            entity.setValue("old");
+            entity.setOther("old");
+            listener.beforeUpdate(entity);
+            entity.setValue("new");
+            entity.setOther("new");
+            listener.afterUpdate(entity);
+            cdi.setFailing(event -> "other".equals(((AuditedChange) event).getPropertyName()));
+            registry.complete(STATUS_COMMITTED);
+            assertEquals(List.of("value: old -> new"), firedEvents(), "Change after the failing one is still fired");
+            assertEquals(1, warnings.size(), "Failure was logged: " + warnings);
+            assertTrue(warnings.get(0).contains("property other failed after the commit"), "Warning names the change: " + warnings);
+        }
+
+        private void assertFiredDuringFlushWithOneWarning(AuditedEntity entity, String reason) {
+            updateTwice(loaded(entity, "old"));
+            assertEquals(List.of("value: old -> first", "value: first -> second"), firedEvents(), "Each change is fired during the flush");
+            assertEquals(1, warnings.size(), "Warning is logged once: " + warnings);
+            assertTrue(warnings.get(0).contains(entity.getClass().getName()), "Warning names the entity class: " + warnings);
+            assertTrue(warnings.get(0).contains(reason), "Warning names the reason: " + warnings);
+        }
+
+        private void updateTwice(AuditedEntity entity) {
+            entity.setValue("first");
+            listener.afterUpdate(entity);
+            entity.setValue("second");
+            listener.afterUpdate(entity);
+        }
+
+        private List<String> firedEvents() {
+            return cdi.getFiredEvents().stream().map(change -> describe((AuditedChange) change)).toList();
+        }
+
+    }
+
     static boolean isExplicitGcDisabled() {
         return getRuntimeMXBean().getInputArguments().contains("-XX:+DisableExplicitGC");
     }
@@ -390,6 +549,106 @@ class AuditListenerTest {
     public static class AuditedSubclassEntity extends AuditedEntity {
 
         private static final long serialVersionUID = 1L;
+
+    }
+
+    @Entity
+    public static class NoRegistryAuditedEntity extends AuditedEntity {
+
+        private static final long serialVersionUID = 1L;
+
+    }
+
+    @Entity
+    public static class NoTransactionAuditedEntity extends AuditedEntity {
+
+        private static final long serialVersionUID = 1L;
+
+    }
+
+    @Entity
+    public static class RejectedAuditedEntity extends AuditedEntity {
+
+        private static final long serialVersionUID = 1L;
+
+    }
+
+    private static class StubRegistry implements TransactionSynchronizationRegistry {
+
+        private final Map<Object, Object> resources = new HashMap<>();
+        private final List<Synchronization> synchronizations = new ArrayList<>();
+        private int status = STATUS_ACTIVE;
+        private boolean rejecting;
+
+        void complete(int completionStatus) {
+            synchronizations.forEach(synchronization -> synchronization.afterCompletion(completionStatus));
+        }
+
+        @Override
+        public Object getTransactionKey() {
+            return this;
+        }
+
+        @Override
+        public void putResource(Object key, Object value) {
+            resources.put(key, value);
+        }
+
+        @Override
+        public Object getResource(Object key) {
+            return resources.get(key);
+        }
+
+        @Override
+        public void registerInterposedSynchronization(Synchronization synchronization) {
+            if (rejecting) {
+                throw new IllegalStateException("Registration rejected.");
+            }
+
+            synchronizations.add(synchronization);
+        }
+
+        @Override
+        public int getTransactionStatus() {
+            return status;
+        }
+
+        @Override
+        public void setRollbackOnly() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean getRollbackOnly() {
+            throw new UnsupportedOperationException();
+        }
+
+    }
+
+    private static class WarningRecorder extends Handler {
+
+        private final List<String> warnings;
+
+        WarningRecorder(List<String> warnings) {
+            this.warnings = warnings;
+        }
+
+        @Override
+        public void publish(LogRecord record) {
+            if (record.getLevel() == WARNING) {
+                warnings.add(record.getMessage());
+            }
+        }
+
+        @Override
+        public void flush() {
+            // NOOP.
+        }
+
+        @Override
+        public void close() {
+            // NOOP.
+        }
 
     }
 
