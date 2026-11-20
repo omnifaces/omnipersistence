@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test;
 
 import static jakarta.persistence.SharedCacheMode.ALL;
 import static jakarta.persistence.SharedCacheMode.UNSPECIFIED;
+import static jakarta.transaction.Status.STATUS_COMMITTED;
 import static java.lang.System.getProperty;
 import static java.lang.System.getenv;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -105,6 +106,7 @@ import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
+import org.omnifaces.persistence.test.service.AuditLogService;
 import org.omnifaces.persistence.test.service.ConfigService;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
@@ -332,6 +334,9 @@ public abstract class OmniPersistenceIT {
 
     @Inject
     private PlainConfigUpdater plainConfigUpdater;
+
+    @Inject
+    private AuditLogService auditLogService;
 
     protected abstract BaseEntityService<Long, InventoryItem> inventoryItemService();
 
@@ -3170,6 +3175,62 @@ public abstract class OmniPersistenceIT {
         var config = persistAuditedConfig("audit.same", "unchanged");
         configService().updateValue(config.getId(), "unchanged");
         assertEquals(List.of(), auditedValueChanges(), "Unchanged value should not produce audit changes");
+    }
+
+    @Test
+    void testAuditedChangeIsFiredAfterCommit() {
+        var config = persistAuditedConfig("audit.committed", "original");
+        configService().updateValue(config.getId(), "modified");
+        assertEquals(List.of(STATUS_COMMITTED), TestAuditListener.getTransactionStatuses(), "Change was observed after the commit");
+    }
+
+    @Test
+    void testAuditedChangeIsNotFiredWhenTransactionIsRolledBack() {
+        var config = persistAuditedConfig("audit.rollback", "original");
+        assertThrows(Exception.class, () -> configService().updateValueAndFail(config.getId(), "modified"));
+        assertAll(
+            () -> assertEquals(List.of(), auditedValueChanges(), "Flushed change of rolled back transaction was not observed"),
+            () -> assertEquals(List.of(), auditLogService.listValueChanges(config), "Flushed change of rolled back transaction was not logged")
+        );
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfChangeFlushedAtCommit() {
+        var config = persistAuditedConfig("audit.log.commit", "original");
+        configService().updateValue(config.getId(), "modified");
+        assertEquals(List.of("original -> modified"), auditLogService.listValueChanges(config), "Change flushed at commit was logged");
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfMergedDetachedEntity() {
+        var config = persistAuditedConfig("audit.log.detached", "original");
+        var detachedConfig = configService().getById(config.getId());
+        detachedConfig.setValue("modified");
+        configService().update(detachedConfig);
+        assertEquals(List.of("original -> modified"), auditLogService.listValueChanges(config), "Change of merged detached entity was logged");
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfChangesFlushedExplicitly() {
+        var config = persistAuditedConfig("audit.log.flush", "original");
+        configService().updateValueTwice(config.getId(), "first", "second");
+        assertEquals(List.of("original -> first", "first -> second"), auditLogService.listValueChanges(config), "Each flushed change was logged");
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfChangeOutsideService() {
+        var config = persistAuditedConfig("audit.log.plain", "original");
+        plainConfigUpdater.updateValue(config.getId(), "plain");
+        assertEquals(List.of("original -> plain"), auditLogService.listValueChanges(config), "Change via plain entity manager was logged");
+    }
+
+    @Test
+    void testAuditLogIsPersistedByObserverOfEachNestedTransaction() {
+        var config = persistAuditedConfig("audit.log.nested", "original");
+        configService().updateValueWhileConcurrentlyUpdated(config.getId(), "outer", () -> plainConfigUpdater.updateValue(config.getId(), "inner"));
+        assertEquals(
+            List.of("original -> inner", "original -> outer"), auditLogService.listValueChanges(config), "Change of each nested transaction was logged"
+        );
     }
 
 }

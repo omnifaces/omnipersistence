@@ -16,23 +16,25 @@ import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
+import jakarta.transaction.Transactional;
 
 import org.omnifaces.persistence.model.BaseEntity;
 
 /**
  * <p>
- * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed during a Jakarta Persistence {@code @PreUpdate} lifecycle
- * callback. The event is fired during the flush, so an observer must not invoke {@link EntityManager} operations in the persistence context being flushed.
+ * CDI event fired by {@link AuditListener} when a field annotated with {@link Audit} has changed. The change is detected during the flush, from a Jakarta
+ * Persistence {@code @PreUpdate} lifecycle callback, and the event is fired after the JTA transaction is committed. An observer which persists an audit log
+ * must start a transaction of its own, for example via {@link Transactional.TxType#REQUIRES_NEW}. When the event cannot be queued for the transaction, it is
+ * fired during the flush, and an observer must then not invoke {@link EntityManager} operations in the persistence context being flushed. {@link AuditListener}
+ * describes when this happens.
  * <p>
  * Usage example:
  *
  * <pre>
  *
+ * &#64;Transactional(REQUIRES_NEW)
  * public void onAuditedChange(&#64;Observes AuditedChange change) {
- *     logger.info(
- *         change.getEntityName() + " " + change.getEntityId() + " " + change.getPropertyName() + ": " + change.getOldValue() + " -&gt; "
- *             + change.getNewValue()
- *     );
+ *     auditLogService.persist(new AuditLog(change));
  * }
  * </pre>
  *

@@ -15,8 +15,10 @@ package org.omnifaces.persistence.test.service;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import jakarta.annotation.Resource;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 
 import org.omnifaces.persistence.audit.AuditedChange;
 
@@ -24,17 +26,32 @@ import org.omnifaces.persistence.audit.AuditedChange;
 public class TestAuditListener {
 
     private static final List<AuditedChange> CHANGES = new CopyOnWriteArrayList<>();
+    private static final List<Integer> TRANSACTION_STATUSES = new CopyOnWriteArrayList<>();
+
+    @Resource
+    private TransactionSynchronizationRegistry transactionSynchronizationRegistry;
 
     public void onAuditedChange(@Observes AuditedChange change) {
         CHANGES.add(change);
+        TRANSACTION_STATUSES.add(transactionSynchronizationRegistry.getTransactionStatus());
     }
 
     public static List<AuditedChange> getChanges() {
         return CHANGES;
     }
 
+    /**
+     * Returns the status of the audited transaction at the moment each change was observed, in the order of {@link #getChanges()}.
+     *
+     * @return The status of the audited transaction at the moment each change was observed.
+     */
+    public static List<Integer> getTransactionStatuses() {
+        return TRANSACTION_STATUSES;
+    }
+
     public static void clearChanges() {
         CHANGES.clear();
+        TRANSACTION_STATUSES.clear();
     }
 
 }
