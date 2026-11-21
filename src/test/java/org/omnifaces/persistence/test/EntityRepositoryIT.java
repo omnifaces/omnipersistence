@@ -71,6 +71,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.Provider;
+import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.IgnoreCase;
 import org.omnifaces.persistence.criteria.Like;
@@ -450,6 +452,35 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * {@link Like} and {@link IgnoreCase} ignore the case of non-ASCII letters, the same in SQL as {@link Criteria#applies(Object)} does in memory, on every
+     * database.
+     */
+    @Test
+    void testLikeAndIgnoreCaseMatchNonAsciiCase() {
+        var titles = List.of("\u00c4rger", "\u00e4rger", "\u00c4pfel");
+        var articles = new ArrayList<Article>();
+
+        try {
+            titles.forEach(title -> articles.add(persistArticle(title, null)));
+            var umlauts = Set.of(articles.get(0).getCode(), articles.get(1).getCode());
+
+            for (var criteria : List.<Criteria<?>>of(
+                Like.contains("\u00c4RG"), Like.contains("\u00e4rg"), IgnoreCase.value(TITLE_PREFIX + "\u00c4RGER"),
+                IgnoreCase.value(TITLE_PREFIX + "\u00e4rger")
+            )) {
+                assertEquals(umlauts, Set.copyOf(codesOf(articlesTitled(criteria))), "Articles titled " + criteria);
+                assertEquals(
+                    umlauts, Set.copyOf(codesOf(articles.stream().filter(article -> criteria.applies(article.getTitle())).toList())),
+                    "Articles titled " + criteria + " in memory"
+                );
+            }
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
      * {@link Like#pattern(String)} matches a character after the escape character literally, also when it is an ordinary character, on every database.
      */
     @Test
@@ -466,8 +497,8 @@ public class EntityRepositoryIT {
         }
     }
 
-    private PartialResultList<Article> articlesTitled(Like like) {
-        return articleRepository.getPage(Page.with().allMatch(Map.of("title", like)).build(), true);
+    private PartialResultList<Article> articlesTitled(Criteria<?> criteria) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of("title", criteria)).build(), true);
     }
 
     @Test
@@ -1170,6 +1201,23 @@ public class EntityRepositoryIT {
         assertTrue(!provider.isProxy(reference) || provider.isProxyUninitialized(reference), "Reference is left as is");
     }
 
+    /**
+     * {@link Provider#isProxyUninitialized(Object)} is true for a lazy association until it is read, which is a proxy on Hibernate only.
+     */
+    @Test
+    void testIsProxyUninitializedOfLazyOwnerUntilRead() {
+        var phoneId = phoneRepository.getPage(Page.ONE, false).get(0).getId();
+        var provider = phoneRepository.getProvider();
+        var states = transactionServiceCDI.call(() -> {
+            var owner = phoneRepository.getById(phoneId).getOwner();
+            var uninitializedBeforeRead = provider.isProxyUninitialized(owner);
+            owner.getEmail();
+            return List.of(provider.isProxy(owner), uninitializedBeforeRead, provider.isProxyUninitialized(owner));
+        });
+        var hibernate = provider == Provider.HIBERNATE;
+        assertEquals(List.of(hibernate, hibernate, false), states, "Lazy owner is proxy, is uninitialized before read, is uninitialized after read");
+    }
+
     @Test
     void testGetIdOfBaseEntity() {
         var text = new Text();
@@ -1516,6 +1564,24 @@ public class EntityRepositoryIT {
     }
 
     @Test
+    void testPageOfDtoWithoutMappingThrowsIllegalArgumentException() {
+        assertThrows(
+            IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, PersonCard.class, (builder, query, person) -> new LinkedHashMap<>())
+        );
+    }
+
+    /**
+     * A plain criteria value on a field of a type for which no {@link Criteria} applies, such as a <code>byte[]</code>, throws
+     * {@link UnsupportedOperationException}.
+     */
+    @Test
+    void testPageWithPlainCriteriaOnUnsupportedTypeThrowsUnsupportedOperationException() {
+        assertThrows(
+            UnsupportedOperationException.class, () -> attachmentRepository.getPage(Page.with().allMatch(Map.of("content", "x")).build(), false)
+        );
+    }
+
+    @Test
     @DisabledIfSystemProperty(
         named = TEST_DATABASE, matches = "(?i)mysql|sqlserver", disabledReason = "Case insensitive collation rejects case variant elements"
     )
@@ -1616,6 +1682,37 @@ public class EntityRepositoryIT {
     void testManageIfNecessaryOfDtoReturnsItUnchanged() {
         var card = new PersonCard(1L, "card@example.com", "address", 0L);
         assertSame(card, transactionServiceCDI.call(() -> personRepository.manageIfNecessary(card)), "DTO");
+    }
+
+    /**
+     * {@link EntityRepository#manage(Object)} of an entity which has been deleted in the meanwhile throws {@link EntityNotFoundException}, while
+     * {@link EntityRepository#manageIfNecessary(Object)} returns it unchanged.
+     */
+    @Test
+    void testManageOfDeletedEntityThrowsWhileManageIfNecessaryReturnsIt() {
+        var text = new Text();
+        var id = transactionServiceCDI.call(() -> textRepository.persist(text));
+        transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id)));
+        text.setId(id);
+
+        assertThrows(EntityNotFoundException.class, () -> transactionServiceCDI.call(() -> textRepository.manage(text)), "manage");
+        assertSame(text, transactionServiceCDI.call(() -> textRepository.manageIfNecessary(text)), "manageIfNecessary");
+    }
+
+    /**
+     * {@link EntityRepository#manageIfNecessary(Object)} of a detached lazy association, which is an uninitialized proxy on Hibernate, returns the managed
+     * entity.
+     */
+    @Test
+    void testManageIfNecessaryOfDetachedLazyOwnerReturnsManagedEntity() {
+        var phoneId = phoneRepository.getPage(Page.ONE, false).get(0).getId();
+        var owner = transactionServiceCDI.call(() -> phoneRepository.getById(phoneId).getOwner());
+        var expectedEmail = personRepository.getById(owner.getId()).getEmail();
+        var state = transactionServiceCDI.call(() -> {
+            var managed = personRepository.manageIfNecessary(owner);
+            return List.of(personRepository.getEntityManager().contains(managed), managed.getEmail());
+        });
+        assertEquals(List.of(true, expectedEmail), state, "Managed, with email");
     }
 
     @Test
@@ -1904,29 +2001,25 @@ public class EntityRepositoryIT {
             assertEquals(
                 List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("id", codes.get(0))).build(), true)), "Criteria on id"
             );
-            assertEquals(
-                2, articleRepository.getPage(Page.with().allMatch(Map.of("category.name", Like.startsWith("Fir"))).build(), true).size(),
-                "Criteria on association"
-            );
-            assertEquals(1, articleRepository.getPage(Page.with().allMatch(Map.of("category", second)).build(), true).size(), "Criteria on entity");
+            var firstCategory = descendingCodes.subList(1, 3);
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "category.name", Like.startsWith("Fir")), "Criteria on association");
+            assertEquals(List.of(codes.get(2)), codesOfArticles(Map.of(), "category", second), "Criteria on entity");
 
-            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", "x")).build(), true).size(), "Criteria on element collection");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "tags", "x"), "Criteria on element collection");
             var ignoreCase = articleRepository.getPage(Page.with().allMatch(Map.of("tags", "X")).build(), true);
-            assertEquals(2, ignoreCase.size(), "Criteria on element collection ignore case");
+            assertEquals(firstCategory, codesOf(ignoreCase), "Criteria on element collection ignore case");
             assertEquals(2, ignoreCase.getEstimatedTotalNumberOfResults(), "Count of criteria on element collection ignore case");
             assertEquals(
                 List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of("x", "y"))).build(), true)),
                 "Criteria on all of element collection"
             );
-            assertEquals(
-                2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", Like.contains("X"))).build(), true).size(), "Like on element collection"
-            );
-            assertEquals(3, countArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
-            assertEquals(0, countArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
-            assertEquals(3, countArticles(TITLED, "deleted", Like.contains("e")), "Like on boolean matching true and false");
-            assertEquals(0, countArticles(TITLED, "deleted", Like.contains("foo")), "Like on boolean matching neither true nor false");
-            assertEquals(1, countArticles(TITLED, "flags", Like.contains("tru")), "Like on boolean element collection");
-            assertEquals(0, countArticles(TITLED, "flags", Like.contains("foo")), "Like on boolean element collection matching neither");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "tags", Like.contains("X")), "Like on element collection");
+            assertEquals(descendingCodes, codesOfArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
+            assertEquals(List.of(), codesOfArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
+            assertEquals(descendingCodes, codesOfArticles(TITLED, "deleted", Like.contains("e")), "Like on boolean matching true and false");
+            assertEquals(List.of(), codesOfArticles(TITLED, "deleted", Like.contains("foo")), "Like on boolean matching neither true nor false");
+            assertEquals(List.of(codes.get(0)), codesOfArticles(TITLED, "flags", Like.contains("tru")), "Like on boolean element collection");
+            assertEquals(List.of(), codesOfArticles(TITLED, "flags", Like.contains("foo")), "Like on boolean element collection matching neither");
             assertEquals(
                 List.of(articles.get(2).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(Like.contains("x")))).build(), true)),
@@ -1937,7 +2030,7 @@ public class EntityRepositoryIT {
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of(Like.contains("x"), "y"))).build(), true)),
                 "Like and value on all of element collection"
             );
-            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("ratings", "05")).build(), true).size(), "Numeric element collection");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "ratings", "05"), "Numeric element collection");
             assertEquals(
                 List.of(articles.get(0).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("ratings", List.of(5, 10))).build(), true)),
@@ -1987,6 +2080,14 @@ public class EntityRepositoryIT {
             assertEquals(codes.subList(2, 3), codesOf(nextPage), "Next page by cursor");
             var nextPageById = articleRepository.getPage(Page.with().range(0, 2, Map.of("id", codes.get(2)), false).allMatch(TITLED).build(), false);
             assertEquals(descendingCodes.subList(1, 3), codesOf(nextPageById), "Next page by cursor values on id");
+
+            transactionServiceCDI.run(() -> articleRepository.softDelete(articleRepository.getById(articles.get(2).getCode())));
+            var deleted = List.of(articles.get(2).getCode());
+            var notDeleted = descendingCodes.stream().filter(code -> !deleted.contains(code)).toList();
+            assertEquals(deleted, codesOfArticles(TITLED, "deleted", Bool.value(true)), "Bool true on soft deleted field");
+            assertEquals(notDeleted, codesOfArticles(TITLED, "deleted", Bool.value(false)), "Bool false on soft deleted field");
+            assertEquals(deleted, codesOfArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
+            assertEquals(notDeleted, codesOfArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
         }
         finally {
             deleteArticles(articles);
@@ -2030,10 +2131,10 @@ public class EntityRepositoryIT {
         return category;
     }
 
-    private int countArticles(Map<String, Object> criteria, String field, Object value) {
+    private List<Long> codesOfArticles(Map<String, Object> criteria, String field, Object value) {
         var allCriteria = new HashMap<>(criteria);
         allCriteria.put(field, value);
-        return articleRepository.getPage(Page.with().allMatch(allCriteria).build(), true).size();
+        return codesOf(articleRepository.getPage(Page.with().allMatch(allCriteria).build(), true));
     }
 
     private void deleteArticles(List<Article> articles) {

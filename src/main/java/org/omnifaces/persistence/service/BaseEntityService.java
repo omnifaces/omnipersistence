@@ -214,6 +214,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults ignores this criteria. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
+    private static final String EXCEPTION_UNSUPPORTED_DTO_COLLECTION_ORDER = "Cannot order a DTO page by %s on DB2, because it is a field of a @OneToMany, @ManyToMany or @ElementCollection which the DTO does not map, and DB2 does not accept a correlated subquery as order expression. Map an aggregate of it in the MappedQueryBuilder instead, such as builder.min(join.get(\"field\")) on a join of the collection, and order by that mapped field.";
     private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 
     private static final ClassValue<Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ClassValue<>() {
@@ -2049,6 +2050,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example: see {@link MappedQueryBuilder}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
+     * <p>
+     * An ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map is a
+     * correlated subquery on the ID, so a mapping which groups must also group by the ID.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -2057,7 +2061,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty, or when the result type is ordered on DB2 by a
+     * field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map.
      * @see Page
      * @see Criteria
      */
@@ -2071,6 +2076,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example: see {@link MappedQueryBuilder}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
+     * <p>
+     * An ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map is a
+     * correlated subquery on the ID, so a mapping which groups must also group by the ID.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -2081,7 +2089,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths when result type does not
      * equal entity type.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty, or when the result type is ordered on DB2 by a
+     * field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map.
      * @see Page
      * @see Criteria
      */
@@ -2327,14 +2336,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping,
                                                         // we cannot reliably determine if custom criteria is used, so count subquery building cannot be
                                                         // reliably skipped.
-            pageBuilder.canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields); // A value based paging predicate is a WHERE clause, which
-                                                                                              // cannot compare an aggregate.
+            // A value based paging predicate is a WHERE clause, which cannot compare an aggregate, nor the correlated subquery of a collection ordering.
+            pageBuilder
+                .canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields && !containsCollectionOrdering(pageBuilder.getPage(), paths.keySet()));
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.hasQueryBuilder(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             // A collection ordering is a correlated subquery, and a non-null mapping may aggregate, so value based paging cannot be reliably used then.
-            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage()));
+            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage(), Set.of()));
             return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
         }
         else {
@@ -2382,7 +2392,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Sorting actions ------------------------------------------------------------------------------------------------
 
     /**
-     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection.
+     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection. On
+     * DB2 it throws {@link IllegalArgumentException} for a DTO page ordered by a collection field which the DTO does not map.
      */
     private <T extends E> boolean buildOrderBy(
         PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
@@ -2400,9 +2411,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var orders = new ArrayList<Order>(ordering.size() + 1);
         Entry<String, Boolean> lastCollectionOrder = null;
         var orderedBySubquery = false;
+        var mappedPathResolver = pathResolver instanceof MappedPathResolver resolver ? resolver : null;
 
         for (var order : ordering.entrySet()) {
-            var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
+            var collectionPath = mappedPathResolver != null && mappedPathResolver.maps(order.getKey()) ? null : findCollectionPath(order.getKey());
 
             if (collectionPath == null) {
                 orders.add(buildOrder(order, criteriaBuilder, pathResolver, reversed));
@@ -2415,6 +2427,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
             else if (database == DB2) {
+                if (mappedPathResolver != null) {
+                    throw new IllegalArgumentException(format(EXCEPTION_UNSUPPORTED_DTO_COLLECTION_ORDER, order.getKey()));
+                }
+
                 pageBuilder.shouldBuildIdQuery(true); // The order is then built by buildIdQuery.
             }
             else {
@@ -2443,8 +2459,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
-    private boolean containsCollectionOrdering(Page page) {
-        return page.getOrdering().keySet().stream().anyMatch(field -> findCollectionPath(field) != null);
+    /**
+     * Returns whether the page orders by a field of a collection, other than given mapped fields of a DTO.
+     */
+    private boolean containsCollectionOrdering(Page page, Set<String> mappedFields) {
+        return page.getOrdering().keySet().stream().anyMatch(field -> !mappedFields.contains(field) && findCollectionPath(field) != null);
     }
 
     /**

@@ -53,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -377,6 +378,13 @@ public abstract class OmniPersistenceIT {
         return isEclipseLinkOnH2() || isHibernate() && SQLSERVER.name().equalsIgnoreCase(getTestRunDatabaseName());
     }
 
+    /**
+     * Returns whether the test runs on DB2. See {@link #isEclipseLinkOnH2()}.
+     */
+    static boolean isDB2() {
+        return DB2.name().equalsIgnoreCase(getTestRunDatabaseName());
+    }
+
     protected static boolean isHibernate() {
         return !isEclipseLink() && !isOpenJPA();
     }
@@ -473,45 +481,58 @@ public abstract class OmniPersistenceIT {
 
     /**
      * Positional parameters are 1-based: <code>?1</code> takes the first vararg. The ranges are asymmetric so that binding them in reverse yields no match
-     * rather than the same match.
+     * rather than the same match. Named parameters of a <code>Map</code> bind the same.
      */
     @Test
-    void testListByPositionalParameters() {
-        var persons = personService().listByIdRange(2L, 4L);
-        assertEquals(List.of(2L, 3L, 4L), persons.stream().map(Person::getId).toList(), "Persons 2 until 4");
-        assertTrue(personService().listByIdRange(4L, 2L).isEmpty(), "Reversed range matches nothing");
+    void testListByPositionalAndNamedParameters() {
+        for (var listByIdRange : List.<BiFunction<Long, Long, List<Person>>>of(
+            personService()::listByIdRange, personService()::listByIdRangeViaNamedParameters
+        )) {
+            var persons = listByIdRange.apply(2L, 4L);
+            assertEquals(List.of(2L, 3L, 4L), persons.stream().map(Person::getId).toList(), "Persons 2 until 4");
+            assertTrue(listByIdRange.apply(4L, 2L).isEmpty(), "Reversed range matches nothing");
+        }
     }
 
     /**
-     * Each vararg lands on its own position, so a query with two of them matches only when both hold.
+     * Each parameter lands on its own position or name, so a query with two of them matches only when both hold.
      *
-     * @see #testListByPositionalParameters()
+     * @see #testListByPositionalAndNamedParameters()
      */
     @Test
-    void testFindByPositionalParameters() {
+    void testFindByPositionalAndNamedParameters() {
         var person = personService().getById(2L);
-        var foundPerson = personService().findByIdAndEmail(person.getId(), person.getEmail());
-        assertTrue(foundPerson.isPresent(), "Person matching both ID and email");
-        assertEquals(person.getId(), foundPerson.get().getId(), "Found person");
-        assertFalse(personService().findByIdAndEmail(3L, person.getEmail()).isPresent(), "Mismatching ID and email");
+
+        for (var findByIdAndEmail : List.<BiFunction<Long, String, Optional<Person>>>of(
+            personService()::findByIdAndEmail, personService()::findByIdAndEmailViaNamedParameters
+        )) {
+            var foundPerson = findByIdAndEmail.apply(person.getId(), person.getEmail());
+            assertTrue(foundPerson.isPresent(), "Person matching both ID and email");
+            assertEquals(person.getId(), foundPerson.get().getId(), "Found person");
+            assertFalse(findByIdAndEmail.apply(3L, person.getEmail()).isPresent(), "Mismatching ID and email");
+        }
     }
 
     /**
-     * @see #testListByPositionalParameters()
+     * @see #testListByPositionalAndNamedParameters()
      */
     @Test
-    void testFindFirstByPositionalParameters() {
-        var person = personService().findFirstByIdRange(2L, 4L);
-        assertTrue(person.isPresent(), "First person of persons 2 until 4");
-        assertEquals(2L, person.get().getId(), "Found person");
-        assertFalse(personService().findFirstByIdRange(4L, 2L).isPresent(), "Reversed range matches nothing");
+    void testFindFirstByPositionalAndNamedParameters() {
+        for (var findFirstByIdRange : List.<BiFunction<Long, Long, Optional<Person>>>of(
+            personService()::findFirstByIdRange, personService()::findFirstByIdRangeViaNamedParameters
+        )) {
+            var person = findFirstByIdRange.apply(2L, 4L);
+            assertTrue(person.isPresent(), "First person of persons 2 until 4");
+            assertEquals(2L, person.get().getId(), "Found person");
+            assertFalse(findFirstByIdRange.apply(4L, 2L).isPresent(), "Reversed range matches nothing");
+        }
     }
 
     /**
      * Bulk update binds positionally as well, across both the SET and the WHERE clause. It runs on its own ID range so that it doesn't disturb the persons
      * asserted by the other positional parameter tests.
      *
-     * @see #testListByPositionalParameters()
+     * @see #testListByPositionalAndNamedParameters()
      */
     @Test
     void testUpdateByPositionalParameters() {
@@ -567,16 +588,17 @@ public abstract class OmniPersistenceIT {
     void testPage() {
         var persons = personService().getPage(Page.ALL, true);
         assertEquals(TOTAL_RECORDS, persons.size(), "There are 200 records");
-
-        var males = personService().getPage(Page.with().anyMatch(Collections.singletonMap("gender", Gender.MALE)).build(), true);
-        assertTrue(males.size() < TOTAL_RECORDS, "There are less than 200 records");
+        assertEquals(TOTAL_RECORDS, persons.getEstimatedTotalNumberOfResults(), "Count of all records");
+        assertPage(persons, person -> person.getGender() == Gender.MALE, Map.of(), Map.of("gender", Gender.MALE), personService()::getPage, true);
     }
 
     @Test
-    void testPageByLazyManyToOne() { // This was failing since Hibernate 6 upgrade.
+    void testPageByLazyManyToOne() {
         var person = personService().getById(1L);
-        var phones = phoneService().getPage(Page.with().allMatch(Map.of("owner", person)).build(), true);
-        assertEquals(TOTAL_PHONES_PER_PERSON_0, phones.size(), "There are 3 phones");
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> phone.getOwner().getId().equals(person.getId()), Map.of("owner", person), Map.of(),
+            phoneService()::getPage, true
+        );
     }
 
     @Test
@@ -639,8 +661,26 @@ public abstract class OmniPersistenceIT {
             "email", person1.getEmail(),
             "gender", person2.getGender()
         );
-        var result = personService().getPage(Page.with().anyMatch(criteria).build(), true);
-        assertTrue(result.size() >= 1, "At least one match by email or gender");
+        assertPage(
+            personService().list(), person -> person.getEmail().equals(person1.getEmail()) || person.getGender() == person2.getGender(), Map.of(), criteria,
+            personService()::getPage, true
+        );
+    }
+
+    /**
+     * A page with optional criteria pages by the ordering values the same as by the offset, ascending and descending, forward and reversed.
+     */
+    @Test
+    void testPageWithOptionalCriteriaPagesByOrderingValues() {
+        var optional = Map.<String, Object>of("email", Like.contains("1"), "gender", Gender.FEMALE);
+        Predicate<Person> anyOptional = person -> likes("1", person.getEmail()) || person.getGender() == Gender.FEMALE;
+
+        for (var ascending : List.of(true, false)) {
+            assertOrderedPages(
+                personService().list(), anyOptional, Map.of(), optional, ordering("email", ascending), byKey(Person::getEmail, ascending),
+                person -> orderingValues("email", person.getEmail(), person), personService()::getPage
+            );
+        }
     }
 
     // Page with criteria types ---------------------------------------------------------------------------------------
@@ -1178,6 +1218,17 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testPageWithAddressAndPhoneOwnersFetchedViaFetchAttributes() {
+        var result = personService().getPageWithAddressAndPhoneOwnersViaFetchAttributes(Page.with().range(0, 10).build(), false);
+        assertEquals(10, result.size(), "Page has 10 persons");
+        result.forEach(person -> {
+            assertNotNull(person.getAddress().getStreet(), "Address is fetched via fetch attribute");
+            assertFalse(person.getPhones().isEmpty(), "Phones are fetched via fetch attribute");
+            person.getPhones().forEach(phone -> assertEquals(person.getEmail(), phone.getOwner().getEmail(), "Phone owner is fetched via fetch attribute"));
+        });
+    }
+
+    @Test
     void testPageWithPhonesFetchedViaFetchAttribute() {
         var result = personService()
             .getPageWithPhonesViaFetchAttribute(Page.with().range(0, 10).allMatch(Map.of("phones.number", Like.contains("11"))).build(), false);
@@ -1220,11 +1271,65 @@ public abstract class OmniPersistenceIT {
         );
     }
 
+    /**
+     * Optional criteria on the phones select the persons, but leave their fetched phones unfiltered, unlike required criteria on the phones.
+     */
+    @Test
+    void testPageWithPhonesAndOptionalCriteriaOnThemKeepsAllPhones() {
+        var all = personService().getAllWithPhones();
+        var optional = Map.<String, Object>of("phones.number", Like.contains("11"), "email", Like.contains("name1"));
+        assertPage(
+            all, person -> likes("name1", person.getEmail()) || person.getPhones().stream().anyMatch(phone -> likes("11", phone.getNumber())), Map.of(),
+            optional, personService()::getPageWithPhones, true
+        );
+        var page = personService().getPageWithPhones(Page.with().anyMatch(optional).build(), false);
+        var allById = all.stream().collect(toMap(Person::getId, Function.identity()));
+        assertEquals(phoneIdsOf(page.stream().map(person -> allById.get(person.getId())).toList()), phoneIdsOf(page), "All phones of each person are fetched");
+    }
+
+    /**
+     * An ordering on a collection in a query which is distinct, because a criteria joins another collection, is skipped, and the page still returns each
+     * matching entity once.
+     */
+    @Test
+    void testPageOrderedByGroupsWithCriteriaOnPhoneTypeReturnsAllMatchingOnce() {
+        var expected = personService().getAllWithPhones().stream().filter(person -> phoneTypes(person).contains(Phone.Type.MOBILE)).map(Person::getId)
+            .collect(toSet());
+        var ids = ids(personService().getPage(Page.with().allMatch(Map.of("phones.type", Phone.Type.MOBILE)).orderBy("groups", true).build(), false));
+        assertEquals(ids.size(), ids.stream().distinct().count(), "Each matching person is returned once");
+        assertEquals(expected, Set.copyOf(ids), "All matching persons are returned");
+    }
+
+    /**
+     * A global search over a field of each path type, with a fetch, a collection ordering and a count, returns each matching entity once, counts them, and
+     * orders them by the smallest phone number.
+     */
+    @Test
+    void testPageWithGlobalSearchOverAllPathTypesOrderedByOneToMany() {
+        var term = "11";
+        var fields = List.of("email", "gender", "dateOfBirth", "address.street", "phones.number", "groups");
+        var addresses = personService().getAllWithAddress().stream().collect(toMap(Person::getId, Person::getAddress));
+        var all = personService().getAllWithGroups();
+        var phones = personService().getAllWithPhones().stream().collect(toMap(Person::getId, Person::getPhones));
+        Predicate<Person> anyMatches = person -> likes(term, person.getEmail()) || likes(term, person.getGender()) || likes(term, person.getDateOfBirth())
+            || likes(term, addresses.get(person.getId()).getStreet()) || phones.get(person.getId()).stream().anyMatch(phone -> likes(term, phone.getNumber()))
+            || person.getGroups().stream().anyMatch(group -> likes(term, group));
+        var optional = likeOnAll(term, fields.toArray(String[]::new));
+        assertPage(all, anyMatches, Map.of(), optional, personService()::getPageWithPhones, true);
+
+        Function<Person, String> smallestNumber = person -> extreme(phones.get(person.getId()).stream().map(Phone::getNumber), true);
+        var page = personService().getPageWithPhones(Page.with().anyMatch(optional).orderBy("phones.number", true).build(), true);
+        var expected = all.stream().filter(anyMatches).map(smallestNumber).sorted().toList();
+        assertEquals(expected, page.stream().map(smallestNumber).toList(), "Ordered by smallest phone number");
+        assertEquals(expected.size(), page.getEstimatedTotalNumberOfResults(), "Count");
+    }
+
     @Test
     void testPageWithGroupsSortedAscending() {
+        var allGroups = personService().getAllWithGroups().stream().collect(toMap(Person::getId, Person::getGroups));
         var result = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("groups", true).build(), false);
         assertEquals(10, result.size(), "Page with groups sorted ascending returns 10 persons");
-        result.forEach(p -> assertFalse(p.getGroups().isEmpty(), "Groups collection is populated"));
+        result.forEach(person -> assertEquals(allGroups.get(person.getId()), person.getGroups(), "All groups of person " + person.getId() + " are fetched"));
     }
 
     @Test
@@ -1476,6 +1581,38 @@ public abstract class OmniPersistenceIT {
         result.forEach(p -> assertTrue(p.getOwner().getPhones().contains(p), "Owner phones are populated after detachment"));
     }
 
+    /**
+     * A criteria next to a nested fetch is counted the same as it selects.
+     */
+    @Test
+    void testPageWithOwnerPhonesAndCriteriaCounts() {
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> phone.getOwner().getGender() == Gender.FEMALE, Map.of("owner.gender", Gender.FEMALE), Map.of(),
+            phoneService()::getPageWithOwnerPhones, true
+        );
+    }
+
+    /**
+     * A required criteria on a collection nested under a singular fetch selects the phones of the owners having a matching phone, and filters the fetched
+     * phones of their owners to the matching ones.
+     */
+    @Test
+    void testPhonePageWithOwnerPhonesFilteredByOwnerPhoneNumber() {
+        var ownerPhones = personService().getAllWithPhones().stream()
+            .collect(toMap(Person::getId, person -> person.getPhones().stream().map(Phone::getNumber).filter(number -> likes("11", number)).sorted().toList()));
+        var criteria = Map.<String, Object>of("owner.phones.number", Like.contains("11"));
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> !ownerPhones.get(phone.getOwner().getId()).isEmpty(), criteria, Map.of(),
+            phoneService()::getPageWithOwnerPhones, true
+        );
+        phoneService().getPageWithOwnerPhones(Page.with().allMatch(criteria).build(), false).forEach(
+            phone -> assertEquals(
+                ownerPhones.get(phone.getOwner().getId()), phone.getOwner().getPhones().stream().map(Phone::getNumber).sorted().toList(),
+                "Fetched phones of owner of phone " + phone.getId()
+            )
+        );
+    }
+
     @Test
     void testPhonePageFilteredByTransientEmail() {
         var expectedEmail = "name0@example.com";
@@ -1562,14 +1699,35 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithIgnoreCaseAgreesWithAppliesOnEachType() {
         var person = personService().list().get(0);
-        assertPageWithIgnoreCaseOnPerson("gender", Person::getGender, "fEmAlE");
-        assertPageWithIgnoreCaseOnPerson("id", Person::getId, String.valueOf(person.getId()));
-        assertPageWithIgnoreCaseOnPerson("dateOfBirth", Person::getDateOfBirth, person.getDateOfBirth().toString());
+        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, IgnoreCase.value("fEmAlE"));
+        assertPageAgreesWithAppliesOnPerson("id", Person::getId, IgnoreCase.value(String.valueOf(person.getId())));
+        assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, IgnoreCase.value(person.getDateOfBirth().toString()));
 
         var ignoreCase = IgnoreCase.value("MoBiLe");
         assertPage(
             phoneService().getAllWithOwners(), phone -> ignoreCase.applies(phone.getType()), Map.of("type", ignoreCase), Map.of(), phoneService()::getPage, true
         );
+    }
+
+    /**
+     * {@link Like#startsWith(String)} and {@link Like#endsWith(String)} select the same entities in SQL as {@link Like#applies(Object)} does in memory, on a
+     * number, an ordinal enum, a date and a string enum.
+     */
+    @Test
+    void testPageWithLikeStartsWithAndEndsWithOnNonStringTypes() {
+        var dateOfBirth = personService().list().get(0).getDateOfBirth().toString();
+        assertPageAgreesWithAppliesOnPerson("id", Person::getId, Like.startsWith("1"));
+        assertPageAgreesWithAppliesOnPerson("id", Person::getId, Like.endsWith("1"));
+        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, Like.startsWith("fe"));
+        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, Like.endsWith("ale"));
+        assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, Like.startsWith(dateOfBirth.substring(0, "yyyy".length())));
+        assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, Like.endsWith(dateOfBirth.substring("yyyy-MM".length())));
+
+        for (var like : List.of(Like.startsWith("mob"), Like.endsWith("ile"))) {
+            assertPage(
+                phoneService().getAllWithOwners(), phone -> like.applies(phone.getType()), Map.of("type", like), Map.of(), phoneService()::getPage, true
+            );
+        }
     }
 
     @Test
@@ -1633,6 +1791,17 @@ public abstract class OmniPersistenceIT {
             )) {
             assertPage(personService().list(), person -> not.applies(person.nickname()), Map.of("nickname", not), Map.of(), personService()::getPage, true);
         }
+    }
+
+    @Test
+    void testPageWithSingleStringEnumValue() {
+        var mobile = Enumerated.value(Phone.Type.MOBILE);
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> mobile.applies(phone.getType()), Map.of("type", mobile), Map.of(), phoneService()::getPage, true
+        );
+        assertPage(
+            phoneService().getAllWithOwners(), phone -> phone.getType() == Phone.Type.MOBILE, Map.of("type", "MOBILE"), Map.of(), phoneService()::getPage, true
+        );
     }
 
     @Test
@@ -1724,6 +1893,10 @@ public abstract class OmniPersistenceIT {
         assertEquals(Set.copyOf(ids), page.stream().map(Person::getId).collect(toSet()), "Persons by IDs as strings");
         var single = personService().getPage(Page.with().range(0, 1).allMatch(Map.of(Page.ID, List.of(stringIds.get(0)))).build(), false);
         assertEquals(List.of(ids.get(0)), single.stream().map(Person::getId).toList(), "Person by ID as string");
+        var withoutList = personService().getPage(Page.with().range(0, 1).allMatch(Map.of(Page.ID, stringIds.get(0))).build(), false);
+        assertEquals(List.of(ids.get(0)), ids(withoutList), "Person by ID as string without list");
+        var card = personService().getPageOfPersonCards(Page.with().range(0, 1).allMatch(Map.of(Page.ID, stringIds.get(0))).build(), false);
+        assertEquals(List.of(ids.get(0)), ids(card), "Person card by ID as string without list");
     }
 
     @Test
@@ -2015,10 +2188,9 @@ public abstract class OmniPersistenceIT {
         return Like.contains(term).applies(value);
     }
 
-    private void assertPageWithIgnoreCaseOnPerson(String field, Function<Person, Object> getter, String term) {
-        var ignoreCase = IgnoreCase.value(term);
+    private void assertPageAgreesWithAppliesOnPerson(String field, Function<Person, Object> getter, Criteria<?> criteria) {
         assertPage(
-            personService().list(), person -> ignoreCase.applies(getter.apply(person)), Map.of(field, ignoreCase), Map.of(), personService()::getPage, true
+            personService().list(), person -> criteria.applies(getter.apply(person)), Map.of(field, criteria), Map.of(), personService()::getPage, true
         );
     }
 
@@ -2203,14 +2375,25 @@ public abstract class OmniPersistenceIT {
         var result = personService().getAllPersonCards();
         assertEquals(TOTAL_RECORDS, result.size(), "All person cards returned");
         assertEquals(cardValues(result), cardValues(personService().getPageOfPersonCardsAsOptimusFaces(Page.ALL, false)), "Person cards of OptimusFaces shape");
+        var addresses = personService().getAllWithAddress().stream().collect(toMap(Person::getId, Person::getAddress));
         result.forEach(card -> {
             assertNotNull(card.getId(), "Card has ID");
             assertNotNull(card.getEmail(), "Card has email");
-            assertNotNull(card.getAddressString(), "Card has address string");
-            assertTrue(card.getAddressString().contains(","), "Address string is formatted with commas");
+            var address = addresses.get(card.getId());
+            assertEquals(
+                address.getStreet() + " " + address.getHouseNumber() + ", " + address.getPostcode() + " " + address.getCity() + ", " + address.getCountry(),
+                card.getAddressString(), "Address string of card " + card.getId()
+            );
             assertNotNull(card.getTotalPhones(), "Card has total phones");
             assertTrue(card.getTotalPhones() >= 1, "Each person has at least one phone");
         });
+    }
+
+    @Test
+    void testPageOfPersonCardsWithNonStringConcatParts() {
+        var cards = personService().getPageOfPersonCardsWithNonStringConcatParts(Page.ALL, false);
+        assertEquals(TOTAL_RECORDS, cards.size(), "All person cards returned");
+        cards.forEach(card -> assertEquals(card.getId() + "-1", card.getAddressString(), "Concatenation of ID, String and Integer"));
     }
 
     private static List<List<Object>> cardValues(List<PersonCard> cards) {
@@ -2228,6 +2411,76 @@ public abstract class OmniPersistenceIT {
             assertConsecutivePages(ids(getPage.apply(Page.ALL, false)), 5, page, secondPage);
 
             assertCardValues(personService().getAllPersonCards(), Stream.concat(page.stream(), secondPage.stream()).toList());
+        }
+    }
+
+    /**
+     * A required criteria on a field which the DTO does not map, and one on a collection path, select the cards of the matching persons.
+     */
+    @Test
+    void testPageOfPersonCardsWithCriteriaOnUnmappedAndCollectionFields() {
+        var all = personService().getAllPersonCards();
+        var persons = personService().getAllWithPhones().stream().collect(toMap(Person::getId, Function.identity()));
+
+        for (var getPage : personCardLoaders()) {
+            assertPage(all, card -> persons.get(card.getId()).getGender() == Gender.FEMALE, Map.of("gender", Gender.FEMALE), Map.of(), getPage, true);
+            assertPage(
+                all, card -> phoneTypes(persons.get(card.getId())).contains(Phone.Type.MOBILE), Map.of("phones.type", Phone.Type.MOBILE), Map.of(), getPage,
+                true
+            );
+        }
+    }
+
+    /**
+     * An ordering on a collection field which the DTO does not map orders the cards the same as the persons, by the smallest or largest element. DB2 does not
+     * accept the correlated subquery which this needs, so there it throws {@link IllegalArgumentException} telling to map an aggregate instead.
+     */
+    @Test
+    void testPageOfPersonCardsOrderedByCollectionPath() {
+        for (var ascending : List.of(true, false)) {
+            var page = Page.with().orderBy("phones.number", ascending).build();
+
+            if (personService().getDatabase() == DB2) {
+                for (var getPage : personCardLoaders()) {
+                    var exception = assertThrows(RuntimeException.class, () -> getPage.apply(page, false), "Cards ordered by phones.number on DB2");
+                    var cause = Stream.iterate((Throwable) exception, Objects::nonNull, Throwable::getCause).filter(IllegalArgumentException.class::isInstance)
+                        .findFirst();
+                    assertTrue(cause.isPresent(), "Thrown as or caused by IllegalArgumentException, which an EJB wraps in EJBException");
+                    assertTrue(cause.get().getMessage().contains("Map an aggregate of it in the MappedQueryBuilder"), "Message tells how to solve it");
+                }
+
+                continue;
+            }
+
+            var expected = ids(personService().getPage(page, false));
+
+            for (var getPage : personCardLoaders()) {
+                assertEquals(expected, ids(getPage.apply(page, false)), "Cards ordered by phones.number " + (ascending ? "ascending" : "descending"));
+            }
+        }
+    }
+
+    /**
+     * Paging cards ordered by an unmapped collection field from the ordering values falls back to paging by offset, the same as for entities.
+     */
+    @Test
+    @DisabledIf(value = "isDB2", disabledReason = "DB2 does not order a DTO page by an unmapped collection field")
+    void testPageOfPersonCardsOrderedByCollectionPathPagesByOffsetFromOrderingValues() {
+        var all = personService().getAllPersonCards();
+        var smallestNumbers = personService().getAllWithPhones().stream()
+            .collect(toMap(Person::getId, person -> extreme(person.getPhones().stream().map(Phone::getNumber), true)));
+        var largestNumbers = personService().getAllWithPhones().stream()
+            .collect(toMap(Person::getId, person -> extreme(person.getPhones().stream().map(Phone::getNumber), false)));
+
+        for (var ascending : List.of(true, false)) {
+            var numbers = ascending ? smallestNumbers : largestNumbers;
+
+            for (var getPage : personCardLoaders()) {
+                assertOrderedPages(
+                    all, card -> true, Map.of(), ordering("phones.number", ascending), byKey(card -> numbers.get(card.getId()), ascending),
+                    card -> orderingValues("phones.number", numbers.get(card.getId()), card), getPage
+                );
+            }
         }
     }
 
@@ -2645,6 +2898,10 @@ public abstract class OmniPersistenceIT {
             page.stream().map(Person::getId).toList(),
             "Offset of the page is applied when value based paging is not applicable"
         );
+
+        var reversedPage = personService()
+            .getPageViaQueryBuilder(Page.with().range(pageOffset, 10, Map.of("id", boundaryId), 0, true).orderBy("id", true).build(), false);
+        assertEquals(ids(offsetPage), ids(reversedPage), "Offset of the reversed page is applied when value based paging is not applicable");
     }
 
     private void assertResidualOffsetPageEqualsOffsetPage(BiFunction<Page, Boolean, PartialResultList<Person>> getPage, String message) {

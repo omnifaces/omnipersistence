@@ -341,6 +341,9 @@ PartialResultList<PersonCard> cards = personRepository.getPage(
 );
 ```
 
+An ordering on a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the mapping does not map, such as `phones.number`, orders by a correlated subquery on the ID.
+So a mapping which groups must also group by the ID.
+
 **Eager fetching** — declare which lazy associations to join-fetch:
 
 ```java
@@ -892,11 +895,13 @@ OmniPersistence ships its own Arquillian-based integration test suite. Every sce
 
 The tests cover CRUD, soft delete, `@NonDeletable`, auditing, and provider/database detection.
 They cover paginated queries with offset based and value based paging, also on nullable fields, multiple fields and DTO projections.
-They cover all `Criteria` types, also `null`, `Not` and `Like.pattern()`, on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany`, `@ManyToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
+They cover each `Criteria` type, also `null`, `Not` and `Like.pattern()`.
+They cover criteria on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany`, `@ManyToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
 They also cover the fetched elements of fetch fields, and the agreement of `Criteria#applies()` with the SQL.
 
 More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`.
-OptimusFaces translates the DataTable state into a `Page` with `Criteria`, and every query shape which it generates is covered by the integration tests of OmniPersistence on all databases.
+OptimusFaces translates the DataTable state into a `Page` with `Criteria`.
+The integration tests of OmniPersistence cover the query shapes which it generates on all databases, including the DTO mapping of the OptimusFaces integration tests.
 The integration tests of OptimusFaces therefore run on H2 only, and cover the DataTable behavior itself.
 
 
@@ -905,6 +910,7 @@ The integration tests of OptimusFaces therefore run on H2 only, and cover the Da
 2.0 is not binary compatible with 1.x, so recompile your code against it.
 In the source, these changes need your attention:
 
+- `Page` has moved from the package `org.omnifaces.persistence.model.dto` to `org.omnifaces.persistence.query`. Update its import.
 - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
 - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
 - `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
@@ -937,6 +943,7 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On OpenJPA, a criteria on a lazy association of the elements of a fetched collection, such as `categories.parent` with a fetch of `categories`, leaves the fetched collection empty. OpenJPA does not load that association on the fetched elements. The entities themselves are filtered correctly.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
+- On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.
 

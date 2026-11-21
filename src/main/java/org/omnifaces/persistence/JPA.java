@@ -518,8 +518,6 @@ public final class JPA {
     @SuppressWarnings("unchecked")
     public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
 
-        // TODO: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
-
         var service = requireCurrentBaseEntityService("castAsString");
         var type = expression.getJavaType();
 
@@ -536,15 +534,15 @@ public final class JPA {
         if (service.getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);
 
-            if (cast.isPresent()) { // Hibernate 6.6.0.
-                return invokeMethod(expression, cast.get(), String.class); // https://hibernate.atlassian.net/browse/HHH-18710
+            if (cast.isPresent()) { // Expression#as() does not convert, as its javadoc specifies.
+                return invokeMethod(expression, cast.get(), String.class);
             }
             else {
                 return expression.as(String.class);
             }
         }
 
-        // EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
+        // Expression#as() does not convert, and EclipseLink renders Expression#cast(String.class) without CAST, so delegate to a DB specific function.
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
         if (service.getDatabase() == POSTGRESQL) {
