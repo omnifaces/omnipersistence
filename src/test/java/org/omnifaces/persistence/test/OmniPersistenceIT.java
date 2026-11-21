@@ -40,6 +40,7 @@ import static org.omnifaces.persistence.test.service.StartupServiceEJB.TOTAL_REC
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.sql.DriverManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -194,23 +195,29 @@ public abstract class OmniPersistenceIT {
             .addAsResource("META-INF/sql/load-test.sql")
             .addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
             .addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
-            .addAsLibraries(
-                maven
-                    .resolve(
-                        "com.h2database:h2:" + getProperty("test.h2.version"),
-                        "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version"),
-                        "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version"),
-                        "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version"),
-                        "com.ibm.db2:jcc:" + getProperty("test.db2-driver.version")
-                    )
-                    .withTransitivity().asFile()
-            );
+            .addAsLibraries(maven.resolve(jdbcDriverOf(database)).withTransitivity().asFile());
 
         if (wildFlyDB2) {
             archive.addAsWebInfResource(new StringAsset(wildFlyDB2DataSourceOf(jtaDataSource, persistenceUnitName)), "db2-ds.xml");
         }
 
         return archive;
+    }
+
+    /**
+     * Returns the Maven coordinate of the JDBC driver of the given test database. The deployment holds only this driver. A data source which connects via
+     * {@link DriverManager}, such as <code>PGSimpleDataSource</code>, asks every driver in the deployment. One driver which fails its static initialization, as
+     * the DB2 driver does on WildFly, breaks the connection.
+     */
+    private static String jdbcDriverOf(Database database) {
+        return switch (database) {
+            case H2 -> "com.h2database:h2:" + getProperty("test.h2.version");
+            case MYSQL -> "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version");
+            case POSTGRESQL -> "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version");
+            case SQLSERVER -> "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version");
+            case DB2 -> "com.ibm.db2:jcc:" + getProperty("test.db2-driver.version");
+            case UNKNOWN -> throw new UnsupportedOperationException(database.name());
+        };
     }
 
     /**
@@ -240,7 +247,7 @@ public abstract class OmniPersistenceIT {
                 // TomEE maps an isolation level onto the int defaultIsolationLevel of the DB2 driver.
                 persistenceUnitName, "com.ibm.db2.jcc.DB2Driver", urlOf(db2UrlOf(persistenceUnitName)) + credentialsOf(DB2_USER, DB2_PASSWORD), ""
             );
-            default -> throw new UnsupportedOperationException(database.name());
+            case UNKNOWN -> throw new UnsupportedOperationException(database.name());
         };
     }
 
