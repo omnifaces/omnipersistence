@@ -395,7 +395,9 @@ public final class JPA {
     // Criteria utils ---------------------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns a SQL CONCAT(...) of given expressions or strings.
+     * Returns a SQL CONCAT(...) of given expressions or strings. On SQL Server with EclipseLink or OpenJPA this is the <code>CONCAT()</code> function, because
+     * their <code>+</code> operator adds a number instead of concatenating it. The <code>CONCAT()</code> function of SQL Server takes <code>NULL</code> as an
+     * empty string.
      *
      * @param builder The involved criteria builder.
      * @param expressionsOrStrings Expressions or Strings.
@@ -415,6 +417,12 @@ public final class JPA {
                 return builder.literal(expressionOrString.toString());
             }
         }).toList();
+
+        var service = getCurrentBaseEntityService();
+
+        if (service != null && service.getDatabase() == SQLSERVER && service.getProvider() != HIBERNATE) {
+            return builder.function("CONCAT", String.class, expressions.toArray(Expression<?>[]::new));
+        }
 
         Expression<String> result = expressions.get(0);
 

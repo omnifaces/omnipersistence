@@ -1579,6 +1579,14 @@ public abstract class OmniPersistenceIT {
         var result = phoneService().getPageWithOwnerPhones(Page.of(0, 10), true);
         assertEquals(10, result.size(), "Page has 10 phones, not fewer due to join row inflation");
         result.forEach(p -> assertTrue(p.getOwner().getPhones().contains(p), "Owner phones are populated after detachment"));
+        var allPhones = personService().getAllWithPhones().stream()
+            .collect(toMap(Person::getId, person -> person.getPhones().stream().map(Phone::getId).sorted().toList()));
+        result.forEach(
+            p -> assertEquals(
+                allPhones.get(p.getOwner().getId()), p.getOwner().getPhones().stream().map(Phone::getId).sorted().toList(),
+                "Each phone of owner of phone " + p.getId() + " once"
+            )
+        );
     }
 
     /**

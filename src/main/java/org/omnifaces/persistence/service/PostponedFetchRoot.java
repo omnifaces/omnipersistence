@@ -31,6 +31,7 @@ import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -81,9 +82,11 @@ import org.omnifaces.persistence.query.Page;
  * <p>
  * BaseEntityService then runs one secondary query per top level fetch path on the returned root entities. The nested fetch paths of a top level fetch path are
  * fetched by the same query, so two nested collections of one top level fetch path form a cartesian product. Finally, this root filters and sorts each fetched
- * collection in memory according to the criteria and ordering of the page, if applicable. This applies to the direct properties of the items of a top level
- * fetch path only. It clears the persistence context before it sets the filtered and sorted collections, so that the provider does not flush them. All entities
- * which were managed by the {@link EntityManager} are then detached. Without postponed fetches there is no secondary query, and the entities stay managed.
+ * collection in memory according to the criteria and ordering of the page, if applicable. This applies to each fetched collection, also one nested in a
+ * singular association such as <code>owner.phones</code>, and to the direct properties of its items. A collection nested in a collection is left as loaded. The
+ * entity elements of a fetched collection which is not a <code>Set</code> are kept once, because a provider may repeat a nested fetched collection per root
+ * row. It clears the persistence context before it sets the filtered and sorted collections, so that the provider does not flush them. All entities which were
+ * managed by the {@link EntityManager} are then detached. Without postponed fetches there is no secondary query, and the entities stay managed.
  * <p>
  * The join type of a fetch is ignored. An actual fetch and the secondary query always use a left fetch join.
  * <p>
@@ -107,6 +110,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     };
 
     private static final Pattern PATH_SEPARATOR = Pattern.compile("\\.");
+    private static final Object UNREACHABLE = new Object();
 
     private final Provider provider;
     private final Set<String> postponedFetches;
@@ -197,7 +201,8 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
         var ids = distinctEntities.stream().map(idOf).toList();
         var fetchedEntities = new HashMap<String, Map<Object, Object>>(fetchPaths.size());
-        var filters = fetchPaths.stream().collect(
+        var processedPaths = postponedFetches.stream().sorted().toList(); // A parent path sorts before its nested paths.
+        var filters = processedPaths.stream().collect(
             toMap(
                 identity(),
                 path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
@@ -219,9 +224,9 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
-        buildPostponedFetches(page, nullsLow, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
+        buildPostponedFetches(page, nullsLow, filters, isEntity, distinctEntities, processedPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
-        applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
+        applyPostponedFetches(distinctEntities, processedPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
     }
 
@@ -314,17 +319,17 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     /**
-     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. The order of the entities is left as the paged query
-     * returned it.
+     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities, also those nested in singular associations, such as
+     * <code>owner.phones</code>. The order of the entities is left as the paged query returned it.
      */
     private static <T> void buildPostponedFetches(
-        Page page, boolean nullsLow, Map<String, Map<String, Object>> filters, List<T> entities, List<String> fetchPaths,
-        Map<String, Map<Object, Object>> fetchedEntities,
-        List<List<Object>> fetchedEntityProperties
+        Page page, boolean nullsLow, Map<String, Map<String, Object>> filters, java.util.function.Predicate<Object> isEntity, List<T> entities,
+        List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, List<List<Object>> fetchedEntityProperties
     )
     {
         entities.forEach(
-            entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page, nullsLow, filters).fetchedEntityProperties())
+            entity -> fetchedEntityProperties
+                .add(processEntityFetches(entity, paths, fetchedEntities, page, nullsLow, filters, isEntity).fetchedEntityProperties())
         );
     }
 
@@ -332,18 +337,20 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     private static <T> EntityRow<T> processEntityFetches(
-        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, boolean nullsLow, Map<String, Map<String, Object>> filters
+        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, boolean nullsLow, Map<String, Map<String, Object>> filters,
+        java.util.function.Predicate<Object> isEntity
     )
     {
         var copies = paths.stream().map(path -> {
-            var raw = invokeGetter(requireNonNullElse(fetchedEntities.get(path).get(entity), entity), path);
+            var properties = PATH_SEPARATOR.split(path);
+            var raw = getViaSingulars(requireNonNullElse(fetchedEntities.get(properties[0]).get(entity), entity), properties);
 
             if (!(raw instanceof Collection<?> col)) {
-                return raw; // @OneToOne / @ManyToOne
+                return raw; // @OneToOne / @ManyToOne, or UNREACHABLE.
             }
 
             var pathFilters = filters.get(path);
-            var filtered = col.stream().filter(item -> matchesFetchFilters(item, pathFilters))
+            var filtered = (raw instanceof Set ? col.stream() : distinctEntityElements(col, isEntity)).filter(item -> matchesFetchFilters(item, pathFilters))
                 .collect(toCollection(ArrayList::new));
             var itemComp = buildFetchItemComparator(path, page.getOrdering(), nullsLow);
 
@@ -498,10 +505,41 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return value instanceof Enum<?> enumValue ? enumValue.getDeclaringClass() : value.getClass();
     }
 
-    private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {
+    /**
+     * Returns the elements of given collection, with each entity element once by identity. Other elements are kept as is, because a list may hold a value more
+     * than once.
+     */
+    private static Stream<?> distinctEntityElements(Collection<?> collection, java.util.function.Predicate<Object> isEntity) {
+        var entityElements = Collections.newSetFromMap(new IdentityHashMap<>(collection.size()));
+        return collection.stream().filter(item -> !isEntity.test(item) || entityElements.add(item));
+    }
+
+    /**
+     * Returns the value of given property path of given object, or {@link #UNREACHABLE} when the path passes a collection or <code>null</code> before its last
+     * property, such as <code>categories.parent</code>.
+     */
+    private static Object getViaSingulars(Object object, String[] properties) {
+        var value = object;
+
+        for (var i = 0; i < properties.length; i++) {
+            if (value == null || value instanceof Collection) {
+                return UNREACHABLE;
+            }
+
+            value = invokeGetter(value, properties[i]);
+        }
+
+        return value;
+    }
+
+    private static void applyPostponedFetches(List<?> entities, List<String> paths, List<List<Object>> fetchedEntityProperties) {
         for (var i = 0; i < entities.size(); i++) {
-            for (var j = 0; j < fetchPaths.size(); j++) {
-                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j));
+            for (var j = 0; j < paths.size(); j++) {
+                var value = fetchedEntityProperties.get(i).get(j);
+
+                if (value != UNREACHABLE) {
+                    invokeSetter(entities.get(i), paths.get(j), value);
+                }
             }
         }
     }

@@ -1571,13 +1571,13 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * A plain criteria value on a field of a type for which no {@link Criteria} applies, such as a <code>byte[]</code>, throws
-     * {@link UnsupportedOperationException}.
+     * A plain criteria value which is not a String, on a field of a type for which no {@link Criteria} applies, such as a <code>byte[]</code>, throws
+     * {@link UnsupportedOperationException}. A String value is matched by {@link IgnoreCase} instead.
      */
     @Test
     void testPageWithPlainCriteriaOnUnsupportedTypeThrowsUnsupportedOperationException() {
         assertThrows(
-            UnsupportedOperationException.class, () -> attachmentRepository.getPage(Page.with().allMatch(Map.of("content", "x")).build(), false)
+            UnsupportedOperationException.class, () -> attachmentRepository.getPage(Page.with().allMatch(Map.of("content", new Object())).build(), false)
         );
     }
 
