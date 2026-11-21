@@ -1325,6 +1325,19 @@ public abstract class OmniPersistenceIT {
     }
 
     @Test
+    void testProbePlainInOnElementCollectionGroupedByRoot() {
+        var groups = Set.of(Group.USER, Group.DEVELOPER);
+        var expected = personService().getAllWithGroups().stream().filter(person -> person.getGroups().containsAll(groups)).map(Person::getId)
+            .collect(toSet());
+
+        for (var fetchPhones : List.of(false, true)) {
+            var ids = ids(personService().listHavingAllGroupsViaPlainIn(groups, fetchPhones));
+            assertEquals(expected, Set.copyOf(ids), "Persons having all groups, fetching phones " + fetchPhones);
+            assertEquals(ids.size(), ids.stream().distinct().count(), "Each person once, fetching phones " + fetchPhones);
+        }
+    }
+
+    @Test
     void testPageWithGroupsSortedAscending() {
         var allGroups = personService().getAllWithGroups().stream().collect(toMap(Person::getId, Person::getGroups));
         var result = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("groups", true).build(), false);

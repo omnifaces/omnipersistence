@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
@@ -37,6 +38,7 @@ import org.omnifaces.persistence.query.Page;
 import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService;
 import org.omnifaces.persistence.test.model.Address;
+import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
@@ -203,6 +205,24 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
             query.groupBy(person.get("id"), person.get("email"));
             return mapping;
         });
+    }
+
+    /**
+     * The persons having all given groups, via a plain <code>IN</code> on the joined groups, grouped by the person, with a <code>HAVING COUNT(DISTINCT)</code>
+     * on the number of groups.
+     */
+    public List<Person> listHavingAllGroupsViaPlainIn(Set<Group> groups, boolean fetchPhones) {
+        var builder = getEntityManager().getCriteriaBuilder();
+        var query = builder.createQuery(Person.class);
+        var person = query.from(Person.class);
+
+        if (fetchPhones) {
+            person.fetch("phones", LEFT);
+        }
+
+        Join<Person, Group> personGroups = person.join("groups");
+        query.select(person).where(personGroups.in(groups)).groupBy(person).having(builder.equal(builder.countDistinct(personGroups), (long) groups.size()));
+        return getEntityManager().createQuery(query).getResultList();
     }
 
     public PartialResultList<Person> getAllWithAddress() {
