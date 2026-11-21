@@ -35,6 +35,7 @@ import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.junit.jupiter.api.Test;
+import org.omnifaces.persistence.Provider;
 
 /**
  * Unit tests for {@link PostponedFetch}, {@link PostponedFetchRoot} and {@link SingularFetch}. They must postpone fetches by attribute name or attribute, and
@@ -174,7 +175,7 @@ public class PostponedFetchTest {
 
     @SuppressWarnings("unchecked")
     private static PostponedFetchRoot<Object> postponedFetchRoot(List<String> fetches) {
-        return new PostponedFetchRoot<>(fetchParent(Root.class, PLURAL_ATTRIBUTES, fetches));
+        return new PostponedFetchRoot<>(fetchParent(Root.class, PLURAL_ATTRIBUTES, fetches), Provider.UNKNOWN);
     }
 
     /**

@@ -39,16 +39,19 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Query;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Fetch;
@@ -56,10 +59,13 @@ import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
+import jakarta.persistence.metamodel.Type;
 
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.query.Page;
@@ -100,10 +106,14 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     };
 
+    private static final Pattern PATH_SEPARATOR = Pattern.compile("\\.");
+
+    private final Provider provider;
     private final Set<String> postponedFetches;
 
-    public PostponedFetchRoot(Root<X> wrapped) {
+    public PostponedFetchRoot(Root<X> wrapped, Provider provider) {
         super(wrapped);
+        this.provider = provider;
         postponedFetches = new HashSet<>(2);
     }
 
@@ -187,10 +197,21 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
         var ids = distinctEntities.stream().map(idOf).toList();
         var fetchedEntities = new HashMap<String, Map<Object, Object>>(fetchPaths.size());
+        var filters = fetchPaths.stream().collect(
+            toMap(
+                identity(),
+                path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
+            )
+        );
 
         for (var fetchPath : fetchPaths) {
-            var query = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idRestriction, fetchPath, ids);
-            var fetchedById = entityManager.createQuery(query).getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
+            var fetchFields = new ArrayList<Entry<Class<?>, String>>();
+            var criteriaQuery = buildFetchQuery(
+                entityManager.getCriteriaBuilder(), entityType, idRestriction, fetchPath, ids, filters.get(fetchPath), fetchFields
+            );
+            var query = entityManager.createQuery(criteriaQuery);
+            fetchFields.forEach(field -> provider.configureFetchField(query, field.getKey(), field.getValue()));
+            var fetchedById = query.getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
             var fetchedByEntity = new IdentityHashMap<Object, Object>(distinctEntities.size());
             distinctEntities.forEach(entity -> fetchedByEntity.put(entity, fetchedById.get(idOf.apply(entity))));
             fetchedEntities.put(fetchPath, fetchedByEntity);
@@ -198,12 +219,6 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
-        var filters = fetchPaths.stream().collect(
-            toMap(
-                identity(),
-                path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
-            )
-        );
         buildPostponedFetches(page, nullsLow, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
         applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
@@ -212,10 +227,12 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
     /**
      * Builds a query which selects the entities with given IDs, with a left fetch join for given top level fetch path and for each postponed fetch nested in
-     * it.
+     * it. It adds an entry to given fetch fields for each nested postponed fetch. It adds an entry for each attribute along each given filter as well, because
+     * the filters read them from the fetched elements. The query must load these, see {@link Provider#configureFetchField(Query, Class, String)}.
      */
     private <E> CriteriaQuery<E> buildFetchQuery(
-        CriteriaBuilder criteriaBuilder, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, String fetchPath, List<?> ids
+        CriteriaBuilder criteriaBuilder, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, String fetchPath, List<?> ids,
+        Map<String, Object> filters, List<Entry<Class<?>, String>> fetchFields
     )
     {
         var query = criteriaBuilder.createQuery(entityType);
@@ -225,19 +242,60 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         for (var path : postponedFetches.stream().filter(path -> path.equals(fetchPath) || path.startsWith(fetchPath + ".")).sorted().toList()) {
             var lastDot = path.lastIndexOf('.');
-            fetches.put(path, fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot)).fetch(path.substring(lastDot + 1), LEFT));
+            var parent = fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot));
+            var attribute = path.substring(lastDot + 1);
+
+            if (parent instanceof Fetch<?, ?> parentFetch && elementTypeOf(parentFetch.getAttribute()) instanceof ManagedType<?> parentType) {
+                fetchFields.add(Map.entry(parentType.getJavaType(), attribute));
+            }
+
+            fetches.put(path, parent.fetch(attribute, LEFT));
         }
 
+        var elementType = elementTypeOf(((Fetch<?, ?>) fetches.get(fetchPath)).getAttribute());
+        filters.keySet().forEach(field -> addFetchFields(elementType, PATH_SEPARATOR.split(field), fetchFields));
         return query.select(root).distinct(true).where(idRestriction.apply(root, ids));
     }
 
     /**
-     * Loads each nested fetch path via its getters while the entities are still managed. OpenJPA does not load a nested fetch of a criteria query, and a
-     * detached entity has no access to unloaded properties. On other providers the nested fetch paths are already loaded.
+     * Returns the type of the elements of given attribute when it is plural, else the type of given attribute.
+     */
+    private static Type<?> elementTypeOf(Attribute<?, ?> attribute) {
+        return attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute
+            ? pluralAttribute.getElementType()
+            : ((SingularAttribute<?, ?>) attribute).getType();
+    }
+
+    /**
+     * Adds an entry to given fetch fields for each attribute along given path from given type, as far as the path goes through managed types.
+     */
+    private static void addFetchFields(Type<?> type, String[] path, List<Entry<Class<?>, String>> fetchFields) {
+        var currentType = type;
+
+        for (var attributeName : path) {
+            if (!(currentType instanceof ManagedType<?> managedType)) {
+                return;
+            }
+
+            fetchFields.add(Map.entry(managedType.getJavaType(), attributeName));
+
+            try {
+                currentType = elementTypeOf(managedType.getAttribute(attributeName));
+            }
+            catch (IllegalArgumentException unknownAttribute) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Loads each nested fetch path via its getters. OpenJPA does not load a nested fetch of a criteria query, and on a detached entity an unloaded property is
+     * <code>null</code>, so on OpenJPA the fetch query also loads them via {@link Provider#configureFetchField(Query, Class, String)}. On other providers the
+     * nested fetch paths are already loaded.
      */
     private void initializeNestedFetches(List<?> entities, Map<String, Map<Object, Object>> fetchedEntities) {
         for (var path : postponedFetches) {
-            var properties = path.split("\\.");
+            var properties = PATH_SEPARATOR.split(path);
 
             if (properties.length > 1) {
                 var fetched = fetchedEntities.get(properties[0]);

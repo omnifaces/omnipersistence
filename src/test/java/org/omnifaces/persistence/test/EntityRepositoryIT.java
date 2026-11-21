@@ -1807,7 +1807,6 @@ public class EntityRepositoryIT {
      * <code>equals()</code>.
      */
     @Test
-    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not load a lazy association of the fetched elements")
     void testPageWithFetchedManyToManyFilteredByEntityValueWithoutEquals() {
         var root = newCategory("m2m-root", "Root");
         var first = newCategory("m2m-a", "A");

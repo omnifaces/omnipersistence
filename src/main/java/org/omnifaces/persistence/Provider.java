@@ -216,8 +216,7 @@ public enum Provider {
 
         @Override
         public void configureSecondLevelCache(Query query, boolean cacheable) {
-            var openJpaQuery = OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query);
-            var fetchPlan = invokeMethod(openJpaQuery, "getFetchPlan"); // OpenJPA does not bypass its data cache on the standard cache mode hints of a query.
+            var fetchPlan = fetchPlanOf(query); // OpenJPA does not bypass its data cache on the standard cache mode hints of a query.
             invokeMethod(fetchPlan, "setQueryResultCacheEnabled", cacheable);
             invokeMethod(
                 fetchPlan, "setCacheRetrieveMode",
@@ -232,6 +231,15 @@ public enum Provider {
         @Override
         public void configureOrderBySubquery(Query query) {
             query.setHint(QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE, QUERY_HINT_OPENJPA_SUBCLASS_FETCH_MODE_NONE);
+        }
+
+        @Override
+        public void configureFetchField(Query query, Class<?> type, String attribute) {
+            invokeMethod(fetchPlanOf(query), "addField", type, attribute);
+        }
+
+        private Object fetchPlanOf(Query query) {
+            return invokeMethod(OPENJPA_QUERY_IMPL.map(query::unwrap).orElse(query), "getFetchPlan");
         }
 
     },
@@ -553,6 +561,20 @@ public enum Provider {
      * @since 2.0
      */
     public void configureOrderBySubquery(Query query) {
+        // NOOP.
+    }
+
+    /**
+     * Makes the given query load the given attribute of the given type, also when the results are detached right after the query, as they are when the query
+     * runs without a transaction. The default implementation does nothing. OpenJPA adds the attribute to the fetch plan of the query, because it does not load
+     * a nested fetch of a criteria query, and an unloaded attribute of a detached entity is <code>null</code> on OpenJPA.
+     *
+     * @param query The query to configure.
+     * @param type The type which has the attribute.
+     * @param attribute The name of the attribute to load.
+     * @since 2.0
+     */
+    public void configureFetchField(Query query, Class<?> type, String attribute) {
         // NOOP.
     }
 

@@ -2308,7 +2308,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
         var root = query.from(entityType);
-        return query instanceof Subquery ? new SubqueryRoot<>(root) : new PostponedFetchRoot<>(root);
+        return query instanceof Subquery ? new SubqueryRoot<>(root) : new PostponedFetchRoot<>(root, provider);
     }
 
     private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
