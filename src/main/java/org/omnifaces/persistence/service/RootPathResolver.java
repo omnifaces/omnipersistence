@@ -35,7 +35,6 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Bindable;
-import jakarta.persistence.metamodel.IdentifiableType;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
@@ -106,10 +105,7 @@ class RootPathResolver implements PathResolver {
                     path = path.get(attribute);
                 }
                 catch (IllegalArgumentException e) {
-                    if (idName.equals(attribute)) {
-                        path = getSupertypePath(path, attribute); // OpenJPA work around.
-                    }
-                    else if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
+                    if (depth == 1 && isTransient(path.getModel().getBindableJavaType(), attribute)) {
                         path = guessManyOrOneToOnePath(attribute);
                     }
                     else {
@@ -183,21 +179,6 @@ class RootPathResolver implements PathResolver {
     private static boolean isTransient(Class<?> type, String property) {
         return findField(type, property).map(f -> f.isAnnotationPresent(Transient.class)).orElse(false)
             || findGetter(type, property).map(m -> m.isAnnotationPresent(Transient.class)).orElse(false);
-    }
-
-    private static Path<?> getSupertypePath(Path<?> path, String attribute) {
-        if (path.getModel() instanceof IdentifiableType<?> type) {
-            while (type != null) {
-                try {
-                    return path.get(attribute);
-                }
-                catch (IllegalArgumentException ignore) {
-                    type = type.getSupertype();
-                }
-            }
-        }
-
-        return null;
     }
 
     private Path<?> guessManyOrOneToOnePath(String attribute) {
