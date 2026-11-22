@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -1719,7 +1720,13 @@ public class EntityRepositoryIT {
             var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.title", true).build(), false, "tracks");
             assertEquals(List.of("a", "b", "c"), ordered.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page");
             var orderedById = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.id", true).build(), false, "tracks");
-            assertEquals(List.of("a", "b", "c"), orderedById.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page by ID");
+            var titlesById = album.getTracks().stream().sorted(comparing(Track::getId)).map(Track::getTitle).toList();
+            assertEquals(titlesById, orderedById.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page by ID");
+            var titlesByIdDescending = new ArrayList<>(titlesById);
+            Collections.reverse(titlesByIdDescending);
+            var orderedByIdDescending = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.id", false).build(), false, "tracks");
+            var descendingTitles = orderedByIdDescending.get(0).getTracks().stream().map(Track::getTitle).toList();
+            assertEquals(titlesByIdDescending, descendingTitles, "Ordering of page by ID descending");
         }
         finally {
             deleteAlbum(album);

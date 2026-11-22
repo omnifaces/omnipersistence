@@ -140,7 +140,7 @@ class RootPathResolver implements PathResolver {
      * Returns whether given attribute of given parent is an embedded value or ID, so that its attributes are reached via a path expression, because an
      * embeddable is not an association.
      */
-    private static boolean isEmbedded(Path<?> path, String attribute) {
+    static boolean isEmbedded(Path<?> path, String attribute) {
         return findSingularAttribute(path, attribute).filter(singularAttribute -> singularAttribute.getType().getPersistenceType() == EMBEDDABLE).isPresent();
     }
 

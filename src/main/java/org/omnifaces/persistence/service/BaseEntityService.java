@@ -2621,9 +2621,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * not. A plain order on the field would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database
      * orders <code>null</code>.
      * <p>
-     * The order is a correlated subquery wrapped in <code>COALESCE</code> with a <code>NULL</code> fallback, because EclipseLink does not accept a subquery as
-     * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts neither, so there the order is built by
-     * {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
+     * The order is a correlated subquery wrapped in <code>COALESCE</code> with the same subquery as fallback, because EclipseLink does not accept a subquery as
+     * order expression, SQL Server does not accept <code>COALESCE</code> with only one argument, and EclipseLink binds a <code>NULL</code> literal as
+     * <code>VARCHAR</code>, which PostgreSQL does not match with a non-text type. DB2 accepts a subquery neither as order expression nor in
+     * <code>COALESCE</code>, so there the order is built by {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private <T extends E> Order buildCollectionOrder(
@@ -2640,7 +2641,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page.getRequiredCriteria(), criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
-        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
+        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, subquery);
         return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
     }
 
@@ -2709,7 +2710,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the path of given field of an element of given collection. JOINs are shared via given map, so that the criteria and the order on the elements
-     * apply to the same elements.
+     * apply to the same elements. An embedded attribute is navigated, not joined, because EclipseLink does not accept an outer JOIN on it.
      */
     private Expression<?> getElementPath(From<?, ?> collection, String collectionPath, String field, JoinType joinType, Map<String, From<?, ?>> joins) {
         if (field.equals(collectionPath)) {
@@ -2719,20 +2720,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var attributes = field.substring(collectionPath.length() + 1).split("\\.");
         var last = attributes.length - 1;
         var path = collectionPath;
-        From<?, ?> from = collection;
+        Path<?> current = collection;
 
         for (var i = 0; i <= last; i++) {
+            var attribute = attributes[i];
+
             if (i == last && !elementCollections.test(field)) {
-                return from.get(attributes[i]);
+                return current.get(attribute);
             }
 
-            var parent = from;
-            var attribute = attributes[i];
             path += "." + attribute;
-            from = joins.computeIfAbsent(path, k -> parent.join(attribute, joinType));
+
+            if (current instanceof From<?, ?> parent && !RootPathResolver.isEmbedded(parent, attribute)) {
+                current = joins.computeIfAbsent(path, k -> parent.join(attribute, joinType));
+            }
+            else {
+                current = current.get(attribute);
+            }
         }
 
-        return from;
+        return current;
     }
 
     private static Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {

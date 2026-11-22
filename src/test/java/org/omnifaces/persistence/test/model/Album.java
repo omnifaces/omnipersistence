@@ -73,4 +73,8 @@ public class Album extends LocalGeneratedIdEntity {
         return memberships;
     }
 
+    public void setMemberships(List<Membership> memberships) {
+        this.memberships = memberships;
+    }
+
 }
