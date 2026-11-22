@@ -23,8 +23,8 @@ jobs:
   test:
     name: Run tests on ${{matrix.server}} + ${{matrix.database}}
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         server: [wildfly-hibernate, glassfish-eclipselink, tomee-openjpa]
         database: [H2, MySQL, PostgreSQL, SQLServer, DB2]
