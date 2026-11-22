@@ -193,6 +193,7 @@ public abstract class OmniPersistenceIT {
             .addAsResource("META-INF/sql/create-test.sql")
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
+            .addAsResource(new StringAsset(ormOf(database)), "META-INF/orm.xml")
             .addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
             .addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
             .addAsLibraries(maven.resolve(jdbcDriverOf(database)).withTransitivity().asFile());
@@ -249,6 +250,25 @@ public abstract class OmniPersistenceIT {
             );
             case UNKNOWN -> throw new UnsupportedOperationException(database.name());
         };
+    }
+
+    /**
+     * Returns the <code>orm.xml</code> which gives the label of a phone a collation which is not binary: one which ignores case and accents on MySQL and SQL
+     * Server, and the linguistic ICU root collation on PostgreSQL. H2 and DB2 do not support a collation per column, so there it keeps the binary collation of
+     * the database.
+     */
+    private static String ormOf(Database database) {
+        var columnDefinition = switch (database) {
+            case MYSQL -> "VARCHAR(255) COLLATE utf8mb4_0900_ai_ci";
+            case POSTGRESQL -> "VARCHAR(255) COLLATE &quot;und-x-icu&quot;";
+            case SQLSERVER -> "VARCHAR(255) COLLATE Latin1_General_100_CI_AI";
+            default -> null;
+        };
+        var phoneLabel = columnDefinition == null
+            ? ""
+            : "<entity class=\"" + Phone.class.getName() + "\"><attributes><basic name=\"label\"><column column-definition=\"" + columnDefinition
+                + "\"/></basic></attributes></entity>";
+        return "<entity-mappings xmlns=\"https://jakarta.ee/xml/ns/persistence/orm\" version=\"3.0\">" + phoneLabel + "</entity-mappings>";
     }
 
     private static String dataSourceOf(String persistenceUnitName, String className, String settings, String isolationLevel) {
@@ -1331,12 +1351,20 @@ public abstract class OmniPersistenceIT {
         assertEquals(expected.size(), page.getEstimatedTotalNumberOfResults(), "Count");
     }
 
+    /**
+     * The fetched groups of a page ordered by them are all groups, in the order of the database, which sorts an enum mapped by name by its name.
+     */
     @Test
     void testPageWithGroupsSortedAscending() {
         var allGroups = personService().getAllWithGroups().stream().collect(toMap(Person::getId, Person::getGroups));
         var result = personService().getPageWithGroups(Page.with().range(0, 10).orderBy("groups", true).build(), false);
         assertEquals(10, result.size(), "Page with groups sorted ascending returns 10 persons");
-        result.forEach(person -> assertEquals(allGroups.get(person.getId()), person.getGroups(), "All groups of person " + person.getId() + " are fetched"));
+
+        for (var person : result) {
+            var names = person.getGroups().stream().map(Group::name).toList();
+            assertEquals(allGroups.get(person.getId()), person.getGroups(), "All groups of person " + person.getId() + " are fetched");
+            assertEquals(names.stream().sorted().toList(), names, "Groups of person " + person.getId() + " are sorted by name");
+        }
     }
 
     @Test

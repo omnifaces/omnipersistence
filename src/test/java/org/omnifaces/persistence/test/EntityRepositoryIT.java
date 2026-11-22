@@ -88,11 +88,13 @@ import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
+import org.omnifaces.persistence.test.model.Album;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Attachment;
 import org.omnifaces.persistence.test.model.Badge;
 import org.omnifaces.persistence.test.model.Category;
 import org.omnifaces.persistence.test.model.Config;
+import org.omnifaces.persistence.test.model.Credit;
 import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Invoice;
@@ -107,6 +109,7 @@ import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Recipient;
 import org.omnifaces.persistence.test.model.Remark;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.Track;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.service.EntityEvents;
 import org.omnifaces.persistence.test.service.StartupServiceEJB;
@@ -150,6 +153,10 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Remark> remarkRepository;
     @Inject
     private EntityRepository<Long, Attachment> attachmentRepository;
+    @Inject
+    private EntityRepository<Long, Album> albumRepository;
+    @Inject
+    private EntityRepository<Long, Track> trackRepository;
     @Inject
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
@@ -1609,11 +1616,11 @@ public class EntityRepositoryIT {
 
     /**
      * The fetched elements of a page ordered by their nullable field are in the same order as the database sorts that field, including the position of
-     * <code>NULL</code> and of mixed case values in the binary collation of the test databases.
+     * <code>NULL</code>, of mixed case values and of accented values in the collation of the label column, see <code>OmniPersistenceIT#ormOf</code>.
      */
     @Test
     void testPageWithPhonesOrderedByLabelSortsFetchedPhonesAsDatabase() {
-        var phones = persistTemporaryPhones(Arrays.asList("a", "B", null));
+        var phones = persistTemporaryPhones(Arrays.asList("anna", "Bob", "émile", "Zed", null));
 
         try {
             for (var ascending : List.of(true, false)) {
@@ -1648,6 +1655,148 @@ public class EntityRepositoryIT {
         finally {
             deleteTemporaryPhones(phones);
         }
+    }
+
+    /**
+     * The fetched elements of a page filtered by a criteria on their String field are those which the database selects by that criteria, in the collation of
+     * the label column, see <code>OmniPersistenceIT#ormOf</code>. On MySQL and SQL Server this collation ignores case and accents.
+     */
+    @Test
+    void testPageWithPhonesFilteredByLabelKeepsPhonesSelectedByDatabase() {
+        var phones = persistTemporaryPhones(List.of("anna", "Bob", "émile", "Zed"));
+
+        try {
+            assertPhonesFilteredByLabel(Order.greaterThanOrEqualTo("b"), "f.label >= ?2", "b");
+            assertPhonesFilteredByLabel("Emile", "LOWER(f.label) = LOWER(?2)", "Emile");
+            assertPhonesFilteredByLabel(Like.contains("EMIL"), "LOWER(f.label) LIKE ?2", "%emil%");
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    private void assertPhonesFilteredByLabel(Object criteria, String condition, String parameter) {
+        var expected = phoneRepository.list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 AND " + condition, 1L, parameter).stream()
+            .map(Phone::getId)
+            .collect(toSet());
+        var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L, "phones.label", criteria)).build(), false, "phones");
+        assertEquals(expected.isEmpty() ? List.of() : List.of(1L), page.stream().map(Person::getId).toList(), "Person by " + criteria);
+
+        if (!expected.isEmpty()) {
+            assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getId).collect(toSet()), "Fetched phones by " + criteria);
+        }
+    }
+
+    /**
+     * The fetched elements of a page which is not ordered by them are sorted by their natural order.
+     */
+    @Test
+    void testPageWithTagsNotOrderedByThemSortsFetchedTagsByNaturalOrder() {
+        var articles = new ArrayList<Article>();
+
+        try {
+            var tagged = persistArticle("tagged", null, "zulu", "alpha", "mike", "bravo", "x-ray", "charlie", "yankee", "delta");
+            articles.add(tagged);
+            var page = articleRepository.getPage(Page.with().allMatch(Map.of("id", tagged.getCode())).build(), false, "tags");
+            var tags = List.copyOf(page.get(0).getTags());
+            assertEquals(List.of("alpha", "bravo", "charlie", "delta", "mike", "x-ray", "yankee", "zulu"), tags, "Tags");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
+     * The fetched elements of a collection mapped with <code>@OrderBy</code> keep the mapped order when the page is not ordered by them, and follow the
+     * ordering of the page when it is.
+     */
+    @Test
+    void testPageWithTracksKeepsMappedOrderUnlessOrderedByThem() {
+        var album = persistAlbum();
+
+        try {
+            var byId = Map.<String, Object>of("id", album.getId());
+            var mapped = albumRepository.getPage(Page.with().allMatch(byId).build(), false, "tracks");
+            assertEquals(List.of("c", "b", "a"), mapped.get(0).getTracks().stream().map(Track::getTitle).toList(), "Mapped order");
+            var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.title", true).build(), false, "tracks");
+            assertEquals(List.of("a", "b", "c"), ordered.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * The fetched embeddable elements of a page filtered or ordered by their fields are those which the database selects, in the order of the database. This
+     * includes an element whose association is <code>NULL</code>, and the position of <code>NULL</code> in the ordering.
+     */
+    @Test
+    void testPageWithCreditsFilteredOrOrderedByThemFollowsDatabase() {
+        var album = persistAlbum();
+
+        try {
+            var byId = Map.<String, Object>of("id", album.getId());
+            assertCreditsFilteredBy(album, "credits.name", Like.contains("AN"), "LOWER(c.name) LIKE ?2", "%an%");
+            assertCreditsFilteredBy(album, "credits.person", null, "c.person IS NULL");
+            var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("credits.role", true).build(), false, "credits");
+            assertEquals(creditNames(album, " ORDER BY c.role"), namesOf(ordered.get(0).getCredits()), "Credits ordered by role");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    private void assertCreditsFilteredBy(Album album, String field, Object criteria, String condition, Object... parameters) {
+        var criteriaMap = new HashMap<String, Object>(Map.of("id", album.getId()));
+        criteriaMap.put(field, criteria);
+        var page = albumRepository.getPage(Page.with().allMatch(criteriaMap).build(), false, "credits");
+        var expected = Set.copyOf(creditNames(album, " AND " + condition, parameters));
+        assertEquals(1, page.size(), "Album by " + field);
+        assertEquals(expected, Set.copyOf(namesOf(page.get(0).getCredits())), "Credits by " + field);
+    }
+
+    private List<String> creditNames(Album album, String condition, Object... parameters) {
+        var query = albumRepository.getEntityManager()
+            .createQuery("SELECT c.name FROM Album a JOIN a.credits c WHERE a.id = ?1" + condition, String.class)
+            .setParameter(1, album.getId());
+
+        for (var i = 0; i < parameters.length; i++) {
+            query.setParameter(i + 2, parameters[i]);
+        }
+
+        return query.getResultList();
+    }
+
+    private static List<String> namesOf(List<Credit> credits) {
+        return credits.stream().map(Credit::getName).toList();
+    }
+
+    private Album persistAlbum() {
+        var album = new Album();
+        album.setTitle("album");
+
+        for (var title : List.of("a", "b", "c")) {
+            var track = new Track();
+            track.setTitle(title);
+            track.setAlbum(album);
+            album.getTracks().add(track);
+        }
+
+        transactionServiceCDI.run(() -> {
+            var person = personRepository.getById(1L);
+            album.getCredits().addAll(
+                List.of(new Credit("anna", "lead", person), new Credit("Bob", null, null), new Credit("Jan", "bass", person), new Credit("Zed", "drums", null))
+            );
+            albumRepository.persist(album);
+        });
+        return album;
+    }
+
+    private void deleteAlbum(Album album) {
+        transactionServiceCDI.run(() -> {
+            album.getTracks().stream().map(Track::getId).map(trackRepository::getById).forEach(trackRepository::delete);
+            albumRepository.delete(albumRepository.getById(album.getId()));
+        });
     }
 
     private List<Phone> persistTemporaryPhones(List<String> values) {

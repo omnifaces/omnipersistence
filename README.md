@@ -350,6 +350,9 @@ So a mapping which groups must also group by the ID.
 PartialResultList<Person> result = personRepository.getPage(page, true, "phones", "address");
 ```
 
+The database filters and orders the fetched phones by the required criteria and the ordering of the page on their fields, such as `phones.number`.
+A fetched collection which the ordering does not reference is sorted by the natural order of its elements, unless it is annotated with `@OrderBy` or `@OrderColumn`, or its elements are not `Comparable`.
+
 **Cursor-based paging** — pass the last seen entity for keyset pagination on large datasets. Bypasses SQL `OFFSET`, so performance stays stable regardless of page depth:
 
 ```java
@@ -920,6 +923,7 @@ These changes in behavior need your attention as well:
 - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
 - `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
 - An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
+- A fetched collection which the ordering of the page does not reference is sorted by the natural order of its elements, unless it is annotated with `@OrderBy` or `@OrderColumn`, or its elements are not `Comparable`.
 - An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
 - `Not.value(v)` also matches when the property is `NULL`, the same as `Not#applies()`. `Not.value(null)` still matches only when it is not `NULL`.
 - A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.

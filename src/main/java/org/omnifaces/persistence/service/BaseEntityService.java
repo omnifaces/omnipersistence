@@ -111,6 +111,7 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Selection;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
@@ -240,6 +241,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private Validator validator;
     private java.util.function.Predicate<Class<?>> entityTypes = type -> false;
     private Function<Object, Object> idGetter;
+    private Function<Class<?>, String> idNames;
     private Consumer<Object> idUnsetter;
     private IdAttribute idAttribute;
     private ManagedType<?> embeddableIdType;
@@ -287,6 +289,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         oneToManys = mappings::isOneToMany;
         entityTypes = mappings::isEntity;
         idGetter = mappings::getId;
+        idNames = type -> mappings.getIdAttribute(type).getName();
         idUnsetter = mappings::unsetId;
         idAttribute = mappings.getIdAttribute(entityType);
         embeddableIdType = getMetamodel().getAttribute(idAttribute.getName()) instanceof SingularAttribute<?, ?> attribute
@@ -1949,6 +1952,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
      * {@link #save(Object)}.
      * <p>
+     * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
+     * collation applies. A negated criteria does not filter them. A fetched collection which the ordering of the page does not reference is sorted by the
+     * natural order of its elements, unless it is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>, or its elements are not
+     * <code>Comparable</code>. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the entities only.
+     * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
@@ -1974,6 +1982,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * call {@link EntityManager#flush()} before when there are any. A fetched collection holds only the elements matching the criteria on its fields, such as
      * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
      * {@link #save(Object)}.
+     * <p>
+     * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
+     * collation applies. A negated criteria does not filter them. A fetched collection which the ordering of the page does not reference is sorted by the
+     * natural order of its elements, unless it is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>, or its elements are not
+     * <code>Comparable</code>. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the entities only.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -2216,12 +2229,98 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
                 pageBuilder.getPage(), getEntityManager(), entityType,
-                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, this::isEntity, database.sortsNullsLow(),
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), this::rankFetchedElements, idGetter, this::isEntity,
                 entities
             );
         }
 
         return entities;
+    }
+
+    /**
+     * Returns a row per element of given collection of the root entities with given IDs which matches given criteria, in given ordering, see
+     * {@link PostponedFetchRoot.ElementRanking}. The criteria and the ordering are built the same as those of
+     * {@link #buildCollectionAggregate(Entry, String, Page, Root, CriteriaBuilder, List, Map)}.
+     */
+    private List<Object[]> rankFetchedElements(
+        String collectionPath, List<?> ids, Map<String, Object> criteria, Map<String, Boolean> ordering, List<String> fields
+    )
+    {
+        var criteriaBuilder = getEntityManager().getCriteriaBuilder();
+        var query = criteriaBuilder.createQuery(Object[].class);
+        Root<E> root = query.from(entityType);
+        var collection = joinCollection(root, collectionPath, JoinType.INNER);
+        var joins = new HashMap<String, From<?, ?>>();
+        var parameters = new HashMap<String, Object>();
+        var rootId = root.get(idAttribute.getName());
+        var selections = new ArrayList<Selection<?>>(fields.size() + 1);
+        selections.add(rootId);
+        Expression<?> elementKey = null;
+
+        for (var field : fields) {
+            var key = getElementKey(collection, collectionPath, field, joins);
+            selections.add(key);
+
+            if (field.equals(collectionPath)) {
+                elementKey = key;
+            }
+        }
+
+        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, criteria, criteriaBuilder, parameters);
+        predicates.add(buildIdInPredicate(criteriaBuilder, rootId, ids));
+        var orders = new ArrayList<Order>(ordering.size() + 1);
+
+        for (var order : ordering.entrySet()) {
+            var path = getElementPath(collection, collectionPath, order.getKey(), JoinType.LEFT, joins);
+            orders.add(order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path));
+        }
+
+        if (elementKey != null && !orders.isEmpty() && !ordering.containsKey(collectionPath)) {
+            orders.add(criteriaBuilder.asc(elementKey)); // Tiebreaker, so that tied elements keep the same order on every call.
+        }
+
+        var typedQuery = getEntityManager().createQuery(query.multiselect(selections).where(toArray(predicates)).orderBy(orders));
+        setMappedParameters(typedQuery, parameters);
+        return typedQuery.getResultList();
+    }
+
+    /**
+     * Returns given collection path joined from given root.
+     */
+    private static From<?, ?> joinCollection(Root<?> root, String collectionPath, JoinType joinType) {
+        From<?, ?> collection = root;
+
+        for (var attribute : collectionPath.split("\\.")) {
+            collection = collection.join(attribute, joinType);
+        }
+
+        return collection;
+    }
+
+    /**
+     * Returns the expression of given field of an element of given collection which identifies its value: the ID when the element or the field is an entity
+     * with a single ID attribute, else the value. An entity-valued field is joined with a <code>LEFT JOIN</code>, so that an element whose association is
+     * <code>NULL</code> is still selected.
+     */
+    private Expression<?> getElementKey(From<?, ?> collection, String collectionPath, String field, Map<String, From<?, ?>> joins) {
+        var path = getElementPath(collection, collectionPath, field, JoinType.LEFT, joins);
+
+        if (
+            path instanceof Join<?, ?> join && join.getAttribute() instanceof PluralAttribute<?, ?, ?> plural
+                && plural.getElementType() instanceof EntityType<?> elementType && elementType.hasSingleIdAttribute()
+        ) {
+            return join.get(idNames.apply(elementType.getJavaType()));
+        }
+        else if (
+            path instanceof Path<?> attributePath && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute
+                && attribute.getType() instanceof EntityType<?> type && type.hasSingleIdAttribute()
+                && attributePath.getParentPath() instanceof From<?, ?> parent
+        ) {
+            return joins.computeIfAbsent(field, key -> parent.join(attribute.getName(), JoinType.LEFT)).get(idNames.apply(type.getJavaType()));
+        }
+        else {
+            return path;
+        }
     }
 
     /**
@@ -2503,16 +2602,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var subquery = criteriaQuery.subquery(Comparable.class);
         Root<E> subqueryRoot = subquery.from(entityType);
-        From<?, ?> collection = subqueryRoot;
-
-        for (var attribute : collectionPath.split("\\.")) {
-            collection = collection.join(attribute);
-        }
-
+        var collection = joinCollection(subqueryRoot, collectionPath, JoinType.INNER);
         var joins = new HashMap<String, From<?, ?>>();
         var predicates = new ArrayList<Predicate>();
         predicates.add(buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
-        predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page, criteriaBuilder, parameters));
+        predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page.getRequiredCriteria(), criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
         var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
@@ -2533,14 +2627,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         Map<String, Object> parameters
     )
     {
-        From<?, ?> collection = root;
-
-        for (var attribute : collectionPath.split("\\.")) {
-            collection = collection.join(attribute, JoinType.LEFT);
-        }
-
+        var collection = joinCollection(root, collectionPath, JoinType.LEFT);
         var joins = new HashMap<String, From<?, ?>>();
-        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, page, criteriaBuilder, parameters);
+        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, page.getRequiredCriteria(), criteriaBuilder, parameters);
         var field = (Expression<Comparable>) getElementPath(collection, collectionPath, order.getKey(), JoinType.LEFT, joins);
         elementPredicates.addAll(predicates);
         // NULLIF(field, field) is NULL; OpenJPA cannot render a NULL literal in a CASE.
@@ -2552,16 +2641,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the predicates of the required criteria on given collection, applied per element, with multiple values and a negation applied per element.
+     * Returns the predicates of given criteria on given collection, applied per element, with multiple values and a negation applied per element.
      */
     private List<Predicate> buildElementPredicates(
-        From<?, ?> collection, String collectionPath, JoinType joinType, Map<String, From<?, ?>> joins, Page page, CriteriaBuilder criteriaBuilder,
-        Map<String, Object> parameters
+        From<?, ?> collection, String collectionPath, JoinType joinType, Map<String, From<?, ?>> joins, Map<String, Object> requiredCriteria,
+        CriteriaBuilder criteriaBuilder, Map<String, Object> parameters
     )
     {
         var predicates = new ArrayList<Predicate>();
 
-        for (var criteria : page.getRequiredCriteria().entrySet()) {
+        for (var criteria : requiredCriteria.entrySet()) {
             var field = criteria.getKey();
 
             if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
@@ -3290,11 +3379,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported. {@link PostponedFetchRoot}
-     * filters the fetched elements by the same criteria, so that they agree with the SQL predicate.
+     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported.
      */
     @SuppressWarnings("unchecked")
-    static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
+    private static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
         if (type.isEnum()) {
             return Enumerated.parse(value, (Class<Enum<?>>) type);
         }
