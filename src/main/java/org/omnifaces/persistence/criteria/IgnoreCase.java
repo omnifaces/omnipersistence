@@ -26,6 +26,8 @@ import jakarta.persistence.criteria.Predicate;
  * This performs an exact (non-LIKE) match, but case insensitive. If you need a case insensitive LIKE search, use {@link Like} instead which is already case
  * insensitive by default.
  * <p>
+ * Whether the match ignores accents depends on the collation of the column, see {@link Like}. {@link #applies(Object)} always ignores accents.
+ * <p>
  * Usage example:
  *
  * <pre>
@@ -70,7 +72,7 @@ public final class IgnoreCase extends Criteria<String> {
 
     @Override
     public boolean applies(@Nullable Object modelValue) {
-        return modelValue != null && asString(modelValue).equalsIgnoreCase(getValue());
+        return modelValue != null && fold(asString(modelValue)).equalsIgnoreCase(getFoldedValue());
     }
 
 }

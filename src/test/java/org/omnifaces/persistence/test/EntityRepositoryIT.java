@@ -1674,6 +1674,31 @@ public class EntityRepositoryIT {
         }
     }
 
+    /**
+     * {@link Like} and {@link IgnoreCase} ignore accents in SQL on a column with an accent-insensitive collation, the same as {@link Criteria#applies(Object)}
+     * does in memory. The label column has such a collation on MySQL and SQL Server, see <code>OmniPersistenceIT#ormOf</code>.
+     */
+    @Test
+    @DisabledIfSystemProperty(
+        named = TEST_DATABASE, matches = "(?i)h2|postgresql|db2", disabledReason = "Only MySQL and SQL Server have an accent-insensitive label"
+    )
+    void testLikeAndIgnoreCaseIgnoreAccentsOnAccentInsensitiveColumn() {
+        var phones = persistTemporaryPhones(List.of("\u00c9mile", "anna"));
+
+        try {
+            for (var criteria : List.<Criteria<?>>of(Like.contains("emil"), IgnoreCase.value("EMILE"))) {
+                var expected = phones.stream().filter(phone -> criteria.applies(phone.getLabel())).map(Phone::getId).collect(toSet());
+                var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L, "phones.label", criteria)).build(), false, "phones");
+                assertEquals(1, expected.size(), "In memory by " + criteria);
+                assertEquals(List.of(1L), page.stream().map(Person::getId).toList(), "Person by " + criteria);
+                assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getId).collect(toSet()), "Fetched phones by " + criteria);
+            }
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
     private void assertPhonesFilteredByLabel(Object criteria, String condition, String parameter) {
         var expected = phoneRepository.list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 AND " + condition, 1L, parameter).stream()
             .map(Phone::getId)

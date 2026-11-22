@@ -12,21 +12,27 @@
  */
 package org.omnifaces.persistence.criteria;
 
+import static java.text.Normalizer.Form.NFC;
+import static java.text.Normalizer.Form.NFD;
 import static java.time.format.DateTimeFormatter.ofPattern;
+import static java.util.Locale.ROOT;
 import static java.util.stream.Collectors.toSet;
 import static org.omnifaces.persistence.JPA.isEnumeratedByName;
 import static org.omnifaces.persistence.JPA.matchNothing;
 import static org.omnifaces.utils.stream.Streams.stream;
 
 import java.io.Serializable;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -96,9 +102,12 @@ public abstract class Criteria<T> implements Serializable {
     private static final DateTimeFormatter LOCAL_DATE_TIME = ofPattern(DATE_PATTERN + " " + TIME_PATTERN);
     private static final DateTimeFormatter OFFSET_TIME = withOffset(LOCAL_TIME);
     private static final DateTimeFormatter OFFSET_DATE_TIME = withOffset(LOCAL_DATE_TIME);
+    private static final Pattern ACCENTS = Pattern.compile("(?:[\\u0300-\\u0305\\u0307-\\u036F]|(?<![\\u0418\\u0438])\\u0306)+");
 
     /** The criteria value. */
     private final T value;
+
+    private transient String foldedValue;
 
     /**
      * Create criteria based on given value.
@@ -170,6 +179,28 @@ public abstract class Criteria<T> implements Serializable {
     Predicate buildByMatchingEnumConstants(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         Set<?> matches = stream(path.getJavaType().getEnumConstants()).filter(this::applies).collect(toSet());
         return matches.isEmpty() ? matchNothing(criteriaBuilder, parameterBuilder) : path.in(parameterBuilder.create(matches));
+    }
+
+    /**
+     * Returns the given string lowercased in {@link Locale#ROOT} and without accents, as {@link Like#applies(Object)} and {@link IgnoreCase#applies(Object)}
+     * compare it. An accent is a combining diacritical mark (U+0300 to U+036F) after Unicode canonical decomposition. A letter such as <code>\u00f8</code> or
+     * <code>\u0142</code>, which does not decompose, keeps its accent, and so does <code>\u0439</code>, which accent-insensitive collations treat as a letter
+     * of its own. The vowel signs of a script such as Devanagari are no accents. The result is recomposed, so that a Hangul syllable stays one character.
+     */
+    static String fold(String string) {
+        var withoutAccents = ACCENTS.matcher(Normalizer.normalize(string, NFD)).replaceAll("");
+        return Normalizer.normalize(withoutAccents, NFC).toLowerCase(ROOT);
+    }
+
+    /**
+     * Returns the value of this criteria as folded by {@link #fold(String)}, computed once.
+     */
+    String getFoldedValue() {
+        if (foldedValue == null) {
+            foldedValue = fold(String.valueOf(value));
+        }
+
+        return foldedValue;
     }
 
     /**

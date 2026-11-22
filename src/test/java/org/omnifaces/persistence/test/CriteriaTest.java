@@ -117,6 +117,40 @@ public class CriteriaTest {
     class LikeTest {
 
         @Test
+        void appliesIgnoresAccentsOnBothSides() {
+            assertTrue(Like.contains("emil").applies("\u00c9mile"));
+            assertTrue(Like.contains("\u00e9MIL").applies("Emile"));
+            assertTrue(Like.startsWith("ange").applies("\u00c5ngelholm"));
+            assertTrue(Like.endsWith("odz").applies("\u0141\u00f3d\u017a"));
+            assertTrue(Like.pattern("cr_me br\u00fbl%").applies("Cr\u00e8me Br\u00fbl\u00e9e"));
+        }
+
+        @Test
+        void appliesKeepsLettersWhichDoNotDecompose() {
+            assertFalse(Like.contains("o").applies("\u00f8"));
+            assertFalse(Like.contains("l").applies("\u0142"));
+        }
+
+        @Test
+        void appliesKeepsMarksWhichAreNoAccents() {
+            assertFalse(Like.contains("\u0915\u093f").applies("\u0915\u0941"));
+            assertFalse(IgnoreCase.value("\u0915\u093f").applies("\u0915\u0941"));
+            assertTrue(Like.pattern("_").applies("\ud55c"));
+        }
+
+        @Test
+        void appliesKeepsShortI() {
+            assertFalse(Like.contains("\u0438").applies("\u0439"));
+            assertTrue(Like.contains("\u0435").applies("\u0451"));
+        }
+
+        @Test
+        void appliesOnBooleanIgnoresAccents() {
+            assertTrue(Like.contains("tr\u00fae").applies(true));
+            assertFalse(Like.contains("tr\u00fae").applies(false));
+        }
+
+        @Test
         void patternMatchesByWildcards() {
             var like = Like.pattern("j_hn%");
             assertTrue(like.applies("John Doe"));
@@ -788,6 +822,18 @@ public class CriteriaTest {
             assertTrue(criteria.applies("JOHN"));
             assertTrue(criteria.applies("John"));
             assertTrue(criteria.applies("jOhN"));
+        }
+
+        @Test
+        void appliesIgnoresAccentsOnBothSides() {
+            assertTrue(IgnoreCase.value("emile").applies("\u00c9mile"));
+            assertTrue(IgnoreCase.value("\u00c9MILE").applies("emile"));
+            assertFalse(IgnoreCase.value("emile").applies("\u00c9mil"));
+        }
+
+        @Test
+        void appliesIgnoresFinalSigma() {
+            assertTrue(IgnoreCase.value("\u03c3").applies("\u03c2"));
         }
 
         @Test
