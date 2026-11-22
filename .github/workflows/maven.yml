@@ -57,7 +57,7 @@ jobs:
         sudo systemctl start postgresql.service
         sudo -u postgres psql postgres -c "CREATE USER test WITH ENCRYPTED PASSWORD 'test';"
         for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
-          sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C';"
+          sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C.UTF-8';"
         done
     - name: Set up SQL Server (via Microsoft's Docker image)
       if: matrix.database == 'SQLServer'

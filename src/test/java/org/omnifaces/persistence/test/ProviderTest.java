@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
@@ -25,12 +26,19 @@ import java.util.List;
 import java.util.Map;
 
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
+import org.eclipse.persistence.sessions.Project;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
 
 /**
@@ -103,16 +111,104 @@ class ProviderTest {
 
     }
 
+    @Nested
+    class DatabaseOf {
+
+        @Test
+        void dialectNameMatchesDatabaseByNameOrAlias() {
+            assertEquals(Database.H2, databaseOf(new H2Platform()));
+            assertEquals(Database.MYSQL, databaseOf(new MariaDBPlatform()));
+            assertEquals(Database.POSTGRESQL, databaseOf(new PostgresPlusPlatform()));
+        }
+
+        @Test
+        void unknownDialectNameFallsBackToUnknown() {
+            assertEquals(Database.UNKNOWN, databaseOf(new OraclePlatform()));
+        }
+
+        @Test
+        void unknownProviderFallsBackToUnknown() {
+            assertEquals(Database.UNKNOWN, Database.of(entityManager(new Object(), entityManagerFactory(new Object()))));
+        }
+
+        private Database databaseOf(Object datasourcePlatform) {
+            return Database.of(entityManager(new Project(), entityManagerFactory(datasourcePlatform)));
+        }
+
+        private EntityManager entityManager(Object delegate, EntityManagerFactory entityManagerFactory) {
+            return (EntityManager) stub(Map.of("getDelegate", delegate, "getEntityManagerFactory", entityManagerFactory), EntityManager.class);
+        }
+
+        private EntityManagerFactory entityManagerFactory(Object datasourcePlatform) {
+            var databaseSession = stub(Map.of("getDatasourcePlatform", datasourcePlatform), DatabaseSession.class);
+            return (EntityManagerFactory) stub(
+                Map.of("getDatabaseSession", databaseSession, "toString", "stub"), EntityManagerFactory.class, EclipseLinkEntityManagerFactory.class
+            );
+        }
+
+    }
+
+    /**
+     * The method of an EclipseLink entity manager factory which {@link Database#of(EntityManager)} invokes by reflection.
+     */
+    public interface EclipseLinkEntityManagerFactory {
+
+        DatabaseSession getDatabaseSession();
+
+    }
+
+    /**
+     * The method of an EclipseLink database session which {@link Database#of(EntityManager)} invokes by reflection.
+     */
+    public interface DatabaseSession {
+
+        Object getDatasourcePlatform();
+
+    }
+
+    static class H2Platform {
+    }
+
+    static class MariaDBPlatform {
+    }
+
+    @Nested
+    class GetOrderBySubqueryFallback {
+
+        private final Expression<?> nullLiteral = (Expression<?>) stub(Map.of(), Expression.class);
+        private final CriteriaBuilder criteriaBuilder = (CriteriaBuilder) stub(Map.of("nullLiteral", nullLiteral), CriteriaBuilder.class);
+        @SuppressWarnings("unchecked")
+        private final Subquery<Long> subquery = (Subquery<Long>) stub(Map.of(), Subquery.class);
+
+        @Test
+        void isNullLiteralByDefault() {
+            assertSame(nullLiteral, HIBERNATE.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+            assertSame(nullLiteral, OPENJPA.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+        }
+
+        @Test
+        void isSubqueryItselfOnEclipseLink() {
+            assertSame(subquery, ECLIPSELINK.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+        }
+
+    }
+
+    static class PostgresPlusPlatform {
+    }
+
+    static class OraclePlatform {
+    }
+
     private static Attribute<?, ?> attribute(Member javaMember) {
-        return stub(Attribute.class, Map.of("getJavaMember", javaMember));
+        return (Attribute<?, ?>) stub(Map.of("getJavaMember", javaMember), Attribute.class);
     }
 
     private static Attribute<?, ?> attribute(Class<?> type, Class<?> javaType, Class<?> bindableJavaType) {
-        return stub(type, Map.of("getJavaType", javaType, "getBindableJavaType", bindableJavaType));
+        return (Attribute<?, ?>) stub(Map.of("getJavaType", javaType, "getBindableJavaType", bindableJavaType), type);
     }
 
-    private static Attribute<?, ?> stub(Class<?> type, Map<String, Object> returnValues) {
-        return (Attribute<?, ?>) Proxy.newProxyInstance(ProviderTest.class.getClassLoader(), new Class<?>[] { type }, (proxy, method, args) -> {
+    private static Object stub(Map<String, Object> returnValues, Class<?>... types) {
+        return Proxy.newProxyInstance(ProviderTest.class.getClassLoader(), types, (proxy, method, args) -> {
             if (!returnValues.containsKey(method.getName())) {
                 throw new UnsupportedOperationException(method.getName());
             }

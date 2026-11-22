@@ -341,11 +341,19 @@ PartialResultList<PersonCard> cards = personRepository.getPage(
 );
 ```
 
+An ordering on a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the mapping does not map, such as `phones.number`, orders by a correlated subquery on the ID.
+So a mapping which groups must also group by the ID.
+
 **Eager fetching** — declare which lazy associations to join-fetch:
 
 ```java
 PartialResultList<Person> result = personRepository.getPage(page, true, "phones", "address");
 ```
+
+The database filters and orders the fetched phones by the required criteria and the ordering of the page on their fields, such as `phones.number`.
+A fetched collection which the ordering does not reference is ordered by its `@OrderBy`: a plain one by the basic ID of an entity element or by the value of a basic element, else by the named fields with an optional `ASC` or `DESC`.
+Any other `@OrderBy`, such as one with `NULLS LAST`, leaves the order to the provider.
+Without `@OrderBy` or `@OrderColumn`, it is sorted by the natural order of its elements, if they are `Comparable`.
 
 **Cursor-based paging** — pass the last seen entity for keyset pagination on large datasets. Bypasses SQL `OFFSET`, so performance stays stable regardless of page depth:
 
@@ -892,11 +900,13 @@ OmniPersistence ships its own Arquillian-based integration test suite. Every sce
 
 The tests cover CRUD, soft delete, `@NonDeletable`, auditing, and provider/database detection.
 They cover paginated queries with offset based and value based paging, also on nullable fields, multiple fields and DTO projections.
-They cover all `Criteria` types, also `null`, `Not` and `Like.pattern()`, on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany`, `@ManyToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
+They cover each `Criteria` type, also `null`, `Not` and `Like.pattern()`.
+They cover criteria on plain fields, on `@OneToOne`, `@ManyToOne`, `@OneToMany`, `@ManyToMany` and `@ElementCollection` fields, and on DTO projections, with required and optional criteria combined.
 They also cover the fetched elements of fetch fields, and the agreement of `Criteria#applies()` with the SQL.
 
 More detailed usage — including Jakarta Faces / PrimeFaces DataTable integration — can be found in the [OptimusFaces](https://github.com/omnifaces/optimusfaces) project, which builds pagination and lazy-loading PrimeFaces DataTable components directly on top of `EntityRepository`, `BaseEntityService` and `Page`.
-OptimusFaces translates the DataTable state into a `Page` with `Criteria`, and every query shape which it generates is covered by the integration tests of OmniPersistence on all databases.
+OptimusFaces translates the DataTable state into a `Page` with `Criteria`.
+The integration tests of OmniPersistence cover the query shapes which it generates on all databases, including the DTO mapping of the OptimusFaces integration tests.
 The integration tests of OptimusFaces therefore run on H2 only, and cover the DataTable behavior itself.
 
 
@@ -905,6 +915,7 @@ The integration tests of OptimusFaces therefore run on H2 only, and cover the Da
 2.0 is not binary compatible with 1.x, so recompile your code against it.
 In the source, these changes need your attention:
 
+- `Page` has moved from the package `org.omnifaces.persistence.model.dto` to `org.omnifaces.persistence.query`. Update its import.
 - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
 - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
 - `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
@@ -914,6 +925,7 @@ These changes in behavior need your attention as well:
 - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
 - `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
 - An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
+- A fetched collection which the ordering of the page does not reference is ordered by its `@OrderBy`: a plain one by the basic ID of an entity element or by the value of a basic element, else by the named fields with an optional `ASC` or `DESC`. Any other `@OrderBy` leaves the order to the provider. Without `@OrderBy` or `@OrderColumn`, it is sorted by the natural order of its elements, if they are `Comparable`.
 - An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
 - `Not.value(v)` also matches when the property is `NULL`, the same as `Not#applies()`. `Not.value(null)` still matches only when it is not `NULL`.
 - A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
@@ -934,9 +946,9 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On EclipseLink and OpenJPA, `delete()` of a managed entity does not unset its ID, because they do not allow modifying the ID of a managed entity.
 - On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, and a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
 - On OpenJPA, persisting an enum field with an `AttributeConverter` fails with a `ClassCastException`, so `Like` and `IgnoreCase` on such a field cannot be used either.
-- On OpenJPA, a criteria on a lazy association of the elements of a fetched collection, such as `categories.parent` with a fetch of `categories`, leaves the fetched collection empty. OpenJPA does not load that association on the fetched elements. The entities themselves are filtered correctly.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
+- On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.
 

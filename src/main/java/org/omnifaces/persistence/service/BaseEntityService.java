@@ -111,8 +111,10 @@ import jakarta.persistence.criteria.ParameterExpression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Selection;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.BasicType;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
@@ -214,6 +216,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private static final String LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE = "Cannot create subquery predicate for %s(%s) = %s, skipping! The estimatedTotalNumberOfResults ignores this criteria. Consider using DTO mapping or DB view instead.";
     private static final String LOG_SEVERE_CONSTRAINT_VIOLATION = "jakarta.validation.ConstraintViolation: @%s %s#%s %s on %s";
     private static final String EXCEPTION_ILLEGAL_MAPPING = "You must return a getter-path mapping from MappedQueryBuilder";
+    private static final String EXCEPTION_UNSUPPORTED_DTO_COLLECTION_ORDER = "Cannot order a DTO page by %s on DB2, because it is a field of a @OneToMany, @ManyToMany or @ElementCollection which the DTO does not map, and DB2 does not accept a correlated subquery as order expression. Map an aggregate of it in the MappedQueryBuilder instead, such as builder.min(join.get(\"field\")) on a join of the collection, and order by that mapped field.";
     private static final String EXCEPTION_UNSUPPORTED_CRITERIA = "Predicate for %s(%s) = %s(%s) is not supported. Consider wrapping in a Criteria instance or creating a custom one if you want to deal with it.";
 
     private static final ClassValue<Entry<Class<?>, Class<?>>> TYPE_MAPPINGS = new ClassValue<>() {
@@ -1948,6 +1951,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
      * {@link #save(Object)}.
      * <p>
+     * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
+     * collation applies. A negated criteria does not filter them. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the
+     * entities only. A fetched collection which the ordering of the page does not reference is ordered by its <code>@OrderBy</code>: a plain one by the basic
+     * ID of an entity element or by the value of a basic element, else by the named fields with an optional <code>ASC</code> or <code>DESC</code>. Any other
+     * <code>@OrderBy</code> leaves the order to the provider. Without <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of
+     * its elements, if they are <code>Comparable</code>.
+     * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
@@ -1973,6 +1983,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * call {@link EntityManager#flush()} before when there are any. A fetched collection holds only the elements matching the criteria on its fields, such as
      * <code>phones.type</code>, so it does not represent the persisted collection: do not pass such an entity to {@link #update(Object)} or
      * {@link #save(Object)}.
+     * <p>
+     * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
+     * collation applies. A negated criteria does not filter them. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the
+     * entities only. A fetched collection which the ordering of the page does not reference is ordered by its <code>@OrderBy</code>: a plain one by the basic
+     * ID of an entity element or by the value of a basic element, else by the named fields with an optional <code>ASC</code> or <code>DESC</code>. Any other
+     * <code>@OrderBy</code> leaves the order to the provider. Without <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of
+     * its elements, if they are <code>Comparable</code>.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -2049,6 +2066,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example: see {@link MappedQueryBuilder}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
+     * <p>
+     * An ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map is a
+     * correlated subquery on the ID, so a mapping which groups must also group by the ID.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -2057,7 +2077,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty, or when the result type is ordered on DB2 by a
+     * field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map.
      * @see Page
      * @see Criteria
      */
@@ -2071,6 +2092,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example: see {@link MappedQueryBuilder}.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
+     * <p>
+     * An ordering on a field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map is a
+     * correlated subquery on the ID, so a mapping which groups must also group by the ID.
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
@@ -2081,7 +2105,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths when result type does not
      * equal entity type.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
-     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty.
+     * @throws IllegalArgumentException When the result type does not equal entity type and mapping is empty, or when the result type is ordered on DB2 by a
+     * field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> which the mapping does not map.
      * @see Page
      * @see Criteria
      */
@@ -2207,12 +2232,126 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             var criteriaBuilder = getEntityManager().getCriteriaBuilder();
             entities = postponedFetchRoot.runPostponedFetches(
                 pageBuilder.getPage(), getEntityManager(), entityType,
-                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), idGetter, this::isEntity, database.sortsNullsLow(),
+                (root, ids) -> buildIdInPredicate(criteriaBuilder, root.get(idAttribute.getName()), ids), this::rankFetchedElements, idGetter, this::isEntity,
                 entities
             );
         }
 
         return entities;
+    }
+
+    /**
+     * Returns a row per element of given collection of the root entities with given IDs which matches given criteria, in given ordering, see
+     * {@link PostponedFetchRoot.ElementRanking}. The criteria and the ordering are built the same as those of
+     * {@link #buildCollectionAggregate(Entry, String, Page, Root, CriteriaBuilder, List, Map)}.
+     */
+    private List<Object[]> rankFetchedElements(
+        String collectionPath, List<?> ids, Map<String, Object> criteria, Map<String, Boolean> ordering, List<String> fields
+    )
+    {
+        var criteriaBuilder = getEntityManager().getCriteriaBuilder();
+        var query = criteriaBuilder.createQuery(Object[].class);
+        Root<E> root = query.from(entityType);
+        var collection = joinCollection(root, collectionPath, JoinType.INNER);
+        var joins = new HashMap<String, From<?, ?>>();
+        var parameters = new HashMap<String, Object>();
+        var rootId = root.get(idAttribute.getName());
+        var selections = new ArrayList<Selection<?>>(fields.size() + 1);
+        selections.add(rootId);
+        Expression<?> elementKey = null;
+
+        for (var field : fields) {
+            var key = getElementKey(collection, collectionPath, field, joins);
+            selections.add(key);
+
+            if (field.equals(collectionPath)) {
+                elementKey = key;
+            }
+        }
+
+        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, criteria, criteriaBuilder, parameters);
+        predicates.add(buildIdInPredicate(criteriaBuilder, rootId, ids));
+        var orders = new ArrayList<Order>(ordering.size() + 1);
+
+        for (var order : ordering.entrySet()) {
+            var path = getElementPath(collection, collectionPath, order.getKey(), JoinType.LEFT, joins);
+            orders.add(order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path));
+        }
+
+        if (
+            isBasic(elementKey) && !orders.isEmpty() && !ordering.containsKey(collectionPath)
+                && !ordering.containsKey(getElementKeyField(collection, collectionPath))
+        ) {
+            orders.add(criteriaBuilder.asc(elementKey)); // Tiebreaker, so that tied elements keep the same order on every call.
+        }
+
+        var typedQuery = getEntityManager().createQuery(query.multiselect(selections).where(toArray(predicates)).orderBy(orders));
+        setMappedParameters(typedQuery, parameters);
+        return typedQuery.getResultList();
+    }
+
+    /**
+     * Returns the field which identifies an element of given collection: the ID field of an entity element, else the collection path itself.
+     */
+    private static String getElementKeyField(From<?, ?> collection, String collectionPath) {
+        var elementType = getEntityElementType(collection);
+        return elementType != null ? collectionPath + "." + getIdName(elementType) : collectionPath;
+    }
+
+    /**
+     * Returns whether given element key is a basic attribute, which can be ordered by, unlike an embeddable ID.
+     */
+    private static boolean isBasic(Expression<?> elementKey) {
+        return elementKey instanceof Path<?> path && path.getModel() instanceof SingularAttribute<?, ?> attribute && attribute.getType() instanceof BasicType;
+    }
+
+    private static String getIdName(EntityType<?> type) {
+        return IdAttribute.findId(type).orElseThrow().getName();
+    }
+
+    /**
+     * Returns the type of the elements of given collection when it is a join of entities with a single ID attribute, else <code>null</code>.
+     */
+    private static EntityType<?> getEntityElementType(Expression<?> collection) {
+        return collection instanceof Join<?, ?> join && join.getAttribute() instanceof PluralAttribute<?, ?, ?> plural
+            && plural.getElementType() instanceof EntityType<?> elementType && elementType.hasSingleIdAttribute() ? elementType : null;
+    }
+
+    /**
+     * Returns given collection path joined from given root.
+     */
+    private static From<?, ?> joinCollection(Root<?> root, String collectionPath, JoinType joinType) {
+        From<?, ?> collection = root;
+
+        for (var attribute : collectionPath.split("\\.")) {
+            collection = collection.join(attribute, joinType);
+        }
+
+        return collection;
+    }
+
+    /**
+     * Returns the expression of given field of an element of given collection which identifies its value: the ID when the element or the field is an entity
+     * with a single ID attribute, else the value. An entity-valued field is joined with a <code>LEFT JOIN</code>, so that an element whose association is
+     * <code>NULL</code> is still selected.
+     */
+    private Expression<?> getElementKey(From<?, ?> collection, String collectionPath, String field, Map<String, From<?, ?>> joins) {
+        var path = getElementPath(collection, collectionPath, field, JoinType.LEFT, joins);
+        var elementType = getEntityElementType(path);
+
+        if (elementType != null && path instanceof Join<?, ?> join) {
+            return join.get(getIdName(elementType));
+        }
+        else if (
+            path instanceof Path<?> attributePath && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute
+                && attribute.getType() instanceof EntityType<?> type && type.hasSingleIdAttribute()
+                && attributePath.getParentPath() instanceof From<?, ?> parent
+        ) {
+            return joins.computeIfAbsent(field, key -> parent.join(attribute.getName(), JoinType.LEFT)).get(getIdName(type));
+        }
+        else {
+            return path;
+        }
     }
 
     /**
@@ -2299,7 +2438,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     private <T extends E> Root<E> buildRoot(AbstractQuery<T> query) {
         var root = query.from(entityType);
-        return query instanceof Subquery ? new SubqueryRoot<>(root) : new PostponedFetchRoot<>(root);
+        return query instanceof Subquery ? new SubqueryRoot<>(root) : new PostponedFetchRoot<>(root, provider);
     }
 
     private <T extends E> PathResolver buildSelection(PageBuilder<T> pageBuilder, AbstractQuery<T> query, Root<E> root, CriteriaBuilder criteriaBuilder) {
@@ -2327,14 +2466,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             pageBuilder.shouldBuildCountSubquery(true); // Normally, building of count subquery is skipped for performance, but when there's a custom mapping,
                                                         // we cannot reliably determine if custom criteria is used, so count subquery building cannot be
                                                         // reliably skipped.
-            pageBuilder.canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields); // A value based paging predicate is a WHERE clause, which
-                                                                                              // cannot compare an aggregate.
+            // A value based paging predicate is a WHERE clause, which cannot compare an aggregate, nor the correlated subquery of a collection ordering.
+            pageBuilder
+                .canBuildValueBasedPagingPredicate(!orderingContainsAggregatedFields && !containsCollectionOrdering(pageBuilder.getPage(), paths.keySet()));
             return new MappedPathResolver(root, idAttribute.getName(), paths, elementCollections, manyOrOneToOnes);
         }
         else if (pageBuilder.getResultType() == entityType) {
             pageBuilder.hasQueryBuilder(mapping != null); // mapping is empty but not null when getPage(..., QueryBuilder) is used.
             // A collection ordering is a correlated subquery, and a non-null mapping may aggregate, so value based paging cannot be reliably used then.
-            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage()));
+            pageBuilder.canBuildValueBasedPagingPredicate(mapping == null && !containsCollectionOrdering(pageBuilder.getPage(), Set.of()));
             return new RootPathResolver(root, idAttribute.getName(), elementCollections, manyOrOneToOnes);
         }
         else {
@@ -2382,7 +2522,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     // Sorting actions ------------------------------------------------------------------------------------------------
 
     /**
-     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection.
+     * Builds the order of the page on given entity query, and returns whether it orders by a correlated subquery, as built for an ordering on a collection. On
+     * DB2 it throws {@link IllegalArgumentException} for a DTO page ordered by a collection field which the DTO does not map.
      */
     private <T extends E> boolean buildOrderBy(
         PageBuilder<T> pageBuilder, CriteriaQuery<T> criteriaQuery, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
@@ -2400,9 +2541,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var orders = new ArrayList<Order>(ordering.size() + 1);
         Entry<String, Boolean> lastCollectionOrder = null;
         var orderedBySubquery = false;
+        var mappedPathResolver = pathResolver instanceof MappedPathResolver resolver ? resolver : null;
 
         for (var order : ordering.entrySet()) {
-            var collectionPath = pathResolver instanceof MappedPathResolver ? null : findCollectionPath(order.getKey());
+            var collectionPath = mappedPathResolver != null && mappedPathResolver.maps(order.getKey()) ? null : findCollectionPath(order.getKey());
 
             if (collectionPath == null) {
                 orders.add(buildOrder(order, criteriaBuilder, pathResolver, reversed));
@@ -2415,6 +2557,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_DISTINCT_COLLECTION_ORDER, order.getKey()));
             }
             else if (database == DB2) {
+                if (mappedPathResolver != null) {
+                    throw new IllegalArgumentException(format(EXCEPTION_UNSUPPORTED_DTO_COLLECTION_ORDER, order.getKey()));
+                }
+
                 pageBuilder.shouldBuildIdQuery(true); // The order is then built by buildIdQuery.
             }
             else {
@@ -2443,8 +2589,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
     }
 
-    private boolean containsCollectionOrdering(Page page) {
-        return page.getOrdering().keySet().stream().anyMatch(field -> findCollectionPath(field) != null);
+    /**
+     * Returns whether the page orders by a field of a collection, other than given mapped fields of a DTO.
+     */
+    private boolean containsCollectionOrdering(Page page, Set<String> mappedFields) {
+        return page.getOrdering().keySet().stream().anyMatch(field -> !mappedFields.contains(field) && findCollectionPath(field) != null);
     }
 
     /**
@@ -2472,9 +2621,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * not. A plain order on the field would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database
      * orders <code>null</code>.
      * <p>
-     * The order is a correlated subquery wrapped in <code>COALESCE</code> with a <code>NULL</code> fallback, because EclipseLink does not accept a subquery as
-     * order expression, and SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts neither, so there the order is built by
-     * {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
+     * The order is a correlated subquery wrapped in <code>COALESCE</code> with a fallback, see
+     * {@link Provider#getOrderBySubqueryFallback(CriteriaBuilder, Subquery, Class)}, because EclipseLink does not accept a subquery as order expression, and
+     * SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts a subquery neither as order expression nor in <code>COALESCE</code>,
+     * so there the order is built by {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private <T extends E> Order buildCollectionOrder(
@@ -2484,19 +2634,15 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     {
         var subquery = criteriaQuery.subquery(Comparable.class);
         Root<E> subqueryRoot = subquery.from(entityType);
-        From<?, ?> collection = subqueryRoot;
-
-        for (var attribute : collectionPath.split("\\.")) {
-            collection = collection.join(attribute);
-        }
-
+        var collection = joinCollection(subqueryRoot, collectionPath, JoinType.INNER);
         var joins = new HashMap<String, From<?, ?>>();
         var predicates = new ArrayList<Predicate>();
         predicates.add(buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
-        predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page, criteriaBuilder, parameters));
+        predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page.getRequiredCriteria(), criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
-        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, criteriaBuilder.nullLiteral(field.getJavaType()));
+        var fallback = provider.getOrderBySubqueryFallback(criteriaBuilder, subquery, field.getJavaType());
+        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, fallback);
         return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
     }
 
@@ -2514,14 +2660,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         Map<String, Object> parameters
     )
     {
-        From<?, ?> collection = root;
-
-        for (var attribute : collectionPath.split("\\.")) {
-            collection = collection.join(attribute, JoinType.LEFT);
-        }
-
+        var collection = joinCollection(root, collectionPath, JoinType.LEFT);
         var joins = new HashMap<String, From<?, ?>>();
-        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, page, criteriaBuilder, parameters);
+        var predicates = buildElementPredicates(collection, collectionPath, JoinType.LEFT, joins, page.getRequiredCriteria(), criteriaBuilder, parameters);
         var field = (Expression<Comparable>) getElementPath(collection, collectionPath, order.getKey(), JoinType.LEFT, joins);
         elementPredicates.addAll(predicates);
         // NULLIF(field, field) is NULL; OpenJPA cannot render a NULL literal in a CASE.
@@ -2533,16 +2674,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the predicates of the required criteria on given collection, applied per element, with multiple values and a negation applied per element.
+     * Returns the predicates of given criteria on given collection, applied per element, with multiple values and a negation applied per element.
      */
     private List<Predicate> buildElementPredicates(
-        From<?, ?> collection, String collectionPath, JoinType joinType, Map<String, From<?, ?>> joins, Page page, CriteriaBuilder criteriaBuilder,
-        Map<String, Object> parameters
+        From<?, ?> collection, String collectionPath, JoinType joinType, Map<String, From<?, ?>> joins, Map<String, Object> requiredCriteria,
+        CriteriaBuilder criteriaBuilder, Map<String, Object> parameters
     )
     {
         var predicates = new ArrayList<Predicate>();
 
-        for (var criteria : page.getRequiredCriteria().entrySet()) {
+        for (var criteria : requiredCriteria.entrySet()) {
             var field = criteria.getKey();
 
             if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
@@ -2570,7 +2711,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
     /**
      * Returns the path of given field of an element of given collection. JOINs are shared via given map, so that the criteria and the order on the elements
-     * apply to the same elements.
+     * apply to the same elements. An embedded attribute is navigated, not joined, because EclipseLink does not accept an outer JOIN on it.
      */
     private Expression<?> getElementPath(From<?, ?> collection, String collectionPath, String field, JoinType joinType, Map<String, From<?, ?>> joins) {
         if (field.equals(collectionPath)) {
@@ -2580,20 +2721,26 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var attributes = field.substring(collectionPath.length() + 1).split("\\.");
         var last = attributes.length - 1;
         var path = collectionPath;
-        From<?, ?> from = collection;
+        Path<?> current = collection;
 
         for (var i = 0; i <= last; i++) {
+            var attribute = attributes[i];
+
             if (i == last && !elementCollections.test(field)) {
-                return from.get(attributes[i]);
+                return current.get(attribute);
             }
 
-            var parent = from;
-            var attribute = attributes[i];
             path += "." + attribute;
-            from = joins.computeIfAbsent(path, k -> parent.join(attribute, joinType));
+
+            if (current instanceof From<?, ?> parent && !RootPathResolver.isEmbedded(parent, attribute)) {
+                current = joins.computeIfAbsent(path, k -> parent.join(attribute, joinType));
+            }
+            else {
+                current = current.get(attribute);
+            }
         }
 
-        return from;
+        return current;
     }
 
     private static Order buildOrder(Entry<String, Boolean> order, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, boolean reversed) {
@@ -3271,11 +3418,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported. {@link PostponedFetchRoot}
-     * filters the fetched elements by the same criteria, so that they agree with the SQL predicate.
+     * Returns the criteria for given plain value on a field of given type, or <code>null</code> when the type is not supported.
      */
     @SuppressWarnings("unchecked")
-    static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
+    private static Criteria<?> createTypedCriteria(Class<?> type, Object value) {
         if (type.isEnum()) {
             return Enumerated.parse(value, (Class<Enum<?>>) type);
         }

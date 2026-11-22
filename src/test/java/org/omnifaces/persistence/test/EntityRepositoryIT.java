@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test;
 
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -71,6 +72,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.Database;
+import org.omnifaces.persistence.Provider;
+import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.IgnoreCase;
 import org.omnifaces.persistence.criteria.Like;
@@ -86,11 +89,13 @@ import org.omnifaces.persistence.query.Select;
 import org.omnifaces.persistence.service.BaseEntityService.CriteriaQueryBuilder;
 import org.omnifaces.persistence.service.BaseEntityService.QueryBuilder;
 import org.omnifaces.persistence.service.EntityRepository;
+import org.omnifaces.persistence.test.model.Album;
 import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Attachment;
 import org.omnifaces.persistence.test.model.Badge;
 import org.omnifaces.persistence.test.model.Category;
 import org.omnifaces.persistence.test.model.Config;
+import org.omnifaces.persistence.test.model.Credit;
 import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Invoice;
@@ -105,6 +110,7 @@ import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Recipient;
 import org.omnifaces.persistence.test.model.Remark;
 import org.omnifaces.persistence.test.model.Text;
+import org.omnifaces.persistence.test.model.Track;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.service.EntityEvents;
 import org.omnifaces.persistence.test.service.StartupServiceEJB;
@@ -148,6 +154,8 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Remark> remarkRepository;
     @Inject
     private EntityRepository<Long, Attachment> attachmentRepository;
+    @Inject
+    private EntityRepository<Long, Album> albumRepository;
     @Inject
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
@@ -450,6 +458,35 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * {@link Like} and {@link IgnoreCase} ignore the case of non-ASCII letters, the same in SQL as {@link Criteria#applies(Object)} does in memory, on every
+     * database.
+     */
+    @Test
+    void testLikeAndIgnoreCaseMatchNonAsciiCase() {
+        var titles = List.of("\u00c4rger", "\u00e4rger", "\u00c4pfel");
+        var articles = new ArrayList<Article>();
+
+        try {
+            titles.forEach(title -> articles.add(persistArticle(title, null)));
+            var umlauts = Set.of(articles.get(0).getCode(), articles.get(1).getCode());
+
+            for (var criteria : List.<Criteria<?>>of(
+                Like.contains("\u00c4RG"), Like.contains("\u00e4rg"), IgnoreCase.value(TITLE_PREFIX + "\u00c4RGER"),
+                IgnoreCase.value(TITLE_PREFIX + "\u00e4rger")
+            )) {
+                assertEquals(umlauts, Set.copyOf(codesOf(articlesTitled(criteria))), "Articles titled " + criteria);
+                assertEquals(
+                    umlauts, Set.copyOf(codesOf(articles.stream().filter(article -> criteria.applies(article.getTitle())).toList())),
+                    "Articles titled " + criteria + " in memory"
+                );
+            }
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
      * {@link Like#pattern(String)} matches a character after the escape character literally, also when it is an ordinary character, on every database.
      */
     @Test
@@ -466,8 +503,8 @@ public class EntityRepositoryIT {
         }
     }
 
-    private PartialResultList<Article> articlesTitled(Like like) {
-        return articleRepository.getPage(Page.with().allMatch(Map.of("title", like)).build(), true);
+    private PartialResultList<Article> articlesTitled(Criteria<?> criteria) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of("title", criteria)).build(), true);
     }
 
     @Test
@@ -1170,6 +1207,23 @@ public class EntityRepositoryIT {
         assertTrue(!provider.isProxy(reference) || provider.isProxyUninitialized(reference), "Reference is left as is");
     }
 
+    /**
+     * {@link Provider#isProxyUninitialized(Object)} is true for a lazy association until it is read, which is a proxy on Hibernate only.
+     */
+    @Test
+    void testIsProxyUninitializedOfLazyOwnerUntilRead() {
+        var phoneId = phoneRepository.getPage(Page.ONE, false).get(0).getId();
+        var provider = phoneRepository.getProvider();
+        var states = transactionServiceCDI.call(() -> {
+            var owner = phoneRepository.getById(phoneId).getOwner();
+            var uninitializedBeforeRead = provider.isProxyUninitialized(owner);
+            owner.getEmail();
+            return List.of(provider.isProxy(owner), uninitializedBeforeRead, provider.isProxyUninitialized(owner));
+        });
+        var hibernate = provider == Provider.HIBERNATE;
+        assertEquals(List.of(hibernate, hibernate, false), states, "Lazy owner is proxy, is uninitialized before read, is uninitialized after read");
+    }
+
     @Test
     void testGetIdOfBaseEntity() {
         var text = new Text();
@@ -1516,6 +1570,24 @@ public class EntityRepositoryIT {
     }
 
     @Test
+    void testPageOfDtoWithoutMappingThrowsIllegalArgumentException() {
+        assertThrows(
+            IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, PersonCard.class, (builder, query, person) -> new LinkedHashMap<>())
+        );
+    }
+
+    /**
+     * A plain criteria value which is not a String, on a field of a type for which no {@link Criteria} applies, such as a <code>byte[]</code>, throws
+     * {@link UnsupportedOperationException}. A String value is matched by {@link IgnoreCase} instead.
+     */
+    @Test
+    void testPageWithPlainCriteriaOnUnsupportedTypeThrowsUnsupportedOperationException() {
+        assertThrows(
+            UnsupportedOperationException.class, () -> attachmentRepository.getPage(Page.with().allMatch(Map.of("content", new Object())).build(), false)
+        );
+    }
+
+    @Test
     @DisabledIfSystemProperty(
         named = TEST_DATABASE, matches = "(?i)mysql|sqlserver", disabledReason = "Case insensitive collation rejects case variant elements"
     )
@@ -1543,11 +1615,11 @@ public class EntityRepositoryIT {
 
     /**
      * The fetched elements of a page ordered by their nullable field are in the same order as the database sorts that field, including the position of
-     * <code>NULL</code> and of mixed case values in the binary collation of the test databases.
+     * <code>NULL</code>, of mixed case values and of accented values in the collation of the label column, see <code>OmniPersistenceIT#ormOf</code>.
      */
     @Test
     void testPageWithPhonesOrderedByLabelSortsFetchedPhonesAsDatabase() {
-        var phones = persistTemporaryPhones(Arrays.asList("a", "B", null));
+        var phones = persistTemporaryPhones(Arrays.asList("anna", "Bob", "émile", "Zed", null));
 
         try {
             for (var ascending : List.of(true, false)) {
@@ -1584,6 +1656,181 @@ public class EntityRepositoryIT {
         }
     }
 
+    /**
+     * The fetched elements of a page filtered by a criteria on their String field are those which the database selects by that criteria, in the collation of
+     * the label column, see <code>OmniPersistenceIT#ormOf</code>. On MySQL and SQL Server this collation ignores case and accents.
+     */
+    @Test
+    void testPageWithPhonesFilteredByLabelKeepsPhonesSelectedByDatabase() {
+        var phones = persistTemporaryPhones(List.of("anna", "Bob", "émile", "Zed"));
+
+        try {
+            assertPhonesFilteredByLabel(Order.greaterThanOrEqualTo("b"), "f.label >= ?2", "b");
+            assertPhonesFilteredByLabel("Emile", "LOWER(f.label) = LOWER(?2)", "Emile");
+            assertPhonesFilteredByLabel(Like.contains("EMIL"), "LOWER(f.label) LIKE ?2", "%emil%");
+        }
+        finally {
+            deleteTemporaryPhones(phones);
+        }
+    }
+
+    private void assertPhonesFilteredByLabel(Object criteria, String condition, String parameter) {
+        var expected = phoneRepository.list("SELECT f FROM Person p JOIN p.phones f WHERE p.id = ?1 AND " + condition, 1L, parameter).stream()
+            .map(Phone::getId)
+            .collect(toSet());
+        var page = personRepository.getPage(Page.with().allMatch(Map.of("id", 1L, "phones.label", criteria)).build(), false, "phones");
+        assertEquals(expected.isEmpty() ? List.of() : List.of(1L), page.stream().map(Person::getId).toList(), "Person by " + criteria);
+
+        if (!expected.isEmpty()) {
+            assertEquals(expected, page.get(0).getPhones().stream().map(Phone::getId).collect(toSet()), "Fetched phones by " + criteria);
+        }
+    }
+
+    /**
+     * The fetched elements of a page which is not ordered by them are sorted by their natural order.
+     */
+    @Test
+    void testPageWithTagsNotOrderedByThemSortsFetchedTagsByNaturalOrder() {
+        var articles = new ArrayList<Article>();
+
+        try {
+            var tagged = persistArticle("tagged", null, "zulu", "alpha", "mike", "bravo", "x-ray", "charlie", "yankee", "delta");
+            articles.add(tagged);
+            var page = articleRepository.getPage(Page.with().allMatch(Map.of("id", tagged.getCode())).build(), false, "tags");
+            var tags = List.copyOf(page.get(0).getTags());
+            assertEquals(List.of("alpha", "bravo", "charlie", "delta", "mike", "x-ray", "yankee", "zulu"), tags, "Tags");
+        }
+        finally {
+            deleteArticles(articles);
+        }
+    }
+
+    /**
+     * The fetched elements of a collection annotated with <code>@OrderBy</code> are in that order when the page is not ordered by them, on every provider, and
+     * follow the ordering of the page when it is, also when it is ordered by their ID.
+     */
+    @Test
+    void testPageWithTracksKeepsMappedOrderUnlessOrderedByThem() {
+        var album = persistAlbum();
+
+        try {
+            var byId = Map.<String, Object>of("id", album.getId());
+            var mapped = albumRepository.getPage(Page.with().allMatch(byId).build(), false, "tracks");
+            assertEquals(List.of("c", "b", "a"), mapped.get(0).getTracks().stream().map(Track::getTitle).toList(), "Mapped order");
+            var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.title", true).build(), false, "tracks");
+            assertEquals(List.of("a", "b", "c"), ordered.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page");
+            var orderedById = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.id", true).build(), false, "tracks");
+            var titlesById = album.getTracks().stream().sorted(comparing(Track::getId)).map(Track::getTitle).toList();
+            assertEquals(titlesById, orderedById.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page by ID");
+            var titlesByIdDescending = new ArrayList<>(titlesById);
+            Collections.reverse(titlesByIdDescending);
+            var orderedByIdDescending = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.id", false).build(), false, "tracks");
+            var descendingTitles = orderedByIdDescending.get(0).getTracks().stream().map(Track::getTitle).toList();
+            assertEquals(titlesByIdDescending, descendingTitles, "Ordering of page by ID descending");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * The fetched embeddable elements of a page filtered or ordered by their fields are those which the database selects, in the order of the database. This
+     * includes an element whose association is <code>NULL</code>, and the position of <code>NULL</code> in the ordering.
+     */
+    @Test
+    void testPageWithCreditsFilteredOrOrderedByThemFollowsDatabase() {
+        var album = persistAlbum();
+
+        try {
+            var byId = Map.<String, Object>of("id", album.getId());
+            assertCreditsFilteredBy(album, "credits.name", Like.contains("AN"), "LOWER(c.name) LIKE ?2", "%an%");
+            assertCreditsFilteredBy(album, "credits.person", null, "c.person IS NULL");
+            var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("credits.role", true).build(), false, "credits");
+            assertEquals(creditNames(album, " ORDER BY c.role"), namesOf(ordered.get(0).getCredits()), "Credits ordered by role");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * The fetched elements of a collection of entities with an embedded ID, annotated with <code>@OrderBy</code>, are in that order.
+     */
+    @Test
+    void testPageWithMembershipsKeepsMappedOrderOfEmbeddedIdEntities() {
+        var start = LocalDate.of(2026, 1, 1);
+        var memberships = List.of(
+            new Membership(new MembershipId("ordered-a", "x"), new Period(start, null)),
+            new Membership(new MembershipId("ordered-b", "x"), new Period(start.plusMonths(2), null)),
+            new Membership(new MembershipId("ordered-c", "x"), new Period(start.plusMonths(1), null))
+        );
+        memberships.forEach(membership -> transactionServiceCDI.run(() -> membershipRepository.persist(membership)));
+        var album = new Album();
+        album.setTitle("memberships");
+        album.getMemberships().addAll(memberships);
+        transactionServiceCDI.run(() -> albumRepository.persist(album));
+
+        try {
+            var page = albumRepository.getPage(Page.with().allMatch(Map.of("id", album.getId())).build(), false, "memberships");
+            var memberNames = page.get(0).getMemberships().stream().map(membership -> membership.getId().getMemberName()).toList();
+            assertEquals(List.of("ordered-b", "ordered-c", "ordered-a"), memberNames, "Mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+            transactionServiceCDI.run(() -> memberships.forEach(membership -> membershipRepository.delete(membershipRepository.getById(membership.getId()))));
+        }
+    }
+
+    private void assertCreditsFilteredBy(Album album, String field, Object criteria, String condition, Object... parameters) {
+        var criteriaMap = new HashMap<String, Object>(Map.of("id", album.getId()));
+        criteriaMap.put(field, criteria);
+        var page = albumRepository.getPage(Page.with().allMatch(criteriaMap).build(), false, "credits");
+        var expected = Set.copyOf(creditNames(album, " AND " + condition, parameters));
+        assertEquals(1, page.size(), "Album by " + field);
+        assertEquals(expected, Set.copyOf(namesOf(page.get(0).getCredits())), "Credits by " + field);
+    }
+
+    private List<String> creditNames(Album album, String condition, Object... parameters) {
+        var query = albumRepository.getEntityManager()
+            .createQuery("SELECT c.name FROM Album a JOIN a.credits c WHERE a.id = ?1" + condition, String.class)
+            .setParameter(1, album.getId());
+
+        for (var i = 0; i < parameters.length; i++) {
+            query.setParameter(i + 2, parameters[i]);
+        }
+
+        return List.copyOf(query.getResultList());
+    }
+
+    private static List<String> namesOf(List<Credit> credits) {
+        return credits.stream().map(Credit::getName).toList();
+    }
+
+    private Album persistAlbum() {
+        var album = new Album();
+        album.setTitle("album");
+
+        for (var title : List.of("a", "b", "c")) {
+            var track = new Track();
+            track.setTitle(title);
+            track.setAlbum(album);
+            album.getTracks().add(track);
+        }
+
+        transactionServiceCDI.run(() -> {
+            var person = personRepository.getById(1L);
+            album.getCredits().addAll(
+                List.of(new Credit("anna", "lead", person), new Credit("Bob", null, null), new Credit("Jan", "bass", person), new Credit("Zed", "drums", null))
+            );
+            albumRepository.persist(album);
+        });
+        return album;
+    }
+
+    private void deleteAlbum(Album album) {
+        transactionServiceCDI.run(() -> albumRepository.delete(albumRepository.getById(album.getId())));
+    }
+
     private List<Phone> persistTemporaryPhones(List<String> values) {
         var phones = new ArrayList<Phone>();
 
@@ -1616,6 +1863,37 @@ public class EntityRepositoryIT {
     void testManageIfNecessaryOfDtoReturnsItUnchanged() {
         var card = new PersonCard(1L, "card@example.com", "address", 0L);
         assertSame(card, transactionServiceCDI.call(() -> personRepository.manageIfNecessary(card)), "DTO");
+    }
+
+    /**
+     * {@link EntityRepository#manage(Object)} of an entity which has been deleted in the meanwhile throws {@link EntityNotFoundException}, while
+     * {@link EntityRepository#manageIfNecessary(Object)} returns it unchanged.
+     */
+    @Test
+    void testManageOfDeletedEntityThrowsWhileManageIfNecessaryReturnsIt() {
+        var text = new Text();
+        var id = transactionServiceCDI.call(() -> textRepository.persist(text));
+        transactionServiceCDI.run(() -> textRepository.delete(textRepository.getById(id)));
+        text.setId(id);
+
+        assertThrows(EntityNotFoundException.class, () -> transactionServiceCDI.call(() -> textRepository.manage(text)), "manage");
+        assertSame(text, transactionServiceCDI.call(() -> textRepository.manageIfNecessary(text)), "manageIfNecessary");
+    }
+
+    /**
+     * {@link EntityRepository#manageIfNecessary(Object)} of a detached lazy association, which is an uninitialized proxy on Hibernate, returns the managed
+     * entity.
+     */
+    @Test
+    void testManageIfNecessaryOfDetachedLazyOwnerReturnsManagedEntity() {
+        var phoneId = phoneRepository.getPage(Page.ONE, false).get(0).getId();
+        var owner = transactionServiceCDI.call(() -> phoneRepository.getById(phoneId).getOwner());
+        var expectedEmail = personRepository.getById(owner.getId()).getEmail();
+        var state = transactionServiceCDI.call(() -> {
+            var managed = personRepository.manageIfNecessary(owner);
+            return List.of(personRepository.getEntityManager().contains(managed), managed.getEmail());
+        });
+        assertEquals(List.of(true, expectedEmail), state, "Managed, with email");
     }
 
     @Test
@@ -1710,7 +1988,6 @@ public class EntityRepositoryIT {
      * <code>equals()</code>.
      */
     @Test
-    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not load a lazy association of the fetched elements")
     void testPageWithFetchedManyToManyFilteredByEntityValueWithoutEquals() {
         var root = newCategory("m2m-root", "Root");
         var first = newCategory("m2m-a", "A");
@@ -1904,29 +2181,25 @@ public class EntityRepositoryIT {
             assertEquals(
                 List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("id", codes.get(0))).build(), true)), "Criteria on id"
             );
-            assertEquals(
-                2, articleRepository.getPage(Page.with().allMatch(Map.of("category.name", Like.startsWith("Fir"))).build(), true).size(),
-                "Criteria on association"
-            );
-            assertEquals(1, articleRepository.getPage(Page.with().allMatch(Map.of("category", second)).build(), true).size(), "Criteria on entity");
+            var firstCategory = descendingCodes.subList(1, 3);
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "category.name", Like.startsWith("Fir")), "Criteria on association");
+            assertEquals(List.of(codes.get(2)), codesOfArticles(Map.of(), "category", second), "Criteria on entity");
 
-            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", "x")).build(), true).size(), "Criteria on element collection");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "tags", "x"), "Criteria on element collection");
             var ignoreCase = articleRepository.getPage(Page.with().allMatch(Map.of("tags", "X")).build(), true);
-            assertEquals(2, ignoreCase.size(), "Criteria on element collection ignore case");
+            assertEquals(firstCategory, codesOf(ignoreCase), "Criteria on element collection ignore case");
             assertEquals(2, ignoreCase.getEstimatedTotalNumberOfResults(), "Count of criteria on element collection ignore case");
             assertEquals(
                 List.of(codes.get(0)), codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of("x", "y"))).build(), true)),
                 "Criteria on all of element collection"
             );
-            assertEquals(
-                2, articleRepository.getPage(Page.with().allMatch(Map.of("tags", Like.contains("X"))).build(), true).size(), "Like on element collection"
-            );
-            assertEquals(3, countArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
-            assertEquals(0, countArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
-            assertEquals(3, countArticles(TITLED, "deleted", Like.contains("e")), "Like on boolean matching true and false");
-            assertEquals(0, countArticles(TITLED, "deleted", Like.contains("foo")), "Like on boolean matching neither true nor false");
-            assertEquals(1, countArticles(TITLED, "flags", Like.contains("tru")), "Like on boolean element collection");
-            assertEquals(0, countArticles(TITLED, "flags", Like.contains("foo")), "Like on boolean element collection matching neither");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "tags", Like.contains("X")), "Like on element collection");
+            assertEquals(descendingCodes, codesOfArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
+            assertEquals(List.of(), codesOfArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
+            assertEquals(descendingCodes, codesOfArticles(TITLED, "deleted", Like.contains("e")), "Like on boolean matching true and false");
+            assertEquals(List.of(), codesOfArticles(TITLED, "deleted", Like.contains("foo")), "Like on boolean matching neither true nor false");
+            assertEquals(List.of(codes.get(0)), codesOfArticles(TITLED, "flags", Like.contains("tru")), "Like on boolean element collection");
+            assertEquals(List.of(), codesOfArticles(TITLED, "flags", Like.contains("foo")), "Like on boolean element collection matching neither");
             assertEquals(
                 List.of(articles.get(2).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", Not.value(Like.contains("x")))).build(), true)),
@@ -1937,7 +2210,7 @@ public class EntityRepositoryIT {
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("tags", List.of(Like.contains("x"), "y"))).build(), true)),
                 "Like and value on all of element collection"
             );
-            assertEquals(2, articleRepository.getPage(Page.with().allMatch(Map.of("ratings", "05")).build(), true).size(), "Numeric element collection");
+            assertEquals(firstCategory, codesOfArticles(Map.of(), "ratings", "05"), "Numeric element collection");
             assertEquals(
                 List.of(articles.get(0).getCode()),
                 codesOf(articleRepository.getPage(Page.with().allMatch(Map.of("ratings", List.of(5, 10))).build(), true)),
@@ -1987,6 +2260,14 @@ public class EntityRepositoryIT {
             assertEquals(codes.subList(2, 3), codesOf(nextPage), "Next page by cursor");
             var nextPageById = articleRepository.getPage(Page.with().range(0, 2, Map.of("id", codes.get(2)), false).allMatch(TITLED).build(), false);
             assertEquals(descendingCodes.subList(1, 3), codesOf(nextPageById), "Next page by cursor values on id");
+
+            transactionServiceCDI.run(() -> articleRepository.softDelete(articleRepository.getById(articles.get(2).getCode())));
+            var deleted = List.of(articles.get(2).getCode());
+            var notDeleted = descendingCodes.stream().filter(code -> !deleted.contains(code)).toList();
+            assertEquals(deleted, codesOfArticles(TITLED, "deleted", Bool.value(true)), "Bool true on soft deleted field");
+            assertEquals(notDeleted, codesOfArticles(TITLED, "deleted", Bool.value(false)), "Bool false on soft deleted field");
+            assertEquals(deleted, codesOfArticles(TITLED, "deleted", Like.contains("tru")), "Like on boolean matching true");
+            assertEquals(notDeleted, codesOfArticles(TITLED, "deleted", Like.contains("fals")), "Like on boolean matching false");
         }
         finally {
             deleteArticles(articles);
@@ -2030,10 +2311,10 @@ public class EntityRepositoryIT {
         return category;
     }
 
-    private int countArticles(Map<String, Object> criteria, String field, Object value) {
+    private List<Long> codesOfArticles(Map<String, Object> criteria, String field, Object value) {
         var allCriteria = new HashMap<>(criteria);
         allCriteria.put(field, value);
-        return articleRepository.getPage(Page.with().allMatch(allCriteria).build(), true).size();
+        return codesOf(articleRepository.getPage(Page.with().allMatch(allCriteria).build(), true));
     }
 
     private void deleteArticles(List<Article> articles) {

@@ -19,6 +19,7 @@ import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
+import java.util.Optional;
 
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.SingularAttribute;
@@ -50,13 +51,11 @@ final class IdAttribute {
      * @throws IllegalArgumentException When the entity type has an @IdClass, or an ID of a primitive type.
      */
     static IdAttribute of(EntityType<?> entityType) {
-        var attribute = entityType.hasSingleIdAttribute()
-            ? entityType.getSingularAttributes().stream().filter(SingularAttribute::isId).findFirst().orElse(null)
-            : null;
-
-        if (attribute == null || attribute.getJavaType().isPrimitive()) {
+        if (!isSupported(entityType)) {
             throw new IllegalArgumentException(format(ERROR_UNSUPPORTED_ID, entityType.getJavaType()));
         }
+
+        var attribute = findId(entityType).orElseThrow();
 
         var member = attribute.getJavaMember();
 
@@ -65,6 +64,28 @@ final class IdAttribute {
         }
 
         return new IdAttribute(attribute.getName(), member);
+    }
+
+    /**
+     * Returns the single <code>@Id</code> or <code>@EmbeddedId</code> attribute of the given entity type, if any.
+     *
+     * @param entityType The metamodel of the entity type.
+     * @return The single ID attribute of the given entity type, or empty when it has an @IdClass.
+     */
+    static Optional<SingularAttribute<?, ?>> findId(EntityType<?> entityType) {
+        return entityType.hasSingleIdAttribute()
+            ? entityType.getSingularAttributes().stream().filter(SingularAttribute::isId).findFirst().map(attribute -> (SingularAttribute<?, ?>) attribute)
+            : Optional.empty();
+    }
+
+    /**
+     * Returns whether the given entity type has a single ID attribute of a non-primitive type, as {@link #of(EntityType)} requires.
+     *
+     * @param entityType The metamodel of the entity type.
+     * @return Whether the ID of the given entity type is supported.
+     */
+    static boolean isSupported(EntityType<?> entityType) {
+        return findId(entityType).filter(attribute -> !attribute.getJavaType().isPrimitive()).isPresent();
     }
 
     String getName() {

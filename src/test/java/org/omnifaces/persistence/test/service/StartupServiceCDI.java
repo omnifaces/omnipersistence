@@ -18,7 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.Initialized;
@@ -40,6 +40,7 @@ public class StartupServiceCDI {
     public static final int TOTAL_RECORDS = 200;
     public static final int ROWS_PER_PAGE = 10;
     public static final int TOTAL_PHONES_PER_PERSON_0 = 3;
+    private static final long TEST_DATA_SEED = 1L;
     private static final int NICKNAMELESS_EVERY = 5;
     private static final int NICKNAMELESS_REMAINDER = 2;
 
@@ -67,7 +68,7 @@ public class StartupServiceCDI {
         var genders = Gender.values();
         var phoneTypes = Phone.Type.values();
         var groups = Arrays.asList(Group.values());
-        var random = ThreadLocalRandom.current();
+        var random = new Random(TEST_DATA_SEED);
 
         for (var i = 0; i < TOTAL_RECORDS; i++) {
             var person = new Person();

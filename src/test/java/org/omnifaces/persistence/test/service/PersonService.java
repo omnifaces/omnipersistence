@@ -66,6 +66,14 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         return getPage(page, count, (builder, query, person) -> person.fetch(getMetamodel().getList("phones", Phone.class), LEFT));
     }
 
+    public PartialResultList<Person> getPageWithAddressAndPhoneOwnersViaFetchAttributes(Page page, boolean count) {
+        return getPage(page, count, (builder, query, person) -> {
+            person.fetch(getMetamodel().getSingularAttribute("address", Address.class));
+            person.fetch(getMetamodel().getList("phones", Phone.class), LEFT)
+                .fetch(getEntityManager().getMetamodel().entity(Phone.class).getSingularAttribute("owner", Person.class));
+        });
+    }
+
     public boolean isManagedAfterPageWithPhones(Long id, Page page) {
         var person = getById(id);
         getPageWithPhones(page, false);
@@ -181,6 +189,22 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
         });
     }
 
+    /**
+     * The person cards with as address string the concatenation of the ID, a String and an Integer, of which only the String is a String.
+     */
+    public PartialResultList<PersonCard> getPageOfPersonCardsWithNonStringConcatParts(Page page, boolean count) {
+        return getPage(page, count, PersonCard.class, (builder, query, person) -> {
+            LinkedHashMap<Getter<PersonCard>, Expression<?>> mapping = new LinkedHashMap<>();
+            mapping.put(PersonCard::getId, person.get("id"));
+            mapping.put(PersonCard::getEmail, person.get("email"));
+            mapping.put(PersonCard::getAddressString, concat(builder, person.get("id"), "-", 1));
+            mapping.put(PersonCard::getTotalPhones, builder.count(person.join("phones")));
+
+            query.groupBy(person.get("id"), person.get("email"));
+            return mapping;
+        });
+    }
+
     public PartialResultList<Person> getAllWithAddress() {
         return getPageWithAddress(Page.ALL, false);
     }
@@ -224,6 +248,18 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
 
     public Optional<Person> findFirstByIdRange(Long minId, Long maxId) {
         return findFirst("WHERE e.id BETWEEN ?1 AND ?2 ORDER BY e.id", minId, maxId);
+    }
+
+    public List<Person> listByIdRangeViaNamedParameters(Long minId, Long maxId) {
+        return list("WHERE e.id BETWEEN :minId AND :maxId ORDER BY e.id", Map.of("minId", minId, "maxId", maxId));
+    }
+
+    public Optional<Person> findByIdAndEmailViaNamedParameters(Long id, String email) {
+        return find("WHERE e.id = :id AND e.email = :email", Map.of("id", id, "email", email));
+    }
+
+    public Optional<Person> findFirstByIdRangeViaNamedParameters(Long minId, Long maxId) {
+        return findFirst("WHERE e.id BETWEEN :minId AND :maxId ORDER BY e.id", Map.of("minId", minId, "maxId", maxId));
     }
 
     public int updateEmailByIdRange(String email, Long minId, Long maxId) {

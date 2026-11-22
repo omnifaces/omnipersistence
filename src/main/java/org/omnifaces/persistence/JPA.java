@@ -395,7 +395,9 @@ public final class JPA {
     // Criteria utils ---------------------------------------------------------------------------------------------------------------------
 
     /**
-     * Returns a SQL CONCAT(...) of given expressions or strings.
+     * Returns a SQL CONCAT(...) of given expressions or strings. On SQL Server with EclipseLink or OpenJPA this is the <code>CONCAT()</code> function, because
+     * their <code>+</code> operator adds a number instead of concatenating it. The <code>CONCAT()</code> function of SQL Server takes <code>NULL</code> as an
+     * empty string.
      *
      * @param builder The involved criteria builder.
      * @param expressionsOrStrings Expressions or Strings.
@@ -415,6 +417,12 @@ public final class JPA {
                 return builder.literal(expressionOrString.toString());
             }
         }).toList();
+
+        var service = getCurrentBaseEntityService();
+
+        if (service != null && service.getDatabase() == SQLSERVER && service.getProvider() != HIBERNATE) {
+            return builder.function("CONCAT", String.class, expressions.toArray(Expression<?>[]::new));
+        }
 
         Expression<String> result = expressions.get(0);
 
@@ -518,8 +526,6 @@ public final class JPA {
     @SuppressWarnings("unchecked")
     public static Expression<String> castAsString(CriteriaBuilder builder, Expression<?> expression) {
 
-        // TODO: Improvement for all providers is expected in JPA 3.2 with new Expression#cast() API.
-
         var service = requireCurrentBaseEntityService("castAsString");
         var type = expression.getJavaType();
 
@@ -536,15 +542,15 @@ public final class JPA {
         if (service.getProvider() == HIBERNATE) {
             var cast = findMethod(expression, "cast", Class.class);
 
-            if (cast.isPresent()) { // Hibernate 6.6.0.
-                return invokeMethod(expression, cast.get(), String.class); // https://hibernate.atlassian.net/browse/HHH-18710
+            if (cast.isPresent()) { // Expression#as() does not convert, as its javadoc specifies.
+                return invokeMethod(expression, cast.get(), String.class);
             }
             else {
                 return expression.as(String.class);
             }
         }
 
-        // EclipseLink and OpenJPA have a broken Expression#as() implementation, need to delegate to DB specific function.
+        // Expression#as() does not convert, and EclipseLink renders Expression#cast(String.class) without CAST, so delegate to a DB specific function.
 
         // PostgreSQL is quite strict in string casting, it has to be performed explicitly.
         if (service.getDatabase() == POSTGRESQL) {

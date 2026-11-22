@@ -12,25 +12,23 @@
  */
 package org.omnifaces.persistence.service;
 
-import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.naturalOrder;
-import static java.util.Comparator.nullsFirst;
-import static java.util.Comparator.nullsLast;
 import static java.util.Objects.requireNonNullElse;
-import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toMap;
 import static org.omnifaces.persistence.criteria.Criteria.isMultiValued;
-import static org.omnifaces.persistence.service.BaseEntityService.createTypedCriteria;
 import static org.omnifaces.persistence.service.BaseEntityService.isEmptyMultiValue;
 import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.reflect.Reflections.invokeSetter;
 import static org.omnifaces.utils.stream.Streams.stream;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,16 +37,20 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
+import jakarta.persistence.Query;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Fetch;
@@ -56,11 +58,16 @@ import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.BasicType;
+import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.MapAttribute;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
+import jakarta.persistence.metamodel.Type;
 
-import org.omnifaces.persistence.criteria.Criteria;
+import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.query.Page;
 
@@ -75,9 +82,12 @@ import org.omnifaces.persistence.query.Page;
  * <p>
  * BaseEntityService then runs one secondary query per top level fetch path on the returned root entities. The nested fetch paths of a top level fetch path are
  * fetched by the same query, so two nested collections of one top level fetch path form a cartesian product. Finally, this root filters and sorts each fetched
- * collection in memory according to the criteria and ordering of the page, if applicable. This applies to the direct properties of the items of a top level
- * fetch path only. It clears the persistence context before it sets the filtered and sorted collections, so that the provider does not flush them. All entities
- * which were managed by the {@link EntityManager} are then detached. Without postponed fetches there is no secondary query, and the entities stay managed.
+ * collection which is reached via singular associations only, also one nested in a singular association such as <code>owner.phones</code>, see
+ * {@link FetchedCollection}. The database filters and orders the elements by the required criteria and the ordering of the page, so that its collation and its
+ * placement of <code>NULL</code> apply. A negated criteria does not filter the elements. A collection nested in a collection is left as loaded. The entity
+ * elements of a fetched collection which is not a <code>Set</code> are kept once, because a provider may repeat a nested fetched collection per root row. It
+ * clears the persistence context before it sets the filtered and sorted collections, so that the provider does not flush them. All entities which were managed
+ * by the {@link EntityManager} are then detached. Without postponed fetches there is no secondary query, and the entities stay managed.
  * <p>
  * The join type of a fetch is ignored. An actual fetch and the secondary query always use a left fetch join.
  * <p>
@@ -91,19 +101,28 @@ import org.omnifaces.persistence.query.Page;
  */
 class PostponedFetchRoot<X> extends RootWrapper<X> {
 
-    private static final ClassValue<Map<String, Boolean>> ENUMERATED_BY_STRING = new ClassValue<>() {
+    private static final ClassValue<Map<String, MappedOrder>> MAPPED_ORDER = new ClassValue<>() {
 
         @Override
-        protected Map<String, Boolean> computeValue(Class<?> type) {
+        protected Map<String, MappedOrder> computeValue(Class<?> type) {
             return new ConcurrentHashMap<>();
         }
 
     };
 
+    private static final Pattern PATH_SEPARATOR = Pattern.compile("\\.");
+    private static final Pattern ORDER_BY_ITEM_SEPARATOR = Pattern.compile("\\s*,\\s*");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final String ASC = "ASC";
+    private static final String DESC = "DESC";
+    private static final Object UNREACHABLE = new Object();
+
+    private final Provider provider;
     private final Set<String> postponedFetches;
 
-    public PostponedFetchRoot(Root<X> wrapped) {
+    public PostponedFetchRoot(Root<X> wrapped, Provider provider) {
         super(wrapped);
+        this.provider = provider;
         postponedFetches = new HashSet<>(2);
     }
 
@@ -178,44 +197,84 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
         return Set.copyOf(postponedFetches);
     }
 
+    /**
+     * Selects the elements of a fetched collection as the database filters and orders them.
+     */
+    @FunctionalInterface
+    interface ElementRanking {
+
+        /**
+         * Returns a row per element of given collection path of the root entities with given IDs which matches given criteria, in given ordering. Each row
+         * holds the ID of the root entity, followed by the value of each given field of the element. A field equal to given collection path stands for the
+         * element itself.
+         *
+         * @param collectionPath The path of the collection, reached via singular associations only.
+         * @param ids The IDs of the root entities.
+         * @param criteria The required criteria on the fields of the elements, keyed by their full path.
+         * @param ordering The ordering on the fields of the elements, keyed by their full path.
+         * @param fields The full paths of the fields to select.
+         * @return The rows of the matching elements.
+         */
+        List<Object[]> rank(String collectionPath, List<?> ids, Map<String, Object> criteria, Map<String, Boolean> ordering, List<String> fields);
+
+    }
+
+    /**
+     * Runs the secondary query per top level fetch path on given entities, and sets the filtered and sorted fetched collections onto them, see the class
+     * javadoc.
+     */
     public <E, T extends E> List<T> runPostponedFetches(
-        Page page, EntityManager entityManager, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, Function<Object, ?> idOf,
-        java.util.function.Predicate<Object> isEntity, boolean nullsLow, List<T> entities
+        Page page, EntityManager entityManager, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, ElementRanking ranking,
+        Function<Object, ?> idOf, java.util.function.Predicate<Object> isEntity, List<T> entities
     )
     {
         var fetchPaths = postponedFetches.stream().filter(path -> !path.contains(".")).sorted().toList();
         var distinctEntities = entities.stream().distinct().toList(); // May return duplicate entities when a collection join is used for filtering.
         var ids = distinctEntities.stream().map(idOf).toList();
         var fetchedEntities = new HashMap<String, Map<Object, Object>>(fetchPaths.size());
+        var processedPaths = postponedFetches.stream().sorted().toList(); // A parent path sorts before its nested paths.
+        var model = entityManager.getMetamodel().entity(entityType);
+        var collections = new HashMap<String, FetchedCollection>();
+
+        for (var path : processedPaths) {
+            var collection = FetchedCollection.of(model, path, page, idOf, isEntity);
+
+            if (collection != null) {
+                collections.put(path, collection);
+            }
+        }
 
         for (var fetchPath : fetchPaths) {
-            var query = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idRestriction, fetchPath, ids);
-            var fetchedById = entityManager.createQuery(query).getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
+            var fetchFields = new ArrayList<Entry<Class<?>, String>>();
+            var collection = collections.get(fetchPath);
+            var elementFields = collection != null ? collection.getElementFields() : List.<String>of();
+            var criteriaQuery = buildFetchQuery(entityManager.getCriteriaBuilder(), entityType, idRestriction, fetchPath, ids, elementFields, fetchFields);
+            var query = entityManager.createQuery(criteriaQuery);
+            fetchFields.forEach(field -> provider.configureFetchField(query, field.getKey(), field.getValue()));
+            var fetchedById = query.getResultList().stream().collect(toMap(idOf, Object.class::cast, (l, r) -> l));
             var fetchedByEntity = new IdentityHashMap<Object, Object>(distinctEntities.size());
             distinctEntities.forEach(entity -> fetchedByEntity.put(entity, fetchedById.get(idOf.apply(entity))));
             fetchedEntities.put(fetchPath, fetchedByEntity);
         }
 
+        collections.values().forEach(collection -> collection.rank(ranking, ids));
         initializeNestedFetches(distinctEntities, fetchedEntities);
         var fetchedEntityProperties = new ArrayList<List<Object>>();
-        var filters = fetchPaths.stream().collect(
-            toMap(
-                identity(),
-                path -> collectFiltersForFetch(path, page.getRequiredCriteria(), isEntity, idOf)
-            )
-        );
-        buildPostponedFetches(page, nullsLow, filters, distinctEntities, fetchPaths, fetchedEntities, fetchedEntityProperties);
+        buildPostponedFetches(collections, idOf, isEntity, distinctEntities, processedPaths, fetchedEntities, fetchedEntityProperties);
         entityManager.clear(); // Clear before applying the copies, or the provider flushes them.
-        applyPostponedFetches(distinctEntities, fetchPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
+        applyPostponedFetches(distinctEntities, processedPaths, fetchedEntityProperties); // Set filtered+sorted copies onto the now-detached entities.
         return distinctEntities;
     }
 
     /**
      * Builds a query which selects the entities with given IDs, with a left fetch join for given top level fetch path and for each postponed fetch nested in
-     * it.
+     * it. It adds an entry to given fetch fields for each nested postponed fetch. It adds an entry for each attribute along each given element field as well,
+     * because {@link FetchedCollection} reads them from the fetched elements. The query must load these, see
+     * {@link Provider#configureFetchField(Query, Class, String)}.
      */
     private <E> CriteriaQuery<E> buildFetchQuery(
-        CriteriaBuilder criteriaBuilder, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, String fetchPath, List<?> ids
+        CriteriaBuilder criteriaBuilder, Class<E> entityType, BiFunction<Root<E>, List<?>, Predicate> idRestriction, String fetchPath, List<?> ids,
+        List<String> elementFields, List<Entry<Class<?>, String>> fetchFields
     )
     {
         var query = criteriaBuilder.createQuery(entityType);
@@ -225,19 +284,60 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
 
         for (var path : postponedFetches.stream().filter(path -> path.equals(fetchPath) || path.startsWith(fetchPath + ".")).sorted().toList()) {
             var lastDot = path.lastIndexOf('.');
-            fetches.put(path, fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot)).fetch(path.substring(lastDot + 1), LEFT));
+            var parent = fetches.get(lastDot < 0 ? "" : path.substring(0, lastDot));
+            var attribute = path.substring(lastDot + 1);
+
+            if (parent instanceof Fetch<?, ?> parentFetch && elementTypeOf(parentFetch.getAttribute()) instanceof ManagedType<?> parentType) {
+                fetchFields.add(Map.entry(parentType.getJavaType(), attribute));
+            }
+
+            fetches.put(path, parent.fetch(attribute, LEFT));
         }
 
+        var elementType = elementTypeOf(((Fetch<?, ?>) fetches.get(fetchPath)).getAttribute());
+        elementFields.forEach(field -> addFetchFields(elementType, PATH_SEPARATOR.split(field), fetchFields));
         return query.select(root).distinct(true).where(idRestriction.apply(root, ids));
     }
 
     /**
-     * Loads each nested fetch path via its getters while the entities are still managed. OpenJPA does not load a nested fetch of a criteria query, and a
-     * detached entity has no access to unloaded properties. On other providers the nested fetch paths are already loaded.
+     * Returns the type of the elements of given attribute when it is plural, else the type of given attribute.
+     */
+    private static Type<?> elementTypeOf(Attribute<?, ?> attribute) {
+        return attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute
+            ? pluralAttribute.getElementType()
+            : ((SingularAttribute<?, ?>) attribute).getType();
+    }
+
+    /**
+     * Adds an entry to given fetch fields for each attribute along given path from given type, as far as the path goes through managed types.
+     */
+    private static void addFetchFields(Type<?> type, String[] path, List<Entry<Class<?>, String>> fetchFields) {
+        var currentType = type;
+
+        for (var attributeName : path) {
+            if (!(currentType instanceof ManagedType<?> managedType)) {
+                return;
+            }
+
+            fetchFields.add(Map.entry(managedType.getJavaType(), attributeName));
+
+            try {
+                currentType = elementTypeOf(managedType.getAttribute(attributeName));
+            }
+            catch (IllegalArgumentException unknownAttribute) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Loads each nested fetch path via its getters. OpenJPA does not load a nested fetch of a criteria query, and on a detached entity an unloaded property is
+     * <code>null</code>, so on OpenJPA the fetch query also loads them via {@link Provider#configureFetchField(Query, Class, String)}. On other providers the
+     * nested fetch paths are already loaded.
      */
     private void initializeNestedFetches(List<?> entities, Map<String, Map<Object, Object>> fetchedEntities) {
         for (var path : postponedFetches) {
-            var properties = path.split("\\.");
+            var properties = PATH_SEPARATOR.split(path);
 
             if (properties.length > 1) {
                 var fetched = fetchedEntities.get(properties[0]);
@@ -256,104 +356,108 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     /**
-     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities. The order of the entities is left as the paged query
-     * returned it.
+     * Processes "postponed" fetches by copying, filtering, and sorting child collections/entities, also those nested in singular associations, such as
+     * <code>owner.phones</code>. The order of the entities is left as the paged query returned it.
      */
     private static <T> void buildPostponedFetches(
-        Page page, boolean nullsLow, Map<String, Map<String, Object>> filters, List<T> entities, List<String> fetchPaths,
-        Map<String, Map<Object, Object>> fetchedEntities,
-        List<List<Object>> fetchedEntityProperties
+        Map<String, FetchedCollection> collections, Function<Object, ?> idOf, java.util.function.Predicate<Object> isEntity, List<T> entities,
+        List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, List<List<Object>> fetchedEntityProperties
     )
     {
-        entities.forEach(
-            entity -> fetchedEntityProperties.add(processEntityFetches(entity, fetchPaths, fetchedEntities, page, nullsLow, filters).fetchedEntityProperties())
+        entities.forEach(entity -> fetchedEntityProperties.add(processEntityFetches(entity, paths, fetchedEntities, collections, idOf, isEntity)));
+    }
+
+    private static <T> List<Object> processEntityFetches(
+        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Map<String, FetchedCollection> collections, Function<Object, ?> idOf,
+        java.util.function.Predicate<Object> isEntity
+    )
+    {
+        return paths.stream().map(path -> {
+            var properties = PATH_SEPARATOR.split(path);
+            var raw = getViaSingulars(requireNonNullElse(fetchedEntities.get(properties[0]).get(entity), entity), properties);
+
+            if (!(raw instanceof Collection<?> col)) {
+                return raw; // @OneToOne / @ManyToOne, or UNREACHABLE.
+            }
+
+            var elements = (raw instanceof Set ? col.stream() : distinctEntityElements(col, isEntity)).collect(toCollection(ArrayList<Object>::new));
+            var collection = collections.get(path);
+
+            if (collection != null) {
+                collection.arrange(elements, idOf.apply(entity));
+            }
+
+            return (raw instanceof Set) ? new LinkedHashSet<>(elements) : elements;
+        }).toList();
+    }
+
+    /**
+     * Returns the attribute of given path from given type, or <code>null</code> when the path passes a plural attribute before its last attribute.
+     *
+     * @throws IllegalArgumentException When an attribute of given path does not exist.
+     */
+    private static Attribute<?, ?> findAttributeViaSingulars(ManagedType<?> type, String[] path) {
+        var currentType = type;
+        Attribute<?, ?> attribute = null;
+
+        for (var attributeName : path) {
+            if (currentType == null || attribute != null && attribute.isCollection()) {
+                return null;
+            }
+
+            attribute = currentType.getAttribute(attributeName);
+            currentType = elementTypeOf(attribute) instanceof ManagedType<?> managedType ? managedType : null;
+        }
+
+        return attribute;
+    }
+
+    /**
+     * The <code>@OrderBy</code> value of a collection, or <code>null</code> without one, and whether it has an <code>@OrderColumn</code>.
+     */
+    record MappedOrder(String orderBy, boolean orderColumn) {
+
+        /**
+         * Returns the <code>@OrderBy</code> value which applies, or <code>null</code> when there is none. It does not apply along with an
+         * <code>@OrderColumn</code>, as specified by <code>@OrderBy</code>.
+         */
+        String effectiveOrderBy() {
+            return orderColumn ? null : orderBy;
+        }
+
+        boolean isPresent() {
+            return orderBy != null || orderColumn;
+        }
+
+    }
+
+    /**
+     * Returns the mapped order of given property of given type, cached in {@link #MAPPED_ORDER}.
+     */
+    static MappedOrder getMappedOrder(Class<?> type, String property) {
+        return MAPPED_ORDER.get(type).computeIfAbsent(
+            property,
+            key -> new MappedOrder(
+                findAnnotation(type, property, OrderBy.class).map(OrderBy::value).orElse(null), findAnnotation(type, property, OrderColumn.class).isPresent()
+            )
         );
     }
 
-    private record EntityRow<T>(T entity, List<Object> fetchedEntityProperties) {
-    }
-
-    private static <T> EntityRow<T> processEntityFetches(
-        T entity, List<String> paths, Map<String, Map<Object, Object>> fetchedEntities, Page page, boolean nullsLow, Map<String, Map<String, Object>> filters
-    )
-    {
-        var copies = paths.stream().map(path -> {
-            var raw = invokeGetter(requireNonNullElse(fetchedEntities.get(path).get(entity), entity), path);
-
-            if (!(raw instanceof Collection<?> col)) {
-                return raw; // @OneToOne / @ManyToOne
-            }
-
-            var pathFilters = filters.get(path);
-            var filtered = col.stream().filter(item -> matchesFetchFilters(item, pathFilters))
-                .collect(toCollection(ArrayList::new));
-            var itemComp = buildFetchItemComparator(path, page.getOrdering(), nullsLow);
-
-            if (itemComp != null) {
-                filtered.sort(itemComp);
-            }
-
-            return (raw instanceof Set) ? new LinkedHashSet<>(filtered) : filtered;
-        }).toList();
-
-        return new EntityRow<>(entity, copies);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Comparator<Object> buildFetchItemComparator(String fetchPath, Map<String, Boolean> ordering, boolean nullsLow) {
-        Comparator<Comparable<Object>> nullsOrder = nullsLow ? nullsFirst(naturalOrder()) : nullsLast(naturalOrder());
-        return ordering.entrySet().stream()
-            .filter(entry -> entry.getKey().startsWith(fetchPath + "."))
-            .map(entry -> {
-                var subField = entry.getKey().substring(fetchPath.length() + 1);
-                var ascending = entry.getValue();
-                var fieldComp = comparing(obj -> sortKeyOf(obj, subField), nullsOrder);
-                return ascending ? fieldComp : fieldComp.reversed();
-            })
-            .reduce(Comparator::thenComparing)
-            .orElse(null);
-    }
-
     /**
-     * Returns the value of given field of given fetched element to sort it by. This is the name of an enum which is {@link Enumerated} by name, because the
-     * database sorts such an enum by name.
+     * Returns given annotation of given property of given type or of its superclasses, on the field or on the getter.
      */
-    @SuppressWarnings("unchecked")
-    private static Comparable<Object> sortKeyOf(Object element, String field) {
-        var value = invokeGetter(element, field);
-
-        if (value instanceof Enum<?> enumValue) {
-            var lastDot = field.lastIndexOf('.');
-            Object owner = lastDot < 0 ? element : invokeGetter(element, field.substring(0, lastDot));
-
-            if (isEnumeratedByString(owner.getClass(), field.substring(lastDot + 1))) {
-                return (Comparable<Object>) (Comparable<?>) enumValue.name();
-            }
-        }
-
-        return (Comparable<Object>) value;
-    }
-
-    private static boolean isEnumeratedByString(Class<?> type, String property) {
-        return ENUMERATED_BY_STRING.get(type).computeIfAbsent(property, key -> findEnumerated(type, property).map(e -> e.value() == STRING).orElse(false));
-    }
-
-    /**
-     * Returns the {@link Enumerated} of given property of given type or of its superclasses, on the field as well as on the getter.
-     */
-    private static Optional<Enumerated> findEnumerated(Class<?> type, String property) {
+    private static <A extends Annotation> Optional<A> findAnnotation(Class<?> type, String property, Class<A> annotationType) {
         var capitalized = Character.toUpperCase(property.charAt(0)) + property.substring(1);
         var getterNames = Set.of("get" + capitalized, "is" + capitalized);
 
         for (var cls = type; cls != null; cls = cls.getSuperclass()) {
-            var members = Stream.concat(
+            var annotation = Stream.<AnnotatedElement>concat(
                 Stream.of(cls.getDeclaredFields()).filter(field -> field.getName().equals(property)),
                 Stream.of(cls.getDeclaredMethods()).filter(method -> method.getParameterCount() == 0 && getterNames.contains(method.getName()))
-            );
-            var enumerated = members.map(member -> member.getAnnotation(Enumerated.class)).filter(Objects::nonNull).findFirst();
+            ).map(member -> member.getAnnotation(annotationType)).filter(Objects::nonNull).findFirst();
 
-            if (enumerated.isPresent()) {
-                return enumerated;
+            if (annotation.isPresent()) {
+                return annotation;
             }
         }
 
@@ -361,89 +465,294 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     /**
-     * Returns the criteria on the fields of the elements of given fetch path, mapped by field. An entity value is replaced by an {@link EntityIdentity}, so
-     * that it matches the fetched entity with the same identifier, also when the entity does not implement <code>equals()</code>.
+     * Returns the ordering of given <code>@OrderBy</code> value on the elements of given collection path, keyed by the full path of each field. An item without
+     * field orders an entity element by its ID. A basic element is ordered by its value, whatever the field. The ordering is empty when an item is more than a
+     * field with an optional <code>ASC</code> or <code>DESC</code>, such as <code>NULLS LAST</code>, or names no basic field of the element. The order of the
+     * collection is then left to the provider.
      */
-    private static Map<String, Object> collectFiltersForFetch(
-        String fetchPath, Map<String, Object> requiredCriteria, java.util.function.Predicate<Object> isEntity, Function<Object, ?> idOf
-    )
-    {
-        var filters = new LinkedHashMap<String, Object>();
+    static Map<String, Boolean> parseOrderBy(String orderBy, String path, Type<?> elementType) {
+        var ordering = new LinkedHashMap<String, Boolean>();
 
-        for (var entry : requiredCriteria.entrySet()) {
-            if (entry.getKey().startsWith(fetchPath + ".")) {
-                filters.put(entry.getKey().substring(fetchPath.length() + 1), toEntityIdentityIfEntity(entry.getValue(), isEntity, idOf));
+        for (var item : ORDER_BY_ITEM_SEPARATOR.split(orderBy.trim())) {
+            var tokens = item.isEmpty() ? new String[0] : WHITESPACE.split(item);
+            var direction = tokens.length == 0 ? null : tokens[tokens.length - 1];
+            var fieldTokens = ASC.equalsIgnoreCase(direction) || DESC.equalsIgnoreCase(direction) ? tokens.length - 1 : tokens.length;
+            var key = fieldTokens > 1 ? null : getOrderByKey(fieldTokens == 0 ? null : tokens[0], path, elementType);
+
+            if (key == null) {
+                return Map.of();
             }
+
+            ordering.put(key, !DESC.equalsIgnoreCase(direction));
         }
 
-        return filters;
+        return ordering;
     }
 
-    private static Object toEntityIdentityIfEntity(Object value, java.util.function.Predicate<Object> isEntity, Function<Object, ?> idOf) {
-        if (isMultiValued(value)) {
-            return stream(value).map(item -> toEntityIdentityIfEntity(item, isEntity, idOf)).toList();
+    /**
+     * Returns the full path of given field of an <code>@OrderBy</code> item on the elements of given collection path, or <code>null</code> when it names no
+     * basic field reached via singular attributes of the element. A <code>null</code> field stands for the ID of an entity element, when it is basic.
+     */
+    private static String getOrderByKey(String field, String path, Type<?> elementType) {
+        if (!(elementType instanceof ManagedType<?> managedType)) {
+            return path;
         }
-        else if (value != null && isEntity.test(value)) {
-            return new EntityIdentity(idOf.apply(value), idOf);
+        else if (field == null) {
+            return elementType instanceof EntityType<?> entityType
+                ? IdAttribute.findId(entityType).filter(id -> id.getType() instanceof BasicType).map(id -> path + "." + id.getName()).orElse(null)
+                : null;
         }
-        else {
-            return value;
+
+        try {
+            var attribute = findAttributeViaSingulars(managedType, PATH_SEPARATOR.split(field));
+            return attribute instanceof SingularAttribute<?, ?> singular && singular.getType() instanceof BasicType ? path + "." + field : null;
+        }
+        catch (IllegalArgumentException unknownField) {
+            return null;
         }
     }
 
     /**
-     * Matches a fetched entity by its identifier.
+     * Returns whether given required criteria restricts the fetched elements. A negated criteria, also as item of a multi-value, does not, because it restricts
+     * the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>.
      */
-    private record EntityIdentity(Object id, Function<Object, ?> idOf) {
-
-        boolean matches(Object entity) {
-            return entity != null && Objects.equals(id, idOf.apply(entity));
-        }
-
-    }
-
-    private static boolean matchesFetchFilters(Object item, Map<String, Object> filters) {
-        for (var entry : filters.entrySet()) {
-            if (!isEmptyMultiValue(entry.getValue()) && !appliesFetchFilter(entry.getValue(), invokeGetter(item, entry.getKey()))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Returns whether given fetched element value applies to given criteria. A negated criteria, also as item of a multi-value, applies to every element,
-     * because it restricts the entities only: an entity matching <code>Not.value(List.of(a, b))</code> may still have an element <code>a</code>. A plain value
-     * applies as the typed criteria which {@link BaseEntityService} builds the SQL predicate from.
-     */
-    private static boolean appliesFetchFilter(Object criteria, Object fieldValue) {
+    private static boolean restrictsElements(Object criteria) {
         if (criteria instanceof Not) {
-            return true;
-        }
-        else if (criteria instanceof Criteria<?> c) {
-            return c.applies(fieldValue);
-        }
-        else if (criteria instanceof EntityIdentity entityIdentity) {
-            return entityIdentity.matches(fieldValue);
+            return false;
         }
         else if (isMultiValued(criteria)) {
-            return stream(criteria).anyMatch(item -> appliesFetchFilter(item, fieldValue));
+            return !isEmptyMultiValue(criteria) && stream(criteria).filter(item -> !isEmptyMultiValue(item)).allMatch(PostponedFetchRoot::restrictsElements);
         }
         else {
-            var typedCriteria = fieldValue == null ? null : createTypedCriteria(typeOf(fieldValue), criteria);
-            return typedCriteria != null ? typedCriteria.applies(fieldValue) : Objects.equals(criteria, fieldValue);
+            return true;
         }
     }
 
-    private static Class<?> typeOf(Object value) {
-        return value instanceof Enum<?> enumValue ? enumValue.getDeclaringClass() : value.getClass();
+    /**
+     * A fetched collection reached via singular associations only, such as <code>phones</code> or <code>owner.phones</code>. When the page has required
+     * criteria or an ordering on the fields of its elements, the database selects the matching elements in the ordering of the page, see
+     * {@link ElementRanking}, and this keeps and orders the fetched elements accordingly. An entity element is identified by its ID, an embeddable element by
+     * the values of the fields which the criteria and the ordering reference, and a basic element by its value. A collection which the ordering of the page
+     * does not reference is ordered by the database as its <code>@OrderBy</code> specifies, because not every provider applies it to a fetch join. An
+     * <code>@OrderBy</code> item other than a field with an optional <code>ASC</code> or <code>DESC</code> leaves the order to the provider. Without
+     * <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of its elements, if they are <code>Comparable</code>.
+     */
+    static final class FetchedCollection {
+
+        private final String path;
+        private final Map<String, Object> criteria;
+        private final Map<String, Boolean> ordering;
+        private final List<String> fields;
+        private final boolean entityElements;
+        private final boolean mappedOrder;
+        private final Function<Object, ?> idOf;
+        private final java.util.function.Predicate<Object> isEntity;
+        private final Map<Object, Map<List<Object>, Integer>> positions = new HashMap<>();
+
+        private FetchedCollection(
+            String path, Map<String, Object> criteria, Map<String, Boolean> ordering, Type<?> elementType, boolean mappedOrder, Function<Object, ?> idOf,
+            java.util.function.Predicate<Object> isEntity
+        )
+        {
+            this.path = path;
+            this.criteria = criteria;
+            this.ordering = ordering;
+            this.entityElements = elementType instanceof EntityType;
+            this.mappedOrder = mappedOrder;
+            this.idOf = idOf;
+            this.isEntity = isEntity;
+            this.fields = entityElements ? findEntityElementFields(elementType) : findElementFields(elementType);
+        }
+
+        /**
+         * Returns the fetched collection of given path from given root type, or <code>null</code> when the path is no collection reached via singular
+         * associations only.
+         */
+        static FetchedCollection of(
+            ManagedType<?> rootType, String path, Page page, Function<Object, ?> idOf, java.util.function.Predicate<Object> isEntity
+        )
+        {
+            var attribute = findAttributeViaSingulars(rootType, PATH_SEPARATOR.split(path));
+
+            if (attribute == null || !attribute.isCollection() || attribute instanceof MapAttribute) {
+                return null;
+            }
+
+            var prefix = path + ".";
+            var criteria = new LinkedHashMap<String, Object>();
+            page.getRequiredCriteria().forEach((field, value) -> {
+                if (field.startsWith(prefix) && restrictsElements(value)) {
+                    criteria.put(field, value);
+                }
+            });
+            var ordering = new LinkedHashMap<String, Boolean>();
+            page.getOrdering().forEach((field, ascending) -> {
+                if (field.equals(path) || field.startsWith(prefix)) {
+                    ordering.put(field, ascending);
+                }
+            });
+            var mappedOrder = getMappedOrder(attribute.getDeclaringType().getJavaType(), attribute.getName());
+            var elementType = elementTypeOf(attribute);
+
+            if (ordering.isEmpty() && mappedOrder.effectiveOrderBy() != null) {
+                ordering.putAll(parseOrderBy(mappedOrder.effectiveOrderBy(), path, elementType));
+            }
+
+            return new FetchedCollection(path, criteria, ordering, elementType, mappedOrder.isPresent(), idOf, isEntity);
+        }
+
+        /**
+         * Returns the collection path itself as field of given type of entity elements, or none when its ID is not supported, see
+         * {@link IdAttribute#isSupported(EntityType)}. The collection is then not ranked.
+         */
+        private List<String> findEntityElementFields(Type<?> elementType) {
+            return IdAttribute.isSupported((EntityType<?>) elementType) ? List.of(path) : List.of();
+        }
+
+        /**
+         * Returns the fields which the criteria and the ordering reference on given type of embeddable elements, as far as they are reached via singular
+         * attributes. A basic element is its own field when the ordering references the collection itself. An ordering field on an entity whose ID is not
+         * supported is skipped, see {@link IdAttribute#isSupported(EntityType)}.
+         */
+        private List<String> findElementFields(Type<?> elementType) {
+            if (!(elementType instanceof ManagedType<?> managedType)) {
+                return ordering.containsKey(path) ? List.of(path) : List.of();
+            }
+
+            var referencedFields = new LinkedHashSet<>(criteria.keySet());
+            referencedFields.addAll(ordering.keySet());
+            referencedFields.remove(path);
+            var elementFields = new ArrayList<String>(referencedFields.size());
+
+            for (var field : referencedFields) {
+                var attribute = findAttributeViaSingulars(managedType, PATH_SEPARATOR.split(field.substring(path.length() + 1)));
+
+                if (attribute != null && !attribute.isCollection() && (criteria.containsKey(field) || !isEntityWithUnsupportedId(attribute))) {
+                    elementFields.add(field);
+                }
+            }
+
+            return List.copyOf(elementFields);
+        }
+
+        private static boolean isEntityWithUnsupportedId(Attribute<?, ?> attribute) {
+            return attribute instanceof SingularAttribute<?, ?> singular && singular.getType() instanceof EntityType<?> type && !IdAttribute.isSupported(type);
+        }
+
+        private boolean isRanked() {
+            return !fields.isEmpty() && (!criteria.isEmpty() || !ordering.isEmpty());
+        }
+
+        /**
+         * Returns the fields of the elements which this collection reads from the fetched elements, relative to the element.
+         */
+        List<String> getElementFields() {
+            return entityElements || !isRanked()
+                ? List.of()
+                : fields.stream().filter(field -> !field.equals(path)).map(field -> field.substring(path.length() + 1)).toList();
+        }
+
+        /**
+         * Runs given ranking on the root entities with given IDs, if the criteria or the ordering of the page reference this collection.
+         */
+        void rank(ElementRanking ranking, List<?> ids) {
+            if (!isRanked()) {
+                return;
+            }
+
+            for (var row : ranking.rank(path, ids, criteria, ordering, fields)) {
+                var key = new ArrayList<>(row.length - 1);
+
+                for (var i = 1; i < row.length; i++) {
+                    key.add(toKeyValue(row[i]));
+                }
+
+                var rootPositions = positions.computeIfAbsent(row[0], id -> new HashMap<>());
+                rootPositions.putIfAbsent(key, rootPositions.size());
+            }
+        }
+
+        /**
+         * Filters and sorts given fetched elements of the root entity with given ID.
+         */
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        void arrange(List<Object> elements, Object rootId) {
+            if (isRanked()) {
+                var rootPositions = positions.getOrDefault(rootId, Map.of());
+                var elementPositions = new IdentityHashMap<Object, Integer>(elements.size());
+                elements.forEach(element -> elementPositions.put(element, rootPositions.get(keyOf(element))));
+
+                if (!criteria.isEmpty()) {
+                    elements.removeIf(element -> elementPositions.get(element) == null);
+                }
+
+                if (!ordering.isEmpty()) {
+                    elements.sort(comparing(element -> requireNonNullElse(elementPositions.get(element), Integer.MAX_VALUE)));
+                    return;
+                }
+            }
+
+            if (!mappedOrder && elements.stream().allMatch(Comparable.class::isInstance)) {
+                elements.sort((Comparator) naturalOrder());
+            }
+        }
+
+        private List<Object> keyOf(Object element) {
+            if (entityElements) {
+                return List.of(idOf.apply(element));
+            }
+
+            var key = new ArrayList<>(fields.size());
+
+            for (var field : fields) {
+                var value = field.equals(path) ? element : getViaSingulars(element, PATH_SEPARATOR.split(field.substring(path.length() + 1)));
+                key.add(toKeyValue(value == UNREACHABLE ? null : value));
+            }
+
+            return key;
+        }
+
+        private Object toKeyValue(Object value) {
+            return value != null && isEntity.test(value) ? idOf.apply(value) : value;
+        }
+
     }
 
-    private static void applyPostponedFetches(List<?> entities, List<String> fetchPaths, List<List<Object>> fetchedEntityProperties) {
+    /**
+     * Returns the elements of given collection, with each entity element once by identity. Other elements are kept as is, because a list may hold a value more
+     * than once.
+     */
+    private static Stream<?> distinctEntityElements(Collection<?> collection, java.util.function.Predicate<Object> isEntity) {
+        var entityElements = Collections.newSetFromMap(new IdentityHashMap<>(collection.size()));
+        return collection.stream().filter(item -> !isEntity.test(item) || entityElements.add(item));
+    }
+
+    /**
+     * Returns the value of given property path of given object, or {@link #UNREACHABLE} when the path passes a collection or <code>null</code> before its last
+     * property, such as <code>categories.parent</code>.
+     */
+    private static Object getViaSingulars(Object object, String[] properties) {
+        var value = object;
+
+        for (var i = 0; i < properties.length; i++) {
+            if (value == null || value instanceof Collection) {
+                return UNREACHABLE;
+            }
+
+            value = invokeGetter(value, properties[i]);
+        }
+
+        return value;
+    }
+
+    private static void applyPostponedFetches(List<?> entities, List<String> paths, List<List<Object>> fetchedEntityProperties) {
         for (var i = 0; i < entities.size(); i++) {
-            for (var j = 0; j < fetchPaths.size(); j++) {
-                invokeSetter(entities.get(i), fetchPaths.get(j), fetchedEntityProperties.get(i).get(j));
+            for (var j = 0; j < paths.size(); j++) {
+                var value = fetchedEntityProperties.get(i).get(j);
+
+                if (value != UNREACHABLE) {
+                    invokeSetter(entities.get(i), paths.get(j), value);
+                }
             }
         }
     }

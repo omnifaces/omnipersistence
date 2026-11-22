@@ -38,6 +38,13 @@ class MappedPathResolver extends RootPathResolver {
         this.paths = paths;
     }
 
+    /**
+     * Returns whether given field is mapped to an expression of the DTO.
+     */
+    public boolean maps(String field) {
+        return paths.containsKey(field);
+    }
+
     @Override
     public Expression<?> get(String field) {
         if (field != null) {
