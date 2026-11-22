@@ -38,6 +38,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -57,6 +59,7 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.BasicType;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.MapAttribute;
@@ -98,16 +101,20 @@ import org.omnifaces.persistence.query.Page;
  */
 class PostponedFetchRoot<X> extends RootWrapper<X> {
 
-    private static final ClassValue<Map<String, Boolean>> MAPPED_ORDER = new ClassValue<>() {
+    private static final ClassValue<Map<String, MappedOrder>> MAPPED_ORDER = new ClassValue<>() {
 
         @Override
-        protected Map<String, Boolean> computeValue(Class<?> type) {
+        protected Map<String, MappedOrder> computeValue(Class<?> type) {
             return new ConcurrentHashMap<>();
         }
 
     };
 
     private static final Pattern PATH_SEPARATOR = Pattern.compile("\\.");
+    private static final Pattern ORDER_BY_ITEM_SEPARATOR = Pattern.compile("\\s*,\\s*");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final String ASC = "ASC";
+    private static final String DESC = "DESC";
     private static final Object UNREACHABLE = new Object();
 
     private final Provider provider;
@@ -406,32 +413,103 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
     }
 
     /**
-     * Returns whether given property of given type is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>.
+     * The <code>@OrderBy</code> value of a collection, or <code>null</code> without one, and whether it has an <code>@OrderColumn</code>.
      */
-    private static boolean hasMappedOrder(Class<?> type, String property) {
-        return MAPPED_ORDER.get(type).computeIfAbsent(property, key -> isAnnotated(type, property, OrderBy.class, OrderColumn.class));
+    record MappedOrder(String orderBy, boolean orderColumn) {
+
+        /**
+         * Returns the <code>@OrderBy</code> value which applies, or <code>null</code> when there is none. It does not apply along with an
+         * <code>@OrderColumn</code>, as specified by <code>@OrderBy</code>.
+         */
+        String effectiveOrderBy() {
+            return orderColumn ? null : orderBy;
+        }
+
+        boolean isPresent() {
+            return orderBy != null || orderColumn;
+        }
+
     }
 
     /**
-     * Returns whether given property of given type or of its superclasses has any of given annotations, on the field or on the getter.
+     * Returns the mapped order of given property of given type, cached in {@link #MAPPED_ORDER}.
      */
-    @SafeVarargs
-    private static boolean isAnnotated(Class<?> type, String property, Class<? extends Annotation>... annotationTypes) {
+    static MappedOrder getMappedOrder(Class<?> type, String property) {
+        return MAPPED_ORDER.get(type).computeIfAbsent(
+            property,
+            key -> new MappedOrder(
+                findAnnotation(type, property, OrderBy.class).map(OrderBy::value).orElse(null), findAnnotation(type, property, OrderColumn.class).isPresent()
+            )
+        );
+    }
+
+    /**
+     * Returns given annotation of given property of given type or of its superclasses, on the field or on the getter.
+     */
+    private static <A extends Annotation> Optional<A> findAnnotation(Class<?> type, String property, Class<A> annotationType) {
         var capitalized = Character.toUpperCase(property.charAt(0)) + property.substring(1);
         var getterNames = Set.of("get" + capitalized, "is" + capitalized);
 
         for (var cls = type; cls != null; cls = cls.getSuperclass()) {
-            var members = Stream.<AnnotatedElement>concat(
+            var annotation = Stream.<AnnotatedElement>concat(
                 Stream.of(cls.getDeclaredFields()).filter(field -> field.getName().equals(property)),
                 Stream.of(cls.getDeclaredMethods()).filter(method -> method.getParameterCount() == 0 && getterNames.contains(method.getName()))
-            );
+            ).map(member -> member.getAnnotation(annotationType)).filter(Objects::nonNull).findFirst();
 
-            if (members.anyMatch(member -> Stream.of(annotationTypes).anyMatch(member::isAnnotationPresent))) {
-                return true;
+            if (annotation.isPresent()) {
+                return annotation;
             }
         }
 
-        return false;
+        return Optional.empty();
+    }
+
+    /**
+     * Returns the ordering of given <code>@OrderBy</code> value on the elements of given collection path, keyed by the full path of each field. An item without
+     * field orders an entity element by its ID. A basic element is ordered by its value, whatever the field. The ordering is empty when an item is more than a
+     * field with an optional <code>ASC</code> or <code>DESC</code>, such as <code>NULLS LAST</code>, or names no basic field of the element. The order of the
+     * collection is then left to the provider.
+     */
+    static Map<String, Boolean> parseOrderBy(String orderBy, String path, Type<?> elementType) {
+        var ordering = new LinkedHashMap<String, Boolean>();
+
+        for (var item : ORDER_BY_ITEM_SEPARATOR.split(orderBy.trim())) {
+            var tokens = item.isEmpty() ? new String[0] : WHITESPACE.split(item);
+            var direction = tokens.length == 0 ? null : tokens[tokens.length - 1];
+            var fieldTokens = ASC.equalsIgnoreCase(direction) || DESC.equalsIgnoreCase(direction) ? tokens.length - 1 : tokens.length;
+            var key = fieldTokens > 1 ? null : getOrderByKey(fieldTokens == 0 ? null : tokens[0], path, elementType);
+
+            if (key == null) {
+                return Map.of();
+            }
+
+            ordering.put(key, !DESC.equalsIgnoreCase(direction));
+        }
+
+        return ordering;
+    }
+
+    /**
+     * Returns the full path of given field of an <code>@OrderBy</code> item on the elements of given collection path, or <code>null</code> when it names no
+     * basic field reached via singular attributes of the element. A <code>null</code> field stands for the ID of an entity element, when it is basic.
+     */
+    private static String getOrderByKey(String field, String path, Type<?> elementType) {
+        if (!(elementType instanceof ManagedType<?> managedType)) {
+            return path;
+        }
+        else if (field == null) {
+            return elementType instanceof EntityType<?> entityType
+                ? IdAttribute.findId(entityType).filter(id -> id.getType() instanceof BasicType).map(id -> path + "." + id.getName()).orElse(null)
+                : null;
+        }
+
+        try {
+            var attribute = findAttributeViaSingulars(managedType, PATH_SEPARATOR.split(field));
+            return attribute instanceof SingularAttribute<?, ?> singular && singular.getType() instanceof BasicType ? path + "." + field : null;
+        }
+        catch (IllegalArgumentException unknownField) {
+            return null;
+        }
     }
 
     /**
@@ -455,10 +533,11 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
      * criteria or an ordering on the fields of its elements, the database selects the matching elements in the ordering of the page, see
      * {@link ElementRanking}, and this keeps and orders the fetched elements accordingly. An entity element is identified by its ID, an embeddable element by
      * the values of the fields which the criteria and the ordering reference, and a basic element by its value. A collection which the ordering of the page
-     * does not reference is sorted by the natural order of its elements, unless it is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>, or its
-     * elements are not <code>Comparable</code>.
+     * does not reference is ordered by the database as its <code>@OrderBy</code> specifies, because not every provider applies it to a fetch join. An
+     * <code>@OrderBy</code> item other than a field with an optional <code>ASC</code> or <code>DESC</code> leaves the order to the provider. Without
+     * <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of its elements, if they are <code>Comparable</code>.
      */
-    private static final class FetchedCollection {
+    static final class FetchedCollection {
 
         private final String path;
         private final Map<String, Object> criteria;
@@ -482,7 +561,7 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             this.mappedOrder = mappedOrder;
             this.idOf = idOf;
             this.isEntity = isEntity;
-            this.fields = entityElements ? List.of(path) : findElementFields(elementType);
+            this.fields = entityElements ? findEntityElementFields(elementType) : findElementFields(elementType);
         }
 
         /**
@@ -512,13 +591,28 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
                     ordering.put(field, ascending);
                 }
             });
-            var mappedOrder = hasMappedOrder(attribute.getDeclaringType().getJavaType(), attribute.getName());
-            return new FetchedCollection(path, criteria, ordering, elementTypeOf(attribute), mappedOrder, idOf, isEntity);
+            var mappedOrder = getMappedOrder(attribute.getDeclaringType().getJavaType(), attribute.getName());
+            var elementType = elementTypeOf(attribute);
+
+            if (ordering.isEmpty() && mappedOrder.effectiveOrderBy() != null) {
+                ordering.putAll(parseOrderBy(mappedOrder.effectiveOrderBy(), path, elementType));
+            }
+
+            return new FetchedCollection(path, criteria, ordering, elementType, mappedOrder.isPresent(), idOf, isEntity);
+        }
+
+        /**
+         * Returns the collection path itself as field of given type of entity elements, or none when its ID is not supported, see
+         * {@link IdAttribute#isSupported(EntityType)}. The collection is then not ranked.
+         */
+        private List<String> findEntityElementFields(Type<?> elementType) {
+            return IdAttribute.isSupported((EntityType<?>) elementType) ? List.of(path) : List.of();
         }
 
         /**
          * Returns the fields which the criteria and the ordering reference on given type of embeddable elements, as far as they are reached via singular
-         * attributes. A basic element is its own field when the ordering references the collection itself.
+         * attributes. A basic element is its own field when the ordering references the collection itself. An ordering field on an entity whose ID is not
+         * supported is skipped, see {@link IdAttribute#isSupported(EntityType)}.
          */
         private List<String> findElementFields(Type<?> elementType) {
             if (!(elementType instanceof ManagedType<?> managedType)) {
@@ -533,12 +627,16 @@ class PostponedFetchRoot<X> extends RootWrapper<X> {
             for (var field : referencedFields) {
                 var attribute = findAttributeViaSingulars(managedType, PATH_SEPARATOR.split(field.substring(path.length() + 1)));
 
-                if (attribute != null && !attribute.isCollection()) {
+                if (attribute != null && !attribute.isCollection() && (criteria.containsKey(field) || !isEntityWithUnsupportedId(attribute))) {
                     elementFields.add(field);
                 }
             }
 
             return List.copyOf(elementFields);
+        }
+
+        private static boolean isEntityWithUnsupportedId(Attribute<?, ?> attribute) {
+            return attribute instanceof SingularAttribute<?, ?> singular && singular.getType() instanceof EntityType<?> type && !IdAttribute.isSupported(type);
         }
 
         private boolean isRanked() {

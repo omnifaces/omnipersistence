@@ -12,21 +12,33 @@
  */
 package org.omnifaces.persistence.test.model;
 
+import static jakarta.persistence.GenerationType.IDENTITY;
+
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 
+import org.omnifaces.persistence.model.BaseEntity;
+
 /**
- * A track of an {@link Album}.
+ * A track of an {@link Album}: an entity which does not extend {@link BaseEntity}.
  */
 @Entity
-public class Track extends LocalGeneratedIdEntity {
+public class Track {
 
-    private static final long serialVersionUID = 1L;
+    @Id
+    @GeneratedValue(strategy = IDENTITY)
+    private Long id;
 
     private String title;
 
     @ManyToOne
     private Album album;
+
+    public Long getId() {
+        return id;
+    }
 
     public String getTitle() {
         return title;

@@ -156,8 +156,6 @@ public class EntityRepositoryIT {
     @Inject
     private EntityRepository<Long, Album> albumRepository;
     @Inject
-    private EntityRepository<Long, Track> trackRepository;
-    @Inject
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
     private EntityRepository<String, Note> noteRepository;
@@ -1707,8 +1705,8 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * The fetched elements of a collection mapped with <code>@OrderBy</code> keep the mapped order when the page is not ordered by them, and follow the
-     * ordering of the page when it is.
+     * The fetched elements of a collection annotated with <code>@OrderBy</code> are in that order when the page is not ordered by them, on every provider, and
+     * follow the ordering of the page when it is, also when it is ordered by their ID.
      */
     @Test
     void testPageWithTracksKeepsMappedOrderUnlessOrderedByThem() {
@@ -1720,6 +1718,8 @@ public class EntityRepositoryIT {
             assertEquals(List.of("c", "b", "a"), mapped.get(0).getTracks().stream().map(Track::getTitle).toList(), "Mapped order");
             var ordered = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.title", true).build(), false, "tracks");
             assertEquals(List.of("a", "b", "c"), ordered.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page");
+            var orderedById = albumRepository.getPage(Page.with().allMatch(byId).orderBy("tracks.id", true).build(), false, "tracks");
+            assertEquals(List.of("a", "b", "c"), orderedById.get(0).getTracks().stream().map(Track::getTitle).toList(), "Ordering of page by ID");
         }
         finally {
             deleteAlbum(album);
@@ -1746,6 +1746,34 @@ public class EntityRepositoryIT {
         }
     }
 
+    /**
+     * The fetched elements of a collection of entities with an embedded ID, annotated with <code>@OrderBy</code>, are in that order.
+     */
+    @Test
+    void testPageWithMembershipsKeepsMappedOrderOfEmbeddedIdEntities() {
+        var start = LocalDate.of(2026, 1, 1);
+        var memberships = List.of(
+            new Membership(new MembershipId("ordered-a", "x"), new Period(start, null)),
+            new Membership(new MembershipId("ordered-b", "x"), new Period(start.plusMonths(2), null)),
+            new Membership(new MembershipId("ordered-c", "x"), new Period(start.plusMonths(1), null))
+        );
+        memberships.forEach(membership -> transactionServiceCDI.run(() -> membershipRepository.persist(membership)));
+        var album = new Album();
+        album.setTitle("memberships");
+        album.getMemberships().addAll(memberships);
+        transactionServiceCDI.run(() -> albumRepository.persist(album));
+
+        try {
+            var page = albumRepository.getPage(Page.with().allMatch(Map.of("id", album.getId())).build(), false, "memberships");
+            var memberNames = page.get(0).getMemberships().stream().map(membership -> membership.getId().getMemberName()).toList();
+            assertEquals(List.of("ordered-b", "ordered-c", "ordered-a"), memberNames, "Mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+            transactionServiceCDI.run(() -> memberships.forEach(membership -> membershipRepository.delete(membershipRepository.getById(membership.getId()))));
+        }
+    }
+
     private void assertCreditsFilteredBy(Album album, String field, Object criteria, String condition, Object... parameters) {
         var criteriaMap = new HashMap<String, Object>(Map.of("id", album.getId()));
         criteriaMap.put(field, criteria);
@@ -1764,7 +1792,7 @@ public class EntityRepositoryIT {
             query.setParameter(i + 2, parameters[i]);
         }
 
-        return query.getResultList();
+        return List.copyOf(query.getResultList());
     }
 
     private static List<String> namesOf(List<Credit> credits) {
@@ -1793,10 +1821,7 @@ public class EntityRepositoryIT {
     }
 
     private void deleteAlbum(Album album) {
-        transactionServiceCDI.run(() -> {
-            album.getTracks().stream().map(Track::getId).map(trackRepository::getById).forEach(trackRepository::delete);
-            albumRepository.delete(albumRepository.getById(album.getId()));
-        });
+        transactionServiceCDI.run(() -> albumRepository.delete(albumRepository.getById(album.getId())));
     }
 
     private List<Phone> persistTemporaryPhones(List<String> values) {

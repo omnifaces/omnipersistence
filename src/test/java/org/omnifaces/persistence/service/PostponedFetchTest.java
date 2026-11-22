@@ -15,7 +15,9 @@ package org.omnifaces.persistence.service;
 import static jakarta.persistence.criteria.JoinType.INNER;
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.omnifaces.persistence.service.Stubs.stub;
 
@@ -26,16 +28,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.FetchParent;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.BasicType;
+import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 
 import org.junit.jupiter.api.Test;
 import org.omnifaces.persistence.Provider;
+import org.omnifaces.persistence.query.Page;
+import org.omnifaces.persistence.service.PostponedFetchRoot.FetchedCollection;
+import org.omnifaces.persistence.service.PostponedFetchRoot.MappedOrder;
 
 /**
  * Unit tests for {@link PostponedFetch}, {@link PostponedFetchRoot} and {@link SingularFetch}. They must postpone fetches by attribute name or attribute, and
@@ -47,6 +57,29 @@ public class PostponedFetchTest {
     private static final Set<String> PLURAL_ATTRIBUTES = Set.of("phones", "groups");
     private static final Set<String> EMBEDDED_ATTRIBUTES = Set.of("period");
     private static final Map<String, Set<String>> PLURAL_ATTRIBUTES_OF_TYPE_OF = Map.of("address", Set.of("owner"));
+    private static final BasicType<?> BASIC = stub(BasicType.class, Map.of());
+    private static final EntityType<?> TRACK = managedType(
+        EntityType.class,
+        Map.of(
+            "id", BASIC, "title", BASIC, "album", stub(EntityType.class, Map.of()),
+            "tags", stub(PluralAttribute.class, Map.of("getName", "tags", "isCollection", true, "getElementType", BASIC))
+        ),
+        Map.of(
+            "hasSingleIdAttribute", true, "getSingularAttributes",
+            Set.of(stub(SingularAttribute.class, Map.of("isId", true, "getName", "id", "getType", BASIC)))
+        )
+    );
+    private static final EntityType<?> MEMBERSHIP = managedType(
+        EntityType.class, Map.of(),
+        Map.of(
+            "hasSingleIdAttribute", true,
+            "getSingularAttributes",
+            Set.of(stub(SingularAttribute.class, Map.of("isId", true, "getName", "id", "getType", stub(EmbeddableType.class, Map.of()))))
+        )
+    );
+    private static final EmbeddableType<?> CREDIT = managedType(
+        EmbeddableType.class, Map.of("name", BASIC, "address", managedType(EmbeddableType.class, Map.of("city", BASIC), Map.of())), Map.of()
+    );
 
     @Test
     void fetchByNameIsPostponed() {
@@ -161,6 +194,110 @@ public class PostponedFetchTest {
         assertThrows(UnsupportedOperationException.class, fetch::getFetches);
         assertThrows(UnsupportedOperationException.class, fetch::getParent);
         assertThrows(UnsupportedOperationException.class, fetch::getJoinType);
+    }
+
+    @Test
+    void orderByWithoutFieldOrdersEntityElementsByIdAndBasicElementsByValue() {
+        assertEquals(Map.of("tracks.id", true), PostponedFetchRoot.parseOrderBy("", "tracks", TRACK), "Entity, empty");
+        assertEquals(Map.of("tracks.id", false), PostponedFetchRoot.parseOrderBy(" DESC ", "tracks", TRACK), "Entity, DESC");
+        assertEquals(Map.of("tags", true), PostponedFetchRoot.parseOrderBy("", "tags", BASIC), "Basic, empty");
+        assertEquals(Map.of("tags", false), PostponedFetchRoot.parseOrderBy("value DESC", "tags", BASIC), "Basic, field is not used");
+    }
+
+    @Test
+    void orderByWithFieldsOrdersByEachFieldInGivenDirection() {
+        assertEquals(
+            List.of(Map.entry("tracks.title", false), Map.entry("tracks.id", true)),
+            List.copyOf(PostponedFetchRoot.parseOrderBy("title desc, id", "tracks", TRACK).entrySet()), "Entity, two items"
+        );
+        assertEquals(Map.of("credits.address.city", true), PostponedFetchRoot.parseOrderBy("address.city ASC", "credits", CREDIT), "Embeddable, nested");
+    }
+
+    @Test
+    void unsupportedOrderByIsIgnored() {
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("title DESC NULLS LAST", "tracks", TRACK), "NULLS LAST");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("lower(title)", "tracks", TRACK), "Function");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("title, unknown", "tracks", TRACK), "Unknown field");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("", "credits", CREDIT), "Embeddable without field");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("tags", "tracks", TRACK), "Collection field");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("album", "tracks", TRACK), "Association field");
+        assertEquals(Map.of(), PostponedFetchRoot.parseOrderBy("", "memberships", MEMBERSHIP), "Embedded ID");
+    }
+
+    @Test
+    void orderByDoesNotApplyAlongWithOrderColumn() {
+        var both = PostponedFetchRoot.getMappedOrder(MappedOrders.class, "both");
+        assertEquals(new MappedOrder("title", true), both, "Both annotations");
+        assertNull(both.effectiveOrderBy(), "Effective @OrderBy along with @OrderColumn");
+        assertEquals("", PostponedFetchRoot.getMappedOrder(MappedOrders.class, "plain").effectiveOrderBy(), "Plain @OrderBy");
+        assertEquals("title DESC", PostponedFetchRoot.getMappedOrder(MappedOrders.class, "viaGetter").effectiveOrderBy(), "@OrderBy on getter");
+        assertFalse(PostponedFetchRoot.getMappedOrder(MappedOrders.class, "none").isPresent(), "No annotation");
+    }
+
+    @Test
+    void criteriaOnEntityWithUnsupportedIdIsKeptAndOrderingOnItIsSkipped() {
+        var unsupported = stub(EntityType.class, Map.of("hasSingleIdAttribute", false));
+        var owner = stub(SingularAttribute.class, Map.of("getName", "owner", "isCollection", false, "getType", unsupported));
+        var element = managedType(EmbeddableType.class, Map.of("owner", owner), Map.of());
+        var declaringType = stub(ManagedType.class, Map.of("getJavaType", MappedOrders.class));
+        var credits = stub(
+            PluralAttribute.class, Map.of("getName", "credits", "isCollection", true, "getElementType", element, "getDeclaringType", declaringType)
+        );
+        var root = managedType(EntityType.class, Map.of("credits", credits), Map.of());
+        var byCriteria = FetchedCollection.of(root, "credits", Page.with().allMatch(Map.of("credits.owner", 1L)).build(), id -> id, value -> false);
+        var byOrdering = FetchedCollection.of(root, "credits", Page.with().orderBy("credits.owner", true).build(), id -> id, value -> false);
+        assertEquals(List.of("owner"), byCriteria.getElementFields(), "Criteria");
+        assertEquals(List.of(), byOrdering.getElementFields(), "Ordering");
+    }
+
+    static class MappedOrders {
+
+        @OrderBy("title")
+        @OrderColumn
+        List<String> both;
+
+        @OrderBy
+        List<String> plain;
+
+        List<String> none;
+
+        List<String> viaGetter;
+
+        @OrderBy("title DESC")
+        public List<String> getViaGetter() {
+            return viaGetter;
+        }
+
+    }
+
+    /**
+     * Stubs a managed type of given type with given attributes. Each is given attribute, or a singular attribute of given type. An unknown attribute throws
+     * {@link IllegalArgumentException}, as specified by {@link ManagedType#getAttribute(String)}.
+     */
+    private static <T extends ManagedType<?>> T managedType(Class<T> type, Map<String, ?> attributes, Map<String, Object> returnValues) {
+        return type.cast(
+            Proxy.newProxyInstance(
+                type.getClassLoader(), new Class<?>[] { type }, (proxy, method, args) -> {
+                    if ("getAttribute".equals(method.getName())) {
+                        var attributeType = attributes.get((String) args[0]);
+
+                        if (attributeType == null) {
+                            throw new IllegalArgumentException((String) args[0]);
+                        }
+                        else if (attributeType instanceof Attribute) {
+                            return attributeType;
+                        }
+
+                        return stub(SingularAttribute.class, Map.of("getName", args[0], "isCollection", false, "getType", attributeType));
+                    }
+                    else if (returnValues.containsKey(method.getName())) {
+                        return returnValues.get(method.getName());
+                    }
+
+                    throw new UnsupportedOperationException(method.getName());
+                }
+            )
+        );
     }
 
     @SuppressWarnings("unchecked")

@@ -114,6 +114,7 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Selection;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.BasicType;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
@@ -241,7 +242,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private Validator validator;
     private java.util.function.Predicate<Class<?>> entityTypes = type -> false;
     private Function<Object, Object> idGetter;
-    private Function<Class<?>, String> idNames;
     private Consumer<Object> idUnsetter;
     private IdAttribute idAttribute;
     private ManagedType<?> embeddableIdType;
@@ -289,7 +289,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         oneToManys = mappings::isOneToMany;
         entityTypes = mappings::isEntity;
         idGetter = mappings::getId;
-        idNames = type -> mappings.getIdAttribute(type).getName();
         idUnsetter = mappings::unsetId;
         idAttribute = mappings.getIdAttribute(entityType);
         embeddableIdType = getMetamodel().getAttribute(idAttribute.getName()) instanceof SingularAttribute<?, ?> attribute
@@ -1953,9 +1952,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link #save(Object)}.
      * <p>
      * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
-     * collation applies. A negated criteria does not filter them. A fetched collection which the ordering of the page does not reference is sorted by the
-     * natural order of its elements, unless it is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>, or its elements are not
-     * <code>Comparable</code>. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the entities only.
+     * collation applies. A negated criteria does not filter them. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the
+     * entities only. A fetched collection which the ordering of the page does not reference is ordered by its <code>@OrderBy</code>: a plain one by the basic
+     * ID of an entity element or by the value of a basic element, else by the named fields with an optional <code>ASC</code> or <code>DESC</code>. Any other
+     * <code>@OrderBy</code> leaves the order to the provider. Without <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of
+     * its elements, if they are <code>Comparable</code>.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -1984,9 +1985,11 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * {@link #save(Object)}.
      * <p>
      * The database filters and orders the elements of a fetched collection by the required criteria and the ordering of the page on their fields, so that its
-     * collation applies. A negated criteria does not filter them. A fetched collection which the ordering of the page does not reference is sorted by the
-     * natural order of its elements, unless it is annotated with <code>@OrderBy</code> or <code>@OrderColumn</code>, or its elements are not
-     * <code>Comparable</code>. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the entities only.
+     * collation applies. A negated criteria does not filter them. A criteria on a collection of basic values itself, such as <code>tags</code>, restricts the
+     * entities only. A fetched collection which the ordering of the page does not reference is ordered by its <code>@OrderBy</code>: a plain one by the basic
+     * ID of an entity element or by the value of a basic element, else by the named fields with an optional <code>ASC</code> or <code>DESC</code>. Any other
+     * <code>@OrderBy</code> leaves the order to the provider. Without <code>@OrderBy</code> or <code>@OrderColumn</code>, it is sorted by the natural order of
+     * its elements, if they are <code>Comparable</code>.
      * <p>
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
@@ -2275,13 +2278,43 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             orders.add(order.getValue() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path));
         }
 
-        if (elementKey != null && !orders.isEmpty() && !ordering.containsKey(collectionPath)) {
+        if (
+            isBasic(elementKey) && !orders.isEmpty() && !ordering.containsKey(collectionPath)
+                && !ordering.containsKey(getElementKeyField(collection, collectionPath))
+        ) {
             orders.add(criteriaBuilder.asc(elementKey)); // Tiebreaker, so that tied elements keep the same order on every call.
         }
 
         var typedQuery = getEntityManager().createQuery(query.multiselect(selections).where(toArray(predicates)).orderBy(orders));
         setMappedParameters(typedQuery, parameters);
         return typedQuery.getResultList();
+    }
+
+    /**
+     * Returns the field which identifies an element of given collection: the ID field of an entity element, else the collection path itself.
+     */
+    private static String getElementKeyField(From<?, ?> collection, String collectionPath) {
+        var elementType = getEntityElementType(collection);
+        return elementType != null ? collectionPath + "." + getIdName(elementType) : collectionPath;
+    }
+
+    /**
+     * Returns whether given element key is a basic attribute, which can be ordered by, unlike an embeddable ID.
+     */
+    private static boolean isBasic(Expression<?> elementKey) {
+        return elementKey instanceof Path<?> path && path.getModel() instanceof SingularAttribute<?, ?> attribute && attribute.getType() instanceof BasicType;
+    }
+
+    private static String getIdName(EntityType<?> type) {
+        return IdAttribute.findId(type).orElseThrow().getName();
+    }
+
+    /**
+     * Returns the type of the elements of given collection when it is a join of entities with a single ID attribute, else <code>null</code>.
+     */
+    private static EntityType<?> getEntityElementType(Expression<?> collection) {
+        return collection instanceof Join<?, ?> join && join.getAttribute() instanceof PluralAttribute<?, ?, ?> plural
+            && plural.getElementType() instanceof EntityType<?> elementType && elementType.hasSingleIdAttribute() ? elementType : null;
     }
 
     /**
@@ -2304,19 +2337,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      */
     private Expression<?> getElementKey(From<?, ?> collection, String collectionPath, String field, Map<String, From<?, ?>> joins) {
         var path = getElementPath(collection, collectionPath, field, JoinType.LEFT, joins);
+        var elementType = getEntityElementType(path);
 
-        if (
-            path instanceof Join<?, ?> join && join.getAttribute() instanceof PluralAttribute<?, ?, ?> plural
-                && plural.getElementType() instanceof EntityType<?> elementType && elementType.hasSingleIdAttribute()
-        ) {
-            return join.get(idNames.apply(elementType.getJavaType()));
+        if (elementType != null && path instanceof Join<?, ?> join) {
+            return join.get(getIdName(elementType));
         }
         else if (
             path instanceof Path<?> attributePath && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute
                 && attribute.getType() instanceof EntityType<?> type && type.hasSingleIdAttribute()
                 && attributePath.getParentPath() instanceof From<?, ?> parent
         ) {
-            return joins.computeIfAbsent(field, key -> parent.join(attribute.getName(), JoinType.LEFT)).get(idNames.apply(type.getJavaType()));
+            return joins.computeIfAbsent(field, key -> parent.join(attribute.getName(), JoinType.LEFT)).get(getIdName(type));
         }
         else {
             return path;

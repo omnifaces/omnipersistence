@@ -92,6 +92,7 @@ class IdAttributeTest {
     @Test
     void primitiveIdIsRejected() throws ReflectiveOperationException {
         var entityType = entityType(PrimitiveIdEntity.class.getDeclaredField("code"), BASIC, long.class);
+        assertFalse(IdAttribute.isSupported(entityType), "Supported");
         assertThrows(IllegalArgumentException.class, () -> IdAttribute.of(entityType));
     }
 
