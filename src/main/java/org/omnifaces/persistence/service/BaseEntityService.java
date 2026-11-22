@@ -2621,10 +2621,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * not. A plain order on the field would JOIN the collection and multiply the rows. Where entities without elements are placed, depends on how the database
      * orders <code>null</code>.
      * <p>
-     * The order is a correlated subquery wrapped in <code>COALESCE</code> with the same subquery as fallback, because EclipseLink does not accept a subquery as
-     * order expression, SQL Server does not accept <code>COALESCE</code> with only one argument, and EclipseLink binds a <code>NULL</code> literal as
-     * <code>VARCHAR</code>, which PostgreSQL does not match with a non-text type. DB2 accepts a subquery neither as order expression nor in
-     * <code>COALESCE</code>, so there the order is built by {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
+     * The order is a correlated subquery wrapped in <code>COALESCE</code> with a fallback, see
+     * {@link Provider#getOrderBySubqueryFallback(CriteriaBuilder, Subquery, Class)}, because EclipseLink does not accept a subquery as order expression, and
+     * SQL Server does not accept <code>COALESCE</code> with only one argument. DB2 accepts a subquery neither as order expression nor in <code>COALESCE</code>,
+     * so there the order is built by {@link #buildIdQuery(PageBuilder, CriteriaBuilder)} instead.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private <T extends E> Order buildCollectionOrder(
@@ -2641,7 +2641,8 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page.getRequiredCriteria(), criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
-        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, subquery);
+        var fallback = provider.getOrderBySubqueryFallback(criteriaBuilder, subquery, field.getJavaType());
+        var expression = criteriaBuilder.function("COALESCE", field.getJavaType(), subquery, fallback);
         return order.getValue() ? criteriaBuilder.asc(expression) : criteriaBuilder.desc(expression);
     }
 

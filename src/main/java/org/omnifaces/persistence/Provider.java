@@ -43,7 +43,9 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Query;
 import jakarta.persistence.Table;
+import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.Bindable;
@@ -160,6 +162,11 @@ public enum Provider {
         public void configureSecondLevelCache(Query query, boolean cacheable) {
             query.setHint(QUERY_HINT_ECLIPSELINK_REFRESH, !cacheable);
             super.configureSecondLevelCache(query, cacheable);
+        }
+
+        @Override
+        public <T> Expression<T> getOrderBySubqueryFallback(CriteriaBuilder criteriaBuilder, Subquery<T> subquery, Class<T> type) {
+            return subquery;
         }
 
     },
@@ -562,6 +569,23 @@ public enum Provider {
      */
     public void configureOrderBySubquery(Query query) {
         // NOOP.
+    }
+
+    /**
+     * Returns the fallback of the <code>COALESCE</code> wherein a query wraps a correlated subquery to order by, because EclipseLink does not accept a subquery
+     * as order expression. The default implementation returns a <code>NULL</code> literal of the given type, because OpenJPA does not accept the same subquery
+     * twice in one function call. EclipseLink returns the given subquery itself, because it binds a <code>NULL</code> literal as <code>VARCHAR</code>, which
+     * PostgreSQL does not match with a non-text type.
+     *
+     * @param <T> The type of the subquery.
+     * @param criteriaBuilder The criteria builder of the query.
+     * @param subquery The correlated subquery to order by.
+     * @param type The type of the subquery.
+     * @return The fallback of the <code>COALESCE</code> around the given subquery.
+     * @since 2.0
+     */
+    public <T> Expression<T> getOrderBySubqueryFallback(CriteriaBuilder criteriaBuilder, Subquery<T> subquery, Class<T> type) {
+        return criteriaBuilder.nullLiteral(type);
     }
 
     /**

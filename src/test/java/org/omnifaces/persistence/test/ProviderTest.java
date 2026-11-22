@@ -14,6 +14,7 @@ package org.omnifaces.persistence.test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Provider.ECLIPSELINK;
 import static org.omnifaces.persistence.Provider.HIBERNATE;
@@ -27,6 +28,9 @@ import java.util.Map;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
@@ -166,6 +170,27 @@ class ProviderTest {
     }
 
     static class MariaDBPlatform {
+    }
+
+    @Nested
+    class GetOrderBySubqueryFallback {
+
+        private final Expression<?> nullLiteral = (Expression<?>) stub(Map.of(), Expression.class);
+        private final CriteriaBuilder criteriaBuilder = (CriteriaBuilder) stub(Map.of("nullLiteral", nullLiteral), CriteriaBuilder.class);
+        @SuppressWarnings("unchecked")
+        private final Subquery<Long> subquery = (Subquery<Long>) stub(Map.of(), Subquery.class);
+
+        @Test
+        void isNullLiteralByDefault() {
+            assertSame(nullLiteral, HIBERNATE.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+            assertSame(nullLiteral, OPENJPA.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+        }
+
+        @Test
+        void isSubqueryItselfOnEclipseLink() {
+            assertSame(subquery, ECLIPSELINK.getOrderBySubqueryFallback(criteriaBuilder, subquery, Long.class));
+        }
+
     }
 
     static class PostgresPlusPlatform {
