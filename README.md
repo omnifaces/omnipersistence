@@ -444,6 +444,7 @@ Give a searchable column, or on H2 the database, an accent-insensitive collation
 The collation also orders the column linguistically, such as `c`, `ç`, `d`, `e`, `é`.
 `Criteria#applies()` of `Like` and `IgnoreCase` always ignores accents, so it agrees with such a collation.
 A letter which Unicode does not decompose into a base letter and an accent, such as `ø` or `ł`, keeps its accent in `Criteria#applies()`.
+So does `й`, which accent-insensitive collations treat as a letter of its own.
 
 ---
 

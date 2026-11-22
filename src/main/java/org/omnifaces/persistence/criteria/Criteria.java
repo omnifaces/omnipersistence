@@ -102,7 +102,7 @@ public abstract class Criteria<T> implements Serializable {
     private static final DateTimeFormatter LOCAL_DATE_TIME = ofPattern(DATE_PATTERN + " " + TIME_PATTERN);
     private static final DateTimeFormatter OFFSET_TIME = withOffset(LOCAL_TIME);
     private static final DateTimeFormatter OFFSET_DATE_TIME = withOffset(LOCAL_DATE_TIME);
-    private static final Pattern ACCENTS = Pattern.compile("(?:[\\u0300-\\u0305\\u0307-\\u036F]|(?<![\\u0418\\u0438])\\u0306)+");
+    private static final Pattern ACCENTS = Pattern.compile("(?:[\\p{InCombiningDiacriticalMarks}&&[^\\u0306]]|(?<![\\u0418\\u0438])\\u0306)+");
 
     /** The criteria value. */
     private final T value;
