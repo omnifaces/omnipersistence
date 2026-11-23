@@ -55,6 +55,9 @@ import org.omnifaces.persistence.JPA;
  * <p>
  * The value of {@link #contains(String)}, {@link #startsWith(String)} and {@link #endsWith(String)} matches literally: <code>%</code> and <code>_</code>, and
  * <code>[</code> on SQL Server, are no wildcards in it, see {@link JPA#escapeLike(String)}. Use {@link #pattern(String)} to match by wildcards.
+ * <p>
+ * Whether the search on a string column ignores accents depends on the collation of the column. With an accent-insensitive collation,
+ * <code>Like.contains("emil")</code> also matches <code>\u00c9mile</code>. {@link #applies(Object)} always ignores accents.
  *
  * @author Bauke Scholtz
  * @since 1.0
@@ -208,20 +211,20 @@ public final class Like extends Criteria<String> {
             return false;
         }
 
-        String lowerCasedValue = getValue().toLowerCase(Locale.ROOT);
-        String lowerCasedModelValue = asString(modelValue).toLowerCase(Locale.ROOT);
+        String foldedValue = getFoldedValue();
+        String foldedModelValue = fold(asString(modelValue));
 
         if (pattern()) {
-            return matches(lowerCasedValue, lowerCasedModelValue);
+            return matches(foldedValue, foldedModelValue);
         }
         else if (startsWith()) {
-            return lowerCasedModelValue.startsWith(lowerCasedValue);
+            return foldedModelValue.startsWith(foldedValue);
         }
         else if (endsWith()) {
-            return lowerCasedModelValue.endsWith(lowerCasedValue);
+            return foldedModelValue.endsWith(foldedValue);
         }
         else {
-            return lowerCasedModelValue.contains(lowerCasedValue);
+            return foldedModelValue.contains(foldedValue);
         }
     }
 

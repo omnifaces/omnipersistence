@@ -431,6 +431,21 @@ PartialResultList<Person> result = personRepository.getPage(
 On a `java.time` field, `Like` and `IgnoreCase` match the date as `yyyy-MM-dd` and the time as `HH:mm:ss`, with a space in between.
 Whether the offset and fractional seconds follow depends on the database.
 
+Whether `Like` and `IgnoreCase` on a string column also ignore accents, so that `Like.contains("emil")` matches `Émile`, depends on the collation of the column.
+Give a searchable column, or on H2 the database, an accent-insensitive collation:
+
+| Database | Accent-insensitive collation |
+|---|---|
+| MySQL, MariaDB | `utf8mb4_0900_ai_ci`, the default of MySQL 8, or `utf8mb4_general_ci` |
+| SQL Server | `Latin1_General_100_CI_AI` |
+| PostgreSQL | a nondeterministic ICU collation, such as `CREATE COLLATION ignore_accents (provider = icu, locale = 'und-u-ks-level1', deterministic = false)`. `LIKE` on it needs PostgreSQL 18. |
+| H2 | `SET COLLATION ENGLISH STRENGTH PRIMARY` on an empty database |
+
+The collation also orders the column linguistically, such as `c`, `ç`, `d`, `e`, `é`.
+`Criteria#applies()` of `Like` and `IgnoreCase` always ignores accents, so it agrees with such a collation.
+A letter which Unicode does not decompose into a base letter and an accent, such as `ø` or `ł`, keeps its accent in `Criteria#applies()`.
+So does `й`, which accent-insensitive collations treat as a letter of its own.
+
 ---
 
 ## 6. Soft delete
@@ -924,6 +939,7 @@ These changes in behavior need your attention as well:
 
 - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
 - `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
+- `Criteria#applies()` of `Like` and `IgnoreCase` ignores accents, so that it agrees with an accent-insensitive collation of the column. An in-memory filter on it, such as of a non-lazy OptimusFaces table, matches `Émile` by `emil`.
 - An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
 - A fetched collection which the ordering of the page does not reference is ordered by its `@OrderBy`: a plain one by the basic ID of an entity element or by the value of a basic element, else by the named fields with an optional `ASC` or `DESC`. Any other `@OrderBy` leaves the order to the provider. Without `@OrderBy` or `@OrderColumn`, it is sorted by the natural order of its elements, if they are `Comparable`.
 - An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
