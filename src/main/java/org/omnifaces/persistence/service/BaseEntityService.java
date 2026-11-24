@@ -2995,7 +2995,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var value = unwrapNot(criteria);
         var negated = isNegated(criteria);
         var negationApplied = false;
-        var nullValue = isNullValue(value);
+        var nullValue = Criteria.unwrap(value) == null;
         Predicate predicate;
 
         try {
@@ -3298,7 +3298,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * <code>@ElementCollection</code> field itself, see {@link #buildEmptyCollectionPredicate}.
      */
     private boolean isEmptyCollectionCriteria(String field, Object criteria) {
-        return collections.test(field) && isNullValue(unwrapNot(criteria));
+        return collections.test(field) && Criteria.unwrap(criteria) == null;
     }
 
     /**
@@ -3394,17 +3394,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether given value is <code>null</code> or a {@link Criteria} whose value is <code>null</code>.
-     */
-    private static boolean isNullValue(Object value) {
-        return value == null || value instanceof Criteria<?> criteria && criteria.getValue() == null;
-    }
-
-    /**
-     * Returns whether given value is, or holds in its multiple values outside a nested negation, a <code>null</code> value, see {@link #isNullValue(Object)}.
+     * Returns whether given value is, or holds in its multiple values outside a nested negation, a <code>null</code> value.
      */
     private static boolean hasNullValue(Object value) {
-        return !(value instanceof Not) && (isNullValue(value) || isMultiValued(value) && stream(value).anyMatch(BaseEntityService::hasNullValue));
+        return !(value instanceof Not) && (Criteria.unwrap(value) == null || isMultiValued(value) && stream(value).anyMatch(BaseEntityService::hasNullValue));
     }
 
     /**
