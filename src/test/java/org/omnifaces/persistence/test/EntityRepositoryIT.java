@@ -136,8 +136,8 @@ public class EntityRepositoryIT {
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
     private static final String LOADED_REFERENCE = "EclipseLink returns an already loaded instance from EntityManager#getReference()";
     private static final String ECLIPSELINK_ORDER_BY_FETCH_JOIN = "EclipseLink ignores the @OrderBy of a collection which a query fetch joins";
-    private static final String ECLIPSELINK_ORDER_BY_EMBEDDABLE = "EclipseLink expands an @OrderBy on a whole embeddable with the fields of the target entity,"
-        + " so loading the collection fails";
+    private static final String ORDER_BY_WHOLE_EMBEDDABLE = "EclipseLink expands an @OrderBy on a whole embeddable with the fields of the target entity,"
+        + " so loading the collection fails, and OpenJPA ignores it";
 
     @Deployment
     public static WebArchive createDeployment() {
@@ -1901,7 +1901,7 @@ public class EntityRepositoryIT {
      * collection is loaded lazily.
      */
     @Test
-    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ORDER_BY_EMBEDDABLE)
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK_OR_OPENJPA, disabledReason = ORDER_BY_WHOLE_EMBEDDABLE)
     void testPageWithMembershipsOrderedByWholeEmbeddableFollowsProvider() {
         var start = LocalDate.of(2026, 1, 1);
         var memberships = List.of(
@@ -2515,7 +2515,7 @@ public class EntityRepositoryIT {
 
     /**
      * A page of the root of a joined entity hierarchy with a criteria on an element collection returns and counts the matching subclass instances, also when
-     * restricted to one subclass.
+     * restricted to one subclass. The count of the latter is not asserted on OpenJPA.
      */
     @Test
     void testPageOfEntityHierarchyWithCriteriaOnElementCollectionCounts() {
@@ -2538,7 +2538,10 @@ public class EntityRepositoryIT {
                 (criteriaBuilder, query, root) -> query.where(criteriaBuilder.equal(root.type(), Invoice.class))
             );
             assertEquals(List.of(documents.get(0).getId(), documents.get(2).getId()), invoices.stream().map(Document::getId).toList(), "Invoices");
-            assertEquals(2, invoices.getEstimatedTotalNumberOfResults(), "Count of invoices");
+
+            if (documentRepository.getProvider() != Provider.OPENJPA) { // OpenJPA renders TYPE() in the count subquery as 1 = 1, so the count ignores it.
+                assertEquals(2, invoices.getEstimatedTotalNumberOfResults(), "Count of invoices");
+            }
         }
         finally {
             transactionServiceCDI.run(
