@@ -20,26 +20,36 @@ import java.util.List;
 
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 
 /**
- * An entity with collections whose mapped order differs from the natural order of their elements, one of entities with an embedded ID, and with a collection of
- * embeddables.
+ * An entity with collections whose mapped order differs from the natural order of their elements: one of entities ordered by two fields, one of entities with
+ * an embedded ID, one of embeddables and one of basic values.
  */
 @Entity
+@NamedEntityGraph(name = Album.WITH_TRACKS, attributeNodes = @NamedAttributeNode("tracks"))
 public class Album extends LocalGeneratedIdEntity {
 
     private static final long serialVersionUID = 1L;
 
+    public static final String WITH_TRACKS = "Album.withTracks";
+
     private String title;
 
     @OneToMany(mappedBy = "album", cascade = { PERSIST, REMOVE })
-    @OrderBy("title DESC")
+    @OrderBy("disc, title DESC")
     private List<Track> tracks = new ArrayList<>();
 
     @ElementCollection
+    @OrderBy("role DESC")
     private List<Credit> credits = new ArrayList<>();
+
+    @ElementCollection
+    @OrderBy
+    private List<String> genres = new ArrayList<>();
 
     @OneToMany
     @OrderBy("period.startDate DESC")
@@ -67,6 +77,14 @@ public class Album extends LocalGeneratedIdEntity {
 
     public void setCredits(List<Credit> credits) {
         this.credits = credits;
+    }
+
+    public List<String> getGenres() {
+        return genres;
+    }
+
+    public void setGenres(List<String> genres) {
+        this.genres = genres;
     }
 
     public List<Membership> getMemberships() {

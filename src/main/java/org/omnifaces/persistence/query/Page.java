@@ -523,7 +523,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * Set the required criteria. Map key represents property path and map value represents criteria. Each entity must match all of given criteria. A
          * criteria whose value is an empty collection or array imposes no restriction, the same as when it is absent. A criteria whose value is
          * <code>null</code> matches when the property is <code>NULL</code>, and <code>Not.value(null)</code> when it is not <code>NULL</code>. A property of an
-         * optional association is <code>NULL</code> when the association is absent.
+         * optional association is <code>NULL</code> when the association is absent. On a <code>@OneToMany</code>, <code>@ManyToMany</code> or
+         * <code>@ElementCollection</code> field itself, <code>null</code> matches when it has no elements, and <code>Not.value(null)</code> when it has.
          *
          * @param requiredCriteria Required criteria. May not be <code>null</code>.
          * @return This builder.
@@ -544,7 +545,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
          * Set the optional criteria. Map key represents property path and map value represents criteria. Each entity must match at least one of given criteria.
          * A criteria whose value is an empty collection or array imposes no restriction, the same as when it is absent. A criteria whose value is
          * <code>null</code> matches when the property is <code>NULL</code>, and <code>Not.value(null)</code> when it is not <code>NULL</code>. A property of an
-         * optional association is <code>NULL</code> when the association is absent.
+         * optional association is <code>NULL</code> when the association is absent. On a <code>@OneToMany</code>, <code>@ManyToMany</code> or
+         * <code>@ElementCollection</code> field itself, <code>null</code> matches when it has no elements, and <code>Not.value(null)</code> when it has.
          *
          * @param optionalCriteria Optional criteria. May not be <code>null</code>.
          * @return This builder.

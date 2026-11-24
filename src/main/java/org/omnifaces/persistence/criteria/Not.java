@@ -25,7 +25,9 @@ import jakarta.persistence.criteria.Predicate;
  * Creates <code>NOT (predicate) OR path IS NULL</code>, or <code>path IS NOT NULL</code> for <code>Not.value(null)</code>.
  * <p>
  * This wraps any value or {@link Criteria} to negate it. The value can be a plain object, or another {@link Criteria} instance. The negation also matches
- * <code>NULL</code>, the same as {@link #applies(Object)}, except when the value is or contains <code>null</code> outside a nested negation.
+ * <code>NULL</code>, the same as {@link #applies(Object)}, except when the value is or contains <code>null</code> outside a nested negation. On a
+ * <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> field itself, <code>Not.value(null)</code> matches the entities with
+ * elements.
  * <p>
  * Usage examples:
  *

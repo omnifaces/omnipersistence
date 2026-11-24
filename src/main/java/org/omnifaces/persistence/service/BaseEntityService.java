@@ -239,6 +239,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     private java.util.function.Predicate<String> elementCollections = field -> false;
     private Supplier<Set<String>> manyOrOneToOnes = Collections::emptySet;
     private java.util.function.Predicate<String> oneToManys = field -> false;
+    private java.util.function.Predicate<String> collections = field -> false;
     private Validator validator;
     private java.util.function.Predicate<Class<?>> entityTypes = type -> false;
     private Function<Object, Object> idGetter;
@@ -287,6 +288,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         elementCollections = mappings::isElementCollection;
         manyOrOneToOnes = mappings::getManyOrOneToOnes;
         oneToManys = mappings::isOneToMany;
+        collections = mappings::isCollection;
         entityTypes = mappings::isEntity;
         idGetter = mappings::getId;
         idUnsetter = mappings::unsetId;
@@ -2637,7 +2639,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var collection = joinCollection(subqueryRoot, collectionPath, JoinType.INNER);
         var joins = new HashMap<String, From<?, ?>>();
         var predicates = new ArrayList<Predicate>();
-        predicates.add(buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName())));
+        predicates.add(buildCorrelationPredicate(subqueryRoot, pathResolver, criteriaBuilder));
         predicates.addAll(buildElementPredicates(collection, collectionPath, JoinType.INNER, joins, page.getRequiredCriteria(), criteriaBuilder, parameters));
         Expression field = getElementPath(collection, collectionPath, order.getKey(), JoinType.INNER, joins);
         subquery.select(order.getValue() ? criteriaBuilder.least(field) : criteriaBuilder.greatest(field)).where(toArray(predicates));
@@ -2686,7 +2688,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         for (var criteria : requiredCriteria.entrySet()) {
             var field = criteria.getKey();
 
-            if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
+            if (isEmptyCollectionCriteria(field, criteria.getValue())) {
+                continue;
+            }
+            else if (field.equals(collectionPath) || field.startsWith(collectionPath + ".")) {
                 var path = getElementPath(collection, collectionPath, field, joinType, joins);
 
                 try {
@@ -2808,9 +2813,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns the disjunction of the optional predicates of given page for the <code>WHERE</code> clause, or <code>null</code> when there are none or when any
      * of them is on an aggregate. This method then adds the disjunction to the <code>HAVING</code> clause of given query itself. There, each predicate built by
-     * {@link #buildArrayPredicate} is kept as is, because its correlated subquery on the root matches per entity, and SQL Server does not accept a subquery in
-     * an aggregate. Each other non-aggregate predicate matches when it matches any row of the group. The <code>GROUP BY</code> is not affected by the optional
-     * predicates.
+     * {@link #buildArrayPredicate} or {@link #buildEmptyCollectionPredicate} is kept as is, because its correlated subquery on the root matches per entity, and
+     * SQL Server does not accept a subquery in an aggregate. Each other non-aggregate predicate matches when it matches any row of the group. The
+     * <code>GROUP BY</code> is not affected by the optional predicates.
      */
     private <T extends E> Predicate buildOptionalRestriction(
         PageBuilder<T> pageBuilder, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver, Map<String, Object> parameters
@@ -2938,6 +2943,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         if (isEmptyMultiValue(criteria)) {
             return null;
         }
+        else if (isEmptyCollectionCriteria(field, criteria)) {
+            return buildEmptyCollectionPredicate(field, criteria, query, criteriaBuilder, pathResolver);
+        }
 
         Expression<?> path;
         Class<?> type = null;
@@ -2956,13 +2964,17 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     }
 
     /**
-     * Returns whether the predicate for given field and value is built by {@link #buildArrayPredicate}, which compares in its own correlated subquery, or is
-     * not built at all. The path of the field must then not be resolved on the main query root, because that adds a JOIN which multiplies or drops rows.
+     * Returns whether the predicate for given field and value is built by {@link #buildArrayPredicate} or {@link #buildEmptyCollectionPredicate}, each of which
+     * compares in its own correlated subquery, or is not built at all. The path of the field must then not be resolved on the main query root, because that
+     * adds a JOIN which multiplies or drops rows.
      */
     private boolean isBuiltAsArrayPredicate(String field, Object criteria, AbstractQuery<?> query) {
         var value = Criteria.unwrap(criteria);
 
-        if (value == null) {
+        if (isEmptyCollectionCriteria(field, criteria)) {
+            return true;
+        }
+        else if (value == null) {
             return false;
         }
         else if (elementCollections.test(field)) {
@@ -3270,7 +3282,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         var count = subquery.select(criteriaBuilder.countDistinct(lowerIfString(fieldPath, type, criteriaBuilder)))
             .where(
                 criteriaBuilder.or(toArray(predicates)),
-                buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()))
+                buildCorrelationPredicate(subqueryRoot, pathResolver, criteriaBuilder)
             );
 
         if (anyMatch) {
@@ -3279,6 +3291,39 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
 
         var allMatchCount = (long) predicates.size();
         return negated ? criteriaBuilder.notEqual(count, allMatchCount) : criteriaBuilder.equal(count, allMatchCount);
+    }
+
+    /**
+     * Returns whether given criteria is a <code>null</code> value, or <code>Not</code> of it, on a <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> field itself, see {@link #buildEmptyCollectionPredicate}.
+     */
+    private boolean isEmptyCollectionCriteria(String field, Object criteria) {
+        return collections.test(field) && isNullValue(unwrapNot(criteria));
+    }
+
+    /**
+     * Builds a correlated <code>NOT EXISTS</code> subquery on the elements of given <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> field, which matches the entities without elements. When the criteria is negated, it is <code>EXISTS</code>, which
+     * matches the entities with elements. Where a nested subquery is not supported, it is skipped, see {@link #isNestedSubquerySupported(AbstractQuery)}.
+     */
+    private Predicate buildEmptyCollectionPredicate(
+        String field, Object criteria, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver
+    )
+    {
+        if (!isNestedSubquerySupported(query)) {
+            // The count ignores this criteria, see isNestedSubquerySupported.
+            logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, null, criteria));
+            return null;
+        }
+
+        var subquery = query.subquery(Object.class);
+        Root<E> subqueryRoot = subquery.from(entityType);
+        joinCollection(subqueryRoot, field, JoinType.INNER);
+        subquery.select(buildSubquerySelection(subqueryRoot)).where(buildCorrelationPredicate(subqueryRoot, pathResolver, criteriaBuilder));
+        var exists = criteriaBuilder.exists(subquery);
+        var predicate = isNegated(criteria) ? exists : criteriaBuilder.not(exists);
+        Alias.create(provider, pathResolver.get(idAttribute.getName()), field).set(predicate);
+        return predicate;
     }
 
     /**
@@ -3453,6 +3498,13 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns a predicate which compares given IDs, per attribute when the ID is an embeddable, because OpenJPA cannot compare an embeddable as a whole.
      */
+    /**
+     * Returns the predicate which correlates the ID of given subquery root with the ID of the root of given path resolver.
+     */
+    private Predicate buildCorrelationPredicate(Root<E> subqueryRoot, PathResolver pathResolver, CriteriaBuilder criteriaBuilder) {
+        return buildIdEqualPredicate(criteriaBuilder, subqueryRoot.get(idAttribute.getName()), pathResolver.get(idAttribute.getName()));
+    }
+
     private Predicate buildIdEqualPredicate(CriteriaBuilder criteriaBuilder, Expression<?> id, Expression<?> otherId) {
         if (embeddableIdType == null) {
             return criteriaBuilder.equal(id, otherId);

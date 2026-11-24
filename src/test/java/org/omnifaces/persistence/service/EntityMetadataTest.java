@@ -129,6 +129,16 @@ class EntityMetadataTest {
         }
 
         @Test
+        void fieldEndingInOneToManyOrElementCollectionIsCollection() {
+            var mappings = mappings(new EntityMetadata(Root.class));
+            assertTrue(mappings.isCollection("tags"));
+            assertTrue(mappings.isCollection("children"));
+            assertTrue(mappings.isCollection("children.labels"));
+            assertFalse(mappings.isCollection("parent"));
+            assertFalse(mappings.isCollection("parent.name"));
+        }
+
+        @Test
         void fieldNestedInOneToManyIsOneToMany() {
             var mappings = mappings(new EntityMetadata(Root.class));
             assertTrue(mappings.isOneToMany("children.labels"));
