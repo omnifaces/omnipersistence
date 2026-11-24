@@ -33,6 +33,8 @@ public class Track {
 
     private String title;
 
+    private int disc;
+
     @ManyToOne
     private Album album;
 
@@ -46,6 +48,14 @@ public class Track {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public int getDisc() {
+        return disc;
+    }
+
+    public void setDisc(int disc) {
+        this.disc = disc;
     }
 
     public Album getAlbum() {

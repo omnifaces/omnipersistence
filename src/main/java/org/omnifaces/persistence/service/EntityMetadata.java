@@ -205,6 +205,18 @@ final class EntityMetadata {
         }
 
         /**
+         * Returns whether the given field path ends in a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> field, e.g.
+         * <code>phones</code> or <code>tags</code>, but not <code>phones.number</code>.
+         *
+         * @param field The field path.
+         * @return Whether the given field path ends in a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> field.
+         */
+        boolean isCollection(String field) {
+            var pathMapping = getPathMapping(field);
+            return pathMapping.elementCollection() || pathMapping.oneOrManyToMany();
+        }
+
+        /**
          * Returns whether the given field path is nested in a <code>@OneToMany</code> or <code>@ManyToMany</code> field, e.g. <code>phones.number</code> when
          * <code>phones</code> is a <code>@OneToMany</code> field.
          *
@@ -277,7 +289,7 @@ final class EntityMetadata {
 
             var lastAttribute = getAttributeMappings(type).get(attributeNames[lastIndex]);
             return lastAttribute != null
-                ? new PathMapping(true, lastAttribute.elementCollection(), nestedInOneToMany)
+                ? new PathMapping(true, lastAttribute.elementCollection(), lastAttribute.oneOrManyToMany(), nestedInOneToMany)
                 : PathMapping.unresolved(nestedInOneToMany);
         }
 
@@ -375,12 +387,13 @@ final class EntityMetadata {
      * @param resolved Whether every attribute in the path could be found, and each one but the last refers to an entity type. Only resolved paths are cached,
      * so that unknown field names cannot grow the cache.
      * @param elementCollection Whether the path ends in an <code>@ElementCollection</code> field.
+     * @param oneOrManyToMany Whether the path ends in a <code>@OneToMany</code> or <code>@ManyToMany</code> field.
      * @param nestedInOneToMany Whether the path is nested in a <code>@OneToMany</code> field.
      */
-    private record PathMapping(boolean resolved, boolean elementCollection, boolean nestedInOneToMany) {
+    private record PathMapping(boolean resolved, boolean elementCollection, boolean oneOrManyToMany, boolean nestedInOneToMany) {
 
-        private static final PathMapping UNRESOLVED = new PathMapping(false, false, false);
-        private static final PathMapping UNRESOLVED_IN_ONE_TO_MANY = new PathMapping(false, false, true);
+        private static final PathMapping UNRESOLVED = new PathMapping(false, false, false, false);
+        private static final PathMapping UNRESOLVED_IN_ONE_TO_MANY = new PathMapping(false, false, false, true);
 
         static PathMapping unresolved(boolean nestedInOneToMany) {
             return nestedInOneToMany ? UNRESOLVED_IN_ONE_TO_MANY : UNRESOLVED;

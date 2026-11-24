@@ -94,6 +94,7 @@ import org.omnifaces.persistence.test.model.Article;
 import org.omnifaces.persistence.test.model.Attachment;
 import org.omnifaces.persistence.test.model.Badge;
 import org.omnifaces.persistence.test.model.Category;
+import org.omnifaces.persistence.test.model.Club;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Credit;
 import org.omnifaces.persistence.test.model.Document;
@@ -134,6 +135,9 @@ public class EntityRepositoryIT {
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
     private static final String MANAGED_ID_IMMUTABLE = "EclipseLink and OpenJPA reject modifying the ID of a managed entity, so delete() does not unset it";
     private static final String LOADED_REFERENCE = "EclipseLink returns an already loaded instance from EntityManager#getReference()";
+    private static final String ECLIPSELINK_ORDER_BY_FETCH_JOIN = "EclipseLink ignores the @OrderBy of a collection which a query fetch joins";
+    private static final String ECLIPSELINK_ORDER_BY_EMBEDDABLE = "EclipseLink expands an @OrderBy on a whole embeddable with the fields of the target entity,"
+        + " so loading the collection fails";
 
     @Deployment
     public static WebArchive createDeployment() {
@@ -156,6 +160,10 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Attachment> attachmentRepository;
     @Inject
     private EntityRepository<Long, Album> albumRepository;
+    @Inject
+    private EntityRepository<Long, Track> trackRepository;
+    @Inject
+    private EntityRepository<Long, Club> clubRepository;
     @Inject
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
@@ -1797,12 +1805,263 @@ public class EntityRepositoryIT {
 
         try {
             var page = albumRepository.getPage(Page.with().allMatch(Map.of("id", album.getId())).build(), false, "memberships");
-            var memberNames = page.get(0).getMemberships().stream().map(membership -> membership.getId().getMemberName()).toList();
-            assertEquals(List.of("ordered-b", "ordered-c", "ordered-a"), memberNames, "Mapped order");
+            assertEquals(List.of("ordered-b", "ordered-c", "ordered-a"), memberNamesOf(page.get(0).getMemberships()), "Mapped order");
         }
         finally {
             deleteAlbum(album);
             transactionServiceCDI.run(() -> memberships.forEach(membership -> membershipRepository.delete(membershipRepository.getById(membership.getId()))));
+        }
+    }
+
+    /**
+     * The fetched elements of a collection annotated with <code>@OrderBy</code> on two fields are in that order, also among the elements which tie on the first
+     * field.
+     */
+    @Test
+    void testPageWithTracksKeepsMappedOrderOnTwoFields() {
+        var album = new Album();
+        album.setTitle("discs");
+        addTrack(album, 2, "c");
+        addTrack(album, 1, "a");
+        addTrack(album, 2, "d");
+        addTrack(album, 1, "b");
+        transactionServiceCDI.run(() -> albumRepository.persist(album));
+
+        try {
+            var page = albumRepository.getPage(Page.with().allMatch(Map.of("id", album.getId())).build(), false, "tracks");
+            assertEquals(List.of("b", "a", "d", "c"), titlesOf(page.get(0).getTracks()), "Mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * The fetched elements of an element collection annotated with <code>@OrderBy</code> are in that order: embeddables by the named field as the database
+     * orders it, <code>NULL</code> included, and basic values by their value.
+     */
+    @Test
+    void testPageWithElementCollectionsKeepsMappedOrder() {
+        var album = persistAlbum();
+
+        try {
+            var page = albumRepository.getPage(Page.with().allMatch(Map.of("id", album.getId())).build(), false, "credits", "genres");
+            assertEquals(creditNames(album, " ORDER BY c.role DESC"), namesOf(page.get(0).getCredits()), "Credits in mapped order");
+            assertEquals(List.of("blues", "jazz", "rock"), page.get(0).getGenres(), "Genres in mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * A ranged page with a fetch of a collection annotated with <code>@OrderBy</code> returns the entities of the range, each with all its elements in that
+     * order.
+     */
+    @Test
+    void testRangedPageOfAlbumsKeepsAllTracksOfEachAlbumInMappedOrder() {
+        var albums = new ArrayList<Album>();
+
+        try {
+            List.of("range-c", "range-a", "range-b").forEach(title -> albums.add(persistAlbum(title)));
+            var page = albumRepository.getPage(
+                Page.with().range(1, 2).allMatch(Map.of("title", Like.startsWith("range-"))).orderBy("title", true).build(), true, "tracks"
+            );
+            assertEquals(List.of("range-b", "range-c"), page.stream().map(Album::getTitle).toList(), "Albums");
+            assertEquals(3, page.getEstimatedTotalNumberOfResults(), "Count");
+            page.forEach(album -> assertEquals(List.of("c", "b", "a"), titlesOf(album.getTracks()), "Tracks of " + album.getTitle()));
+        }
+        finally {
+            albums.forEach(this::deleteAlbum);
+        }
+    }
+
+    /**
+     * A fetch of a collection annotated with <code>@OrderBy</code> under a fetched association holds each element once, in that order, also when several
+     * entities of the page share the association.
+     */
+    @Test
+    void testPageOfTracksWithFetchedAlbumTracksKeepsMappedOrder() {
+        var album = persistAlbum();
+
+        try {
+            var page = trackRepository.getPage(
+                Page.with().allMatch(Map.of("album.id", album.getId())).orderBy("title", true).build(), true, "album", "album.tracks"
+            );
+            assertEquals(List.of("a", "b", "c"), titlesOf(page), "Tracks");
+            page.forEach(track -> assertEquals(List.of("c", "b", "a"), titlesOf(track.getAlbum().getTracks()), "Tracks of album of " + track.getTitle()));
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * The fetched elements of a collection whose <code>@OrderBy</code> names a whole embeddable are in the order of the provider, the same as when the
+     * collection is loaded lazily.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ORDER_BY_EMBEDDABLE)
+    void testPageWithMembershipsOrderedByWholeEmbeddableFollowsProvider() {
+        var start = LocalDate.of(2026, 1, 1);
+        var memberships = List.of(
+            new Membership(new MembershipId("club-a", "x"), new Period(start, null)),
+            new Membership(new MembershipId("club-b", "x"), new Period(start.plusMonths(2), null)),
+            new Membership(new MembershipId("club-c", "x"), new Period(start.plusMonths(1), null))
+        );
+        var club = new Club();
+        club.setName("club");
+        club.getMemberships().addAll(memberships);
+
+        try {
+            memberships.forEach(membership -> transactionServiceCDI.run(() -> membershipRepository.persist(membership)));
+            transactionServiceCDI.run(() -> clubRepository.persist(club));
+            var page = clubRepository.getPage(Page.with().allMatch(Map.of("id", club.getId())).build(), false, "memberships");
+            var lazilyLoaded = transactionServiceCDI.call(() -> memberNamesOf(clubRepository.getById(club.getId()).getMemberships()));
+            assertEquals(lazilyLoaded, memberNamesOf(page.get(0).getMemberships()), "Order of provider");
+        }
+        finally {
+            transactionServiceCDI.run(
+                () -> Optional.ofNullable(club.getId()).map(clubRepository::getById).ifPresent(clubRepository::delete)
+            );
+            transactionServiceCDI.run(
+                () -> memberships.stream().map(membership -> membershipRepository.getById(membership.getId())).filter(Objects::nonNull)
+                    .forEach(membershipRepository::delete)
+            );
+        }
+    }
+
+    /**
+     * A load graph of a collection annotated with <code>@OrderBy</code> loads its elements in that order.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = "OpenJPA does not support EntityManager#getEntityGraph()")
+    void testGetByIdWithLoadGraphKeepsMappedOrderOfTracks() {
+        var album = persistAlbum();
+
+        try {
+            assertEquals(List.of("c", "b", "a"), titlesOf(albumRepository.getByIdWithLoadGraph(album.getId(), Album.WITH_TRACKS).getTracks()), "Mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * A fetch in a {@link CriteriaQueryBuilder} of a collection annotated with <code>@OrderBy</code> loads its elements in that order.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ORDER_BY_FETCH_JOIN)
+    void testListByCriteriaQueryBuilderWithFetchKeepsMappedOrderOfTracks() {
+        var album = persistAlbum();
+
+        try {
+            CriteriaQueryBuilder<Album> withTracks = (builder, query, root) -> {
+                root.fetch("tracks", LEFT);
+                query.distinct(true).where(builder.equal(root.get("id"), album.getId()));
+            };
+            assertEquals(List.of("c", "b", "a"), titlesOf(albumRepository.list(withTracks, Map.of()).get(0).getTracks()), "Mapped order");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    /**
+     * A criteria on a basic field of an association of embeddable elements returns and counts the entities with a matching element.
+     */
+    @Test
+    void testPageWithCriteriaOnFieldOfAssociationOfCreditsCounts() {
+        var credited = persistAlbum("credited-a");
+        var uncredited = new Album();
+        uncredited.setTitle("credited-b");
+        uncredited.getCredits().add(new Credit("Nobody", "kazoo", null));
+        transactionServiceCDI.run(() -> albumRepository.persist(uncredited));
+
+        try {
+            var criteria = Map.<String, Object>of("title", Like.startsWith("credited-"), "credits.person.email", personRepository.getById(1L).getEmail());
+            var page = albumRepository.getPage(Page.with().allMatch(criteria).build(), true);
+            assertEquals(List.of(credited.getId()), page.stream().map(Album::getId).toList(), "Albums");
+            assertEquals(1, page.getEstimatedTotalNumberOfResults(), "Count");
+        }
+        finally {
+            List.of(credited, uncredited).forEach(this::deleteAlbum);
+        }
+    }
+
+    /**
+     * A <code>null</code> criteria on a collection of embeddables matches the entities without elements, and a negated one the entities with elements. It
+     * restricts neither the elements of an ordering on the collection nor the fetched elements. The count is not asserted on OpenJPA, see
+     * {@link OmniPersistenceIT#OPENJPA_COUNT}.
+     */
+    @Test
+    void testPageWithNullCriteriaOnCreditsMatchesAlbumsWithoutCredits() {
+        var credited = persistAlbum("nullcredits-a");
+        var uncredited = new Album();
+        uncredited.setTitle("nullcredits-b");
+        transactionServiceCDI.run(() -> albumRepository.persist(uncredited));
+
+        try {
+            var criteria = new HashMap<String, Object>(Map.of("title", Like.startsWith("nullcredits-")));
+            criteria.put("credits", null);
+            var without = albumRepository.getPage(Page.with().allMatch(criteria).build(), true);
+            assertEquals(List.of(uncredited.getId()), without.stream().map(Album::getId).toList(), "Without credits");
+            assertCountUnlessOpenJPA(without, "Count without credits");
+            criteria.put("credits", Not.value(null));
+            var with = albumRepository.getPage(Page.with().allMatch(criteria).orderBy("credits.role", true).build(), true, "credits");
+            assertEquals(List.of(credited.getId()), with.stream().map(Album::getId).toList(), "With credits");
+            assertCountUnlessOpenJPA(with, "Count with credits");
+            assertEquals(credited.getCredits().size(), with.get(0).getCredits().size(), "Fetched credits");
+        }
+        finally {
+            List.of(credited, uncredited).forEach(this::deleteAlbum);
+        }
+    }
+
+    /**
+     * A <code>null</code> criteria on a collection nested in a collection matches the entities of which no element has nested elements, also without elements,
+     * and a negated one the entities of which an element has nested elements. The count is not asserted on OpenJPA, see
+     * {@link OmniPersistenceIT#OPENJPA_COUNT}.
+     */
+    @Test
+    void testPageWithNullCriteriaOnNestedCollectionMatchesEntitiesWithoutNestedElements() {
+        var start = LocalDate.of(2026, 1, 1);
+        var memberships = List.of(
+            new Membership(new MembershipId("nested-a", "x"), new Period(start, null)),
+            new Membership(new MembershipId("nested-a", "y"), new Period(start, null)),
+            new Membership(new MembershipId("nested-c", "x"), new Period(start, null)),
+            new Membership(new MembershipId("nested-c", "y"), new Period(start, null))
+        );
+        memberships.get(2).getRoles().add("chair");
+        var albums = new ArrayList<Album>();
+
+        try {
+            memberships.forEach(membership -> transactionServiceCDI.run(() -> membershipRepository.persist(membership)));
+
+            for (var title : List.of("nested-a", "nested-b", "nested-c")) {
+                var album = new Album();
+                album.setTitle(title);
+                memberships.stream().filter(membership -> membership.getId().getMemberName().equals(title)).forEach(album.getMemberships()::add);
+                transactionServiceCDI.run(() -> albumRepository.persist(album));
+                albums.add(album);
+            }
+
+            var criteria = new HashMap<String, Object>(Map.of("title", Like.startsWith("nested-")));
+            criteria.put("memberships.roles", null);
+            var without = albumRepository.getPage(Page.with().allMatch(criteria).orderBy("title", true).build(), true);
+            assertEquals(List.of("nested-a", "nested-b"), without.stream().map(Album::getTitle).toList(), "Without roles");
+            assertCountUnlessOpenJPA(without, "Count without roles");
+            criteria.put("memberships.roles", Not.value(null));
+            var with = albumRepository.getPage(Page.with().allMatch(criteria).orderBy("title", true).build(), true);
+            assertEquals(List.of("nested-c"), with.stream().map(Album::getTitle).toList(), "With roles");
+            assertCountUnlessOpenJPA(with, "Count with roles");
+        }
+        finally {
+            albums.forEach(this::deleteAlbum);
+            transactionServiceCDI.run(
+                () -> memberships.stream().map(membership -> membershipRepository.getById(membership.getId())).filter(Objects::nonNull)
+                    .forEach(membershipRepository::delete)
+            );
         }
     }
 
@@ -1832,15 +2091,14 @@ public class EntityRepositoryIT {
     }
 
     private Album persistAlbum() {
-        var album = new Album();
-        album.setTitle("album");
+        return persistAlbum("album");
+    }
 
-        for (var title : List.of("a", "b", "c")) {
-            var track = new Track();
-            track.setTitle(title);
-            track.setAlbum(album);
-            album.getTracks().add(track);
-        }
+    private Album persistAlbum(String title) {
+        var album = new Album();
+        album.setTitle(title);
+        List.of("a", "b", "c").forEach(trackTitle -> addTrack(album, 1, trackTitle));
+        album.getGenres().addAll(List.of("rock", "jazz", "blues"));
 
         transactionServiceCDI.run(() -> {
             var person = personRepository.getById(1L);
@@ -1852,8 +2110,24 @@ public class EntityRepositoryIT {
         return album;
     }
 
+    private static void addTrack(Album album, int disc, String title) {
+        var track = new Track();
+        track.setDisc(disc);
+        track.setTitle(title);
+        track.setAlbum(album);
+        album.getTracks().add(track);
+    }
+
     private void deleteAlbum(Album album) {
         transactionServiceCDI.run(() -> albumRepository.delete(albumRepository.getById(album.getId())));
+    }
+
+    private static List<String> titlesOf(List<Track> tracks) {
+        return tracks.stream().map(Track::getTitle).toList();
+    }
+
+    private static List<String> memberNamesOf(List<Membership> memberships) {
+        return memberships.stream().map(membership -> membership.getId().getMemberName()).toList();
     }
 
     private List<Phone> persistTemporaryPhones(List<String> values) {
@@ -2014,6 +2288,34 @@ public class EntityRepositoryIT {
      */
     @Test
     void testPageWithFetchedManyToManyFilteredByEntityValueWithoutEquals() {
+        withCategorizedArticles(articles -> {
+            var criteria = new HashMap<>(TITLED);
+            criteria.put("categories.parent", categoryRepository.getById("m2m-root"));
+            var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true, "categories");
+            assertEquals(codesOf(articles.subList(0, 2)), codesOf(page), "Articles");
+            assertEquals(2, page.getEstimatedTotalNumberOfResults(), "Count");
+            page.forEach(
+                article -> assertEquals(
+                    Set.of("m2m-a"), article.getCategories().stream().map(Category::getSlug).collect(toSet()), "Fetched categories of " + article.getTitle()
+                )
+            );
+        });
+    }
+
+    /**
+     * A criteria on a basic field of an association of the elements of a <code>@ManyToMany</code> returns and counts the entities with a matching element.
+     */
+    @Test
+    void testPageWithCriteriaOnFieldOfAssociationOfCategoriesCounts() {
+        withCategorizedArticles(
+            articles -> assertEquals(codesOf(articles.subList(0, 2)), codesOfCategorized(Map.of("categories.parent.slug", "m2m-root")), "Articles")
+        );
+    }
+
+    /**
+     * Runs given test with the articles "both", "first" and "second" in the categories A and B, where A has the parent category Root.
+     */
+    private void withCategorizedArticles(Consumer<List<Article>> test) {
         var root = newCategory("m2m-root", "Root");
         var first = newCategory("m2m-a", "A");
         var second = newCategory("m2m-b", "B");
@@ -2028,21 +2330,43 @@ public class EntityRepositoryIT {
             articles.add(persistArticleInCategories("both", first, second));
             articles.add(persistArticleInCategories("first", first));
             articles.add(persistArticleInCategories("second", second));
-
-            var criteria = new HashMap<>(TITLED);
-            criteria.put("categories.parent", categoryRepository.getById("m2m-root"));
-            var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true, "categories");
-            assertEquals(codesOf(articles.subList(0, 2)), codesOf(page), "Articles");
-            assertEquals(2, page.getEstimatedTotalNumberOfResults(), "Count");
-            page.forEach(
-                article -> assertEquals(
-                    Set.of("m2m-a"), article.getCategories().stream().map(Category::getSlug).collect(toSet()), "Fetched categories of " + article.getTitle()
-                )
-            );
+            test.accept(articles);
         }
         finally {
             deleteArticles(articles);
             deleteCategories(List.of(first, second, root));
+        }
+    }
+
+    /**
+     * A <code>null</code> criteria on a collection matches the entities without elements, and a negated one the entities with elements, on a basic element
+     * collection and on a <code>@ManyToMany</code>, also as optional criteria. The count is not asserted on OpenJPA, see
+     * {@link OmniPersistenceIT#OPENJPA_COUNT}.
+     */
+    @Test
+    void testPageWithNullCriteriaOnCollectionMatchesEntitiesWithoutElements() {
+        var category = newCategory("m2m-a", "A");
+        var articles = new ArrayList<Article>();
+
+        try {
+            transactionServiceCDI.run(() -> categoryRepository.persist(category));
+            articles.add(persistArticle("tagged", null, "x"));
+            articles.add(persistArticleInCategories("categorized", category));
+            articles.add(persistArticle("none", null));
+            var tagged = codesOf(articles.subList(0, 1));
+            var categorized = codesOf(articles.subList(1, 2));
+            var untagged = codesOf(articles.subList(1, 3));
+            var uncategorized = codesOf(List.of(articles.get(0), articles.get(2)));
+            assertEquals(untagged, codesOfTitledArticles(Collections.singletonMap("tags", null), Map.of()), "Without tags");
+            assertEquals(tagged, codesOfTitledArticles(Map.of("tags", Not.value(null)), Map.of()), "With tags");
+            assertEquals(uncategorized, codesOfTitledArticles(Collections.singletonMap("categories", null), Map.of()), "Without categories");
+            assertEquals(categorized, codesOfTitledArticles(Map.of("categories", Not.value(null)), Map.of()), "With categories");
+            var tagsOrCategories = Map.<String, Object>of("tags", Not.value(null), "categories", Not.value(null));
+            assertEquals(codesOf(articles.subList(0, 2)), codesOfTitledArticles(Map.of(), tagsOrCategories), "With tags or categories");
+        }
+        finally {
+            deleteArticles(articles);
+            deleteCategories(List.of(category));
         }
     }
 
@@ -2090,10 +2414,33 @@ public class EntityRepositoryIT {
         return article;
     }
 
-    private List<Long> codesOfCategorized(Map<String, Object> categoryCriteria) {
+    /**
+     * Returns the codes of the titled articles matching all of given required criteria and any of given optional criteria, ordered by ID, and asserts their
+     * count, except on OpenJPA.
+     */
+    private List<Long> codesOfTitledArticles(Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
+        var page = pageOfTitledArticles(requiredCriteria, optionalCriteria);
+        assertCountUnlessOpenJPA(page, "Count of " + requiredCriteria + " and any of " + optionalCriteria);
+        return codesOf(page);
+    }
+
+    private PartialResultList<Article> pageOfTitledArticles(Map<String, Object> requiredCriteria, Map<String, Object> optionalCriteria) {
         var criteria = new HashMap<>(TITLED);
-        criteria.putAll(categoryCriteria);
-        var page = articleRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true);
+        criteria.putAll(requiredCriteria);
+        return articleRepository.getPage(Page.with().allMatch(criteria).anyMatch(optionalCriteria).orderBy("id", true).build(), true);
+    }
+
+    /**
+     * Asserts that the count of given page equals its size, except on OpenJPA, see {@link OmniPersistenceIT#OPENJPA_COUNT}.
+     */
+    private void assertCountUnlessOpenJPA(PartialResultList<?> page, String message) {
+        if (personRepository.getProvider() != Provider.OPENJPA) {
+            assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), message);
+        }
+    }
+
+    private List<Long> codesOfCategorized(Map<String, Object> categoryCriteria) {
+        var page = pageOfTitledArticles(categoryCriteria, Map.of());
         assertEquals(page.size(), page.getEstimatedTotalNumberOfResults(), "Count of " + categoryCriteria);
         return codesOf(page);
     }
@@ -2157,6 +2504,41 @@ public class EntityRepositoryIT {
             );
             assertEquals(List.of(documents.get(0).getId(), documents.get(2).getId()), invoices.stream().map(Document::getId).toList(), "Criteria on subclass");
             assertEquals(List.of(10, 20), invoices.stream().map(EntityRepositoryIT::detailOf).toList(), "Subclass fields of criteria on subclass");
+        }
+        finally {
+            transactionServiceCDI.run(
+                () -> documents.stream().filter(document -> document.getId() != null).map(document -> documentRepository.getById(document.getId()))
+                    .filter(Objects::nonNull).forEach(documentRepository::delete)
+            );
+        }
+    }
+
+    /**
+     * A page of the root of a joined entity hierarchy with a criteria on an element collection returns and counts the matching subclass instances, also when
+     * restricted to one subclass.
+     */
+    @Test
+    void testPageOfEntityHierarchyWithCriteriaOnElementCollectionCounts() {
+        var documents = List.<Document>of(
+            newDocument(new Invoice(), "b", 10), newDocument(new Letter(), "a", "Ann"), newDocument(new Invoice(), "c", 20),
+            newDocument(new Letter(), "d", "Dave")
+        );
+        documents.subList(0, 3).forEach(document -> document.getLabels().add("billing"));
+
+        try {
+            documents.forEach(document -> transactionServiceCDI.run(() -> documentRepository.persist(document)));
+            var criteria = new HashMap<>(TITLED);
+            criteria.put("labels", "billing");
+            var billed = documentRepository.getPage(Page.with().allMatch(criteria).orderBy("id", true).build(), true);
+            assertEquals(documents.subList(0, 3).stream().map(Document::getId).toList(), billed.stream().map(Document::getId).toList(), "Documents");
+            assertEquals(3, billed.getEstimatedTotalNumberOfResults(), "Count");
+
+            var invoices = documentRepository.getPage(
+                Page.with().allMatch(criteria).orderBy("id", true).build(), true,
+                (criteriaBuilder, query, root) -> query.where(criteriaBuilder.equal(root.type(), Invoice.class))
+            );
+            assertEquals(List.of(documents.get(0).getId(), documents.get(2).getId()), invoices.stream().map(Document::getId).toList(), "Invoices");
+            assertEquals(2, invoices.getEstimatedTotalNumberOfResults(), "Count of invoices");
         }
         finally {
             transactionServiceCDI.run(

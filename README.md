@@ -410,6 +410,9 @@ Only `Like.pattern(p)` matches by wildcards: `%` matches any characters, `_` mat
 A value which cannot be parsed into the type of the field, such as `"abc"` on a numeric field, matches nothing, and `Not` of it matches everything.
 A value which is an empty collection or array, such as `Set.of()`, imposes no restriction, the same as when the criteria is absent.
 A `null` value is passed via e.g. `Collections.singletonMap()` or a `HashMap`, because `Map.of()` rejects it.
+A `null` value on a `@OneToMany`, `@ManyToMany` or `@ElementCollection` itself, such as `"phones", null`, matches the entities without elements, and `Not.value(null)` on it matches the entities with elements.
+On a collection nested in a collection, such as `"memberships.roles", null`, it matches the entities of which no element has nested elements, including the entities without elements, and `Not.value(null)` the entities of which an element has nested elements.
+Both hold for a plain `null` only: a `null` item in a multi-value on such a field, such as `Arrays.asList(null, "x")`, matches a `NULL` element.
 `Not.value(v)` also matches when the property is `NULL`, including a property of an absent optional association, the same as `Not#applies()`, unless `v` is or contains `null`.
 
 ```java
@@ -959,8 +962,10 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On EclipseLink with H2, `Like` on an `OffsetTime` or `OffsetDateTime` field does not match the offset, and on an `OffsetDateTime` not always the hour either. EclipseLink creates their columns as `TIME` and `TIMESTAMP` without offset, so the stored value is in another offset than the Java value.
 - On EclipseLink with H2, `Order` and `Between` on a `LocalTime` or `OffsetTime` field match the wrong rows, because EclipseLink binds a time as a `TIMESTAMP` on 1970-01-01, and H2 compares it to the time on the current date.
 - On EclipseLink, a collection of enums needs an explicit `@Enumerated`. Without it, EclipseLink maps the collection to a `VARCHAR` column while it binds the ordinal, so a criteria on it fails on strict databases such as PostgreSQL.
+- On EclipseLink, a collection whose `@OrderBy` names a whole embeddable, such as `@OrderBy("period DESC")`, cannot be loaded, because EclipseLink expands it with the fields of the target entity instead of those of the embeddable. Name the fields of the embeddable instead, such as `@OrderBy("period.startDate DESC")`.
+- On EclipseLink, a fetch in a `CriteriaQueryBuilder` of `list()`, `find()` and `findFirst()` ignores the `@OrderBy` of the fetched collection. `getPage()` applies it on every provider.
 - On EclipseLink and OpenJPA, `delete()` of a managed entity does not unset its ID, because they do not allow modifying the ID of a managed entity.
-- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, and a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
+- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, and a `null` criteria on a collection itself, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
 - On OpenJPA, persisting an enum field with an `AttributeConverter` fails with a `ClassCastException`, so `Like` and `IgnoreCase` on such a field cannot be used either.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
