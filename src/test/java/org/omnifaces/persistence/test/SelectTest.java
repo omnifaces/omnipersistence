@@ -108,6 +108,68 @@ public class SelectTest {
     }
 
     @Nested
+    class ToStringFormat {
+
+        @Test
+        void jpqlWithPositionalParameters() {
+            assertEquals("Select[WHERE e.id = ?1,[1],null]", Select.jpql("WHERE e.id = ?1", 1L).build().toString());
+        }
+
+        @Test
+        void jpqlWithMappedParameters() {
+            assertEquals("Select[WHERE e.id = :id,{id=1},null]", Select.jpql("WHERE e.id = :id", Map.of("id", 1L)).build().toString());
+        }
+
+        @Test
+        void criteria() {
+            CriteriaQueryBuilder<Object> queryBuilder = (criteriaBuilder, query, root) -> query.distinct(true);
+            assertEquals("Select[criteria,{id=1},null]", Select.criteria(queryBuilder, Map.of("id", 1L)).build().toString());
+        }
+
+        @Test
+        void all() {
+            assertEquals("Select[all,null,null]", Select.all().build().toString());
+        }
+
+        @Test
+        void cacheableIsIncluded() {
+            assertEquals("Select[all,null,true]", Select.all().cacheable(true).build().toString());
+            assertEquals("Select[all,null,false]", Select.all().cacheable(false).build().toString());
+        }
+
+    }
+
+    @Nested
+    class WithoutParameters {
+
+        @Test
+        void jpqlWithoutPositionalParametersHasEmptyArray() {
+            var select = Select.jpql("WHERE e.id > 0").build();
+            assertEquals("WHERE e.id > 0", select.getJpql());
+            assertArrayEquals(new Object[0], select.getPositionalParameters());
+            assertNull(select.getMappedParameters());
+            assertEquals("Select[WHERE e.id > 0,[],null]", select.toString());
+        }
+
+        @Test
+        void jpqlWithEmptyMappedParametersHasEmptyMap() {
+            var select = Select.jpql("WHERE e.id > 0", Map.of()).build();
+            assertEquals(Map.of(), select.getMappedParameters());
+            assertNull(select.getPositionalParameters());
+            assertEquals("Select[WHERE e.id > 0,{},null]", select.toString());
+        }
+
+        @Test
+        void criteriaWithEmptyMappedParametersHasEmptyMap() {
+            CriteriaQueryBuilder<Object> queryBuilder = (criteriaBuilder, query, root) -> query.distinct(true);
+            var select = Select.criteria(queryBuilder, Map.of()).build();
+            assertEquals(Map.of(), select.getMappedParameters());
+            assertEquals("Select[criteria,{},null]", select.toString());
+        }
+
+    }
+
+    @Nested
     class Immutability {
 
         @Test

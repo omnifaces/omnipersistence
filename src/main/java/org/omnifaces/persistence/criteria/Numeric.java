@@ -25,12 +25,15 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.omnifaces.persistence.query.Page;
+
 /**
  * Creates <code>path = number</code>.
  * <p>
  * Supports parsing from string values. The target number type is determined by the entity field type and supports {@link BigDecimal}, {@link BigInteger},
  * {@link Double}, {@link Float}, {@link Long}, {@link Integer}, {@link Short} and {@link Byte}, as well as their primitives. Any other target number type is
- * parsed as {@link Long}.
+ * parsed as {@link Long}. An integral target type is parsed by numeric value, so <code>1.0</code> parses as <code>1</code>, and a value with a fraction or
+ * beyond its range cannot be parsed, so that it matches nothing in a {@link Page}.
  * <p>
  * Usage examples:
  *
@@ -47,19 +50,30 @@ public final class Numeric extends Criteria<Number> {
 
     private static final long serialVersionUID = 1L;
 
+    /** The maximum integer digits of a {@link BigInteger} search value, so that a short value such as <code>1E999999999</code> cannot exhaust the CPU. */
+    private static final int MAX_BIG_INTEGER_DIGITS = 1000;
+
+    /** The maximum length of the string form of a search value which is not a number, so that parsing a long value cannot exhaust the CPU. */
+    private static final int MAX_SEARCH_VALUE_LENGTH = MAX_BIG_INTEGER_DIGITS + 100;
+
+    private static final Function<String, Number> LONG_PARSER = value -> new BigDecimal(value).longValueExact();
+    private static final Function<String, Number> INT_PARSER = value -> new BigDecimal(value).intValueExact();
+    private static final Function<String, Number> SHORT_PARSER = value -> new BigDecimal(value).shortValueExact();
+    private static final Function<String, Number> BYTE_PARSER = value -> new BigDecimal(value).byteValueExact();
+
     private static final Map<Class<?>, Function<String, Number>> PARSERS = Map.ofEntries(
         entry(BigDecimal.class, BigDecimal::new),
-        entry(BigInteger.class, BigInteger::new),
+        entry(BigInteger.class, Numeric::parseBigInteger),
         entry(Double.class, Double::valueOf),
         entry(double.class, Double::valueOf),
         entry(Float.class, Float::valueOf),
         entry(float.class, Float::valueOf),
-        entry(Integer.class, Integer::valueOf),
-        entry(int.class, Integer::valueOf),
-        entry(Short.class, Short::valueOf),
-        entry(short.class, Short::valueOf),
-        entry(Byte.class, Byte::valueOf),
-        entry(byte.class, Byte::valueOf)
+        entry(Integer.class, INT_PARSER),
+        entry(int.class, INT_PARSER),
+        entry(Short.class, SHORT_PARSER),
+        entry(short.class, SHORT_PARSER),
+        entry(Byte.class, BYTE_PARSER),
+        entry(byte.class, BYTE_PARSER)
     );
 
     private Numeric(Number value) {
@@ -130,12 +144,32 @@ public final class Numeric extends Criteria<Number> {
             return (Number) searchValue;
         }
 
+        var string = searchValue.toString();
+
+        if (!(searchValue instanceof Number) && string.length() > MAX_SEARCH_VALUE_LENGTH) {
+            throw new IllegalArgumentException(string.substring(0, MAX_SEARCH_VALUE_LENGTH) + "...");
+        }
+
         try {
-            return PARSERS.getOrDefault(targetType, Long::valueOf).apply(searchValue.toString());
+            return PARSERS.getOrDefault(targetType, LONG_PARSER).apply(string);
         }
-        catch (NumberFormatException e) {
-            throw new IllegalArgumentException(searchValue.toString(), e);
+        catch (NumberFormatException | ArithmeticException e) {
+            throw new IllegalArgumentException(string, e);
         }
+    }
+
+    private static BigInteger parseBigInteger(String value) {
+        var number = new BigDecimal(value).stripTrailingZeros();
+
+        if (number.scale() > 0) {
+            throw new ArithmeticException("Rounding necessary");
+        }
+
+        if (number.precision() - number.scale() > MAX_BIG_INTEGER_DIGITS) {
+            throw new ArithmeticException("Overflow");
+        }
+
+        return number.toBigIntegerExact();
     }
 
 }

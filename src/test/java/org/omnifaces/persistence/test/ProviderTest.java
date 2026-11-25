@@ -119,6 +119,13 @@ class ProviderTest {
             assertEquals(Database.H2, databaseOf(new H2Platform()));
             assertEquals(Database.MYSQL, databaseOf(new MariaDBPlatform()));
             assertEquals(Database.POSTGRESQL, databaseOf(new PostgresPlusPlatform()));
+            assertEquals(Database.SQLSERVER, databaseOf(new SQLServerPlatform()));
+            assertEquals(Database.DB2, databaseOf(new DB2Platform()));
+        }
+
+        @Test
+        void db2VariantsMatchDb2() {
+            assertEquals(Database.DB2, databaseOf(new DB2MainframePlatform()));
         }
 
         @Test
@@ -170,6 +177,15 @@ class ProviderTest {
     }
 
     static class MariaDBPlatform {
+    }
+
+    static class SQLServerPlatform {
+    }
+
+    static class DB2Platform {
+    }
+
+    static class DB2MainframePlatform {
     }
 
     @Nested

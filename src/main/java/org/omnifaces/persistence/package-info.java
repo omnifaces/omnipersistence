@@ -17,7 +17,7 @@
  * <ul>
  * <li>{@link JPA} - static utilities for optional and first results, result maps, foreign key reference counts, validation mode and criteria expressions</li>
  * <li>{@link Provider} - the Jakarta Persistence provider (Hibernate, EclipseLink, OpenJPA) and its provider specific behavior</li>
- * <li>{@link Database} - the database (H2, MySQL or MariaDB, PostgreSQL, SQL Server, DB2, or UNKNOWN when not detected) and its database specific behavior</li>
+ * <li>{@link Database} - the database (H2, PostgreSQL, MySQL or MariaDB, SQL Server, DB2, or UNKNOWN when not detected) and its database specific behavior</li>
  * </ul>
  * {@link org.omnifaces.persistence.service.BaseEntityService} detects the provider and the database at runtime.
  *

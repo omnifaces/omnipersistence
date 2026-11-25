@@ -20,6 +20,7 @@ import static java.util.logging.Level.FINE;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.omnifaces.utils.reflect.Reflections.listAnnotatedFields;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -319,27 +320,48 @@ final class EntityMetadata {
             return isEntity(javaType) ? javaType : null;
         }
 
+        /**
+         * Collects the paths of all <code>@ManyToOne</code> and <code>@OneToOne</code> associations, breadth first. A nested entity type is expanded via every
+         * path which reaches it at its minimal depth, so that each such path is collected, including two of the same depth.
+         */
         private Set<String> computeManyOrOneToOneMapping() {
             var mapping = new HashSet<String>();
-            var visitedTypes = new HashSet<Class<?>>();
-            visitedTypes.add(entityType);
-            collectManyOrOneToOnes(entityType, "", visitedTypes, mapping);
+            var minimalDepths = new HashMap<Class<?>, Integer>();
+            minimalDepths.put(entityType, 0);
+            Map<String, Class<?>> level = Map.of("", entityType);
+
+            for (var depth = 1; !level.isEmpty(); depth++) {
+                level = collectManyOrOneToOnes(level, depth, minimalDepths, mapping);
+            }
+
             logger.log(FINE, () -> format(LOG_FINE_COMPUTED_MANY_OR_ONE_TO_ONE_MAPPING, entityType, mapping));
             return unmodifiableSet(mapping);
         }
 
-        private void collectManyOrOneToOnes(Class<?> type, String basePath, Set<Class<?>> visitedTypes, Set<String> mapping) {
-            for (var entry : getAttributeMappings(type).entrySet()) {
-                var attribute = entry.getValue();
+        private Map<String, Class<?>> collectManyOrOneToOnes(
+            Map<String, Class<?>> level, int depth, Map<Class<?>, Integer> minimalDepths, Set<String> mapping
+        )
+        {
+            var nextLevel = new LinkedHashMap<String, Class<?>>();
 
-                if (attribute.manyOrOneToOne()) {
-                    mapping.add(basePath + entry.getKey());
-                }
+            for (var parent : level.entrySet()) {
+                for (var entry : getAttributeMappings(parent.getValue()).entrySet()) {
+                    var path = parent.getKey() + entry.getKey();
+                    var attribute = entry.getValue();
 
-                if (attribute.nestedType() != null && visitedTypes.add(attribute.nestedType())) {
-                    collectManyOrOneToOnes(attribute.nestedType(), basePath + entry.getKey() + '.', visitedTypes, mapping);
+                    if (attribute.manyOrOneToOne()) {
+                        mapping.add(path);
+                    }
+
+                    var nestedType = attribute.nestedType();
+
+                    if (nestedType != null && minimalDepths.computeIfAbsent(nestedType, type -> depth) == depth) {
+                        nextLevel.put(path + '.', nestedType);
+                    }
                 }
             }
+
+            return nextLevel;
         }
 
     }

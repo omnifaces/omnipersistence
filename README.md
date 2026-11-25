@@ -439,10 +439,10 @@ Give a searchable column, or on H2 the database, an accent-insensitive collation
 
 | Database | Accent-insensitive collation |
 |---|---|
+| H2 | `SET COLLATION ENGLISH STRENGTH PRIMARY` on an empty database |
+| PostgreSQL | a nondeterministic ICU collation, such as `CREATE COLLATION ignore_accents (provider = icu, locale = 'und-u-ks-level1', deterministic = false)`. `LIKE` on it needs PostgreSQL 18. |
 | MySQL, MariaDB | `utf8mb4_0900_ai_ci`, the default of MySQL 8, or `utf8mb4_general_ci` |
 | SQL Server | `Latin1_General_100_CI_AI` |
-| PostgreSQL | a nondeterministic ICU collation, such as `CREATE COLLATION ignore_accents (provider = icu, locale = 'und-u-ks-level1', deterministic = false)`. `LIKE` on it needs PostgreSQL 18. |
-| H2 | `SET COLLATION ENGLISH STRENGTH PRIMARY` on an empty database |
 
 The collation also orders the column linguistically, such as `c`, `ç`, `d`, `e`, `é`.
 `Criteria#applies()` of `Like` and `IgnoreCase` always ignores accents, so it agrees with such a collation.
@@ -620,8 +620,8 @@ Database database = personRepository.getDatabase();
 | `Provider` | | `Database` |
 |---|---|---|
 | `HIBERNATE` | | `H2` |
-| `ECLIPSELINK` | | `MYSQL` |
-| `OPENJPA` | | `POSTGRESQL` |
+| `ECLIPSELINK` | | `POSTGRESQL` |
+| `OPENJPA` | | `MYSQL` |
 | `UNKNOWN` | | `SQLSERVER` |
 | | | `DB2` |
 | | | `UNKNOWN` |
@@ -856,7 +856,7 @@ OmniPersistence's `SwitchableCommonDataSource` / `SwitchableXADataSource` extern
 
 ### Provider and database detection
 
-Every `EntityRepository` and `BaseEntityService` detects the active Jakarta Persistence provider (`HIBERNATE`, `ECLIPSELINK`, `OPENJPA`) and underlying database (`H2`, `MYSQL`, `POSTGRESQL`, `SQLSERVER`, `DB2`) at startup, enabling provider-specific or database-specific branches in service code. Jakarta Data has no equivalent.
+Every `EntityRepository` and `BaseEntityService` detects the active Jakarta Persistence provider (`HIBERNATE`, `ECLIPSELINK`, `OPENJPA`) and underlying database (`H2`, `POSTGRESQL`, `MYSQL`, `SQLSERVER`, `DB2`) at startup, enabling provider-specific or database-specific branches in service code. Jakarta Data has no equivalent.
 
 ### NoSQL / multi-datastore support
 
@@ -908,7 +908,7 @@ OmniPersistence is **exclusively Jakarta Persistence (relational)**. It exposes 
 
 ## 14. Integration tests and further examples
 
-OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, MySQL, PostgreSQL, SQL Server and DB2:
+OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, PostgreSQL, MySQL, SQL Server and DB2:
 
 | Server | JPA Provider |
 |---|---|
@@ -957,6 +957,9 @@ These changes in behavior need your attention as well:
    - A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
    - `Bool#applies()` does not match `null` anymore, the same as `Bool` does in SQL.
    - `Not#applies()` negates a wrapped `Criteria`, and matches a multi-value when none of its values matches, the same as `Not` does in SQL.
+   - A number matches an integral field by its numeric value, so `1.0` and `"1.0"` match `1`. A value with a fraction, or beyond the range of the field, matches nothing.
+   - `Order#applies()` and `Between#applies()` throw `IllegalArgumentException` when the model value cannot be compared with the criteria value. `Between#applies()` compares numbers of different types by their numeric value, the same as `Order#applies()`.
+   - A criteria or an ordering on a `@Transient` field resolves to the nearest `@ManyToOne` or `@OneToOne` which declares it, via a path of only `@ManyToOne` and `@OneToOne`. When several of the same depth declare it, or when only a path through a collection reaches it, it throws `IllegalArgumentException`. Use the explicit path instead, such as `lines.product.name`.
 
 - **Auditing and configuration**
    - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
@@ -975,14 +978,15 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On EclipseLink, a collection whose `@OrderBy` names a whole embeddable, such as `@OrderBy("period DESC")`, cannot be loaded, because EclipseLink expands it with the fields of the target entity instead of those of the embeddable. OpenJPA ignores such an `@OrderBy`. Name the fields of the embeddable instead, such as `@OrderBy("period.startDate DESC")`.
 - On EclipseLink, a fetch in a `CriteriaQueryBuilder` of `list()`, `find()` and `findFirst()` ignores the `@OrderBy` of the fetched collection. `getPage()` applies it on every provider.
 - On EclipseLink and OpenJPA, `delete()` of a managed entity does not unset its ID, because they do not allow modifying the ID of a managed entity.
-- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, and a `null` criteria on a collection itself, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
+- On OpenJPA, a negated or multi-valued criteria on a `@OneToMany` or `@ManyToMany`, a negated criteria, a `Criteria` such as `Like` or a nested multi-valued criteria on an `@ElementCollection`, and a `null` or an entity criteria on a collection itself, are ignored in the total count of `getPage()`. OpenJPA correlates a nested subquery in the count query with an extra cross-joined entity instead of the counted one. The entities themselves are filtered correctly.
 - On OpenJPA, a restriction on the entity type in a `QueryBuilder`, such as `criteriaBuilder.equal(root.type(), Invoice.class)`, is ignored in the total count of `getPage()`, because OpenJPA renders `TYPE()` in a subquery as `1 = 1`. The entities themselves are filtered correctly.
 - On OpenJPA, persisting an enum field with an `AttributeConverter` fails with a `ClassCastException`, so `Like` and `IgnoreCase` on such a field cannot be used either.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
-- On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.
+- On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
+- On DB2, `Like` on a `Double` field matches the string form of DB2, which is in scientific notation, such as `3.25E0`. So `Like.contains("3.2")` and `Like.startsWith("3.")` match `3.25`, but `Like.endsWith(".25")` does not.
 
 ---
 

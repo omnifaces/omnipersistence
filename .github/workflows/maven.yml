@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         server: [wildfly-hibernate, glassfish-eclipselink, tomee-openjpa]
-        database: [H2, MySQL, PostgreSQL, SQLServer, DB2]
+        database: [H2, PostgreSQL, MySQL, SQLServer, DB2]
 
     steps:
     - uses: actions/checkout@v7.0.1
@@ -37,6 +37,14 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
+    - name: Set up PostgreSQL (already provided by ubuntu-latest)
+      if: matrix.database == 'PostgreSQL'
+      run: |
+        sudo systemctl start postgresql.service
+        sudo -u postgres psql postgres -c "CREATE USER test WITH ENCRYPTED PASSWORD 'test';"
+        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
+          sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C.UTF-8';"
+        done
     - name: Set up MySQL (via Oracle's Docker image)
       if: matrix.database == 'MySQL'
       run: |
@@ -50,14 +58,6 @@ jobs:
         mysql -e "CREATE USER test IDENTIFIED BY 'test';"
         for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
           mysql -e "CREATE DATABASE $database CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; GRANT ALL ON $database.* TO test;"
-        done
-    - name: Set up PostgreSQL (already provided by ubuntu-latest)
-      if: matrix.database == 'PostgreSQL'
-      run: |
-        sudo systemctl start postgresql.service
-        sudo -u postgres psql postgres -c "CREATE USER test WITH ENCRYPTED PASSWORD 'test';"
-        for database in OmniPersistenceCDIIT OmniPersistenceEJBIT EntityRepositoryIT SecondLevelCacheIT; do
-          sudo -u postgres psql postgres -c "CREATE DATABASE \"$database\" OWNER test TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C.UTF-8';"
         done
     - name: Set up SQL Server (via Microsoft's Docker image)
       if: matrix.database == 'SQLServer'

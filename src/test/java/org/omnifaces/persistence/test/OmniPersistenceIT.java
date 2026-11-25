@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
@@ -213,8 +214,8 @@ public abstract class OmniPersistenceIT {
     private static String jdbcDriverOf(Database database) {
         return switch (database) {
             case H2 -> "com.h2database:h2:" + getProperty("test.h2.version");
-            case MYSQL -> "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version");
             case POSTGRESQL -> "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version");
+            case MYSQL -> "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version");
             case SQLSERVER -> "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version");
             case DB2 -> "com.ibm.db2:jcc:" + getProperty("test.db2-driver.version");
             case UNKNOWN -> throw new UnsupportedOperationException(database.name());
@@ -230,15 +231,15 @@ public abstract class OmniPersistenceIT {
                 persistenceUnitName, "org.h2.jdbcx.JdbcDataSource", urlOf("jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY"),
                 READ_COMMITTED
             );
+            case POSTGRESQL -> dataSourceOf(
+                persistenceUnitName, "org.postgresql.ds.PGSimpleDataSource",
+                urlOf(getProperty("test.postgresql.url") + persistenceUnitName) + credentialsOf("test", "test"), READ_COMMITTED
+            );
             case MYSQL -> dataSourceOf(
                 persistenceUnitName, "com.mysql.cj.jdbc.MysqlDataSource",
                 urlOf(getProperty("test.mysql.url") + persistenceUnitName + "?fallbackToSystemKeyStore=false") // Avoids GlassFish keystore.
                     + credentialsOf("test", "test"),
                 READ_COMMITTED
-            );
-            case POSTGRESQL -> dataSourceOf(
-                persistenceUnitName, "org.postgresql.ds.PGSimpleDataSource",
-                urlOf(getProperty("test.postgresql.url") + persistenceUnitName) + credentialsOf("test", "test"), READ_COMMITTED
             );
             case SQLSERVER -> dataSourceOf(
                 persistenceUnitName, "com.microsoft.sqlserver.jdbc.SQLServerDataSource",
@@ -259,8 +260,8 @@ public abstract class OmniPersistenceIT {
      */
     private static String ormOf(Database database) {
         var columnDefinition = switch (database) {
-            case MYSQL -> "VARCHAR(255) COLLATE utf8mb4_0900_ai_ci";
             case POSTGRESQL -> "VARCHAR(255) COLLATE &quot;und-x-icu&quot;";
+            case MYSQL -> "VARCHAR(255) COLLATE utf8mb4_0900_ai_ci";
             case SQLSERVER -> "VARCHAR(255) COLLATE Latin1_General_100_CI_AI";
             default -> null;
         };
@@ -462,7 +463,9 @@ public abstract class OmniPersistenceIT {
     void testPersistExistingPerson() {
         var existingPerson = createNewPerson("testPersistExistingPerson@example.com");
         existingPerson.setId(1L);
-        assertThrows(IllegalEntityStateException.class, () -> personService().persist(existingPerson));
+        var exception = assertThrows(IllegalEntityStateException.class, () -> personService().persist(existingPerson));
+        assertSame(existingPerson, exception.getEntity(), "Entity of exception");
+        assertEquals("Entity is already persisted. Use update() instead.", exception.getMessage(), "Message of exception");
     }
 
     @Test
@@ -479,7 +482,9 @@ public abstract class OmniPersistenceIT {
     @Test
     void testUpdateNewPerson() {
         var newPerson = createNewPerson("testUpdateNewPerson@example.com");
-        assertThrows(IllegalEntityStateException.class, () -> personService().update(newPerson));
+        var exception = assertThrows(IllegalEntityStateException.class, () -> personService().update(newPerson));
+        assertSame(newPerson, exception.getEntity(), "Entity of exception");
+        assertEquals("Entity is not persisted. Use persist() instead.", exception.getMessage(), "Message of exception");
     }
 
     @Test
@@ -601,6 +606,15 @@ public abstract class OmniPersistenceIT {
         var persons = personService().getByIds(List.of(1L, 999999L));
         assertEquals(1, persons.size(), "Should find only 1 existing person");
         assertEquals(1L, persons.get(0).getId(), "Found person has correct ID");
+    }
+
+    /**
+     * A duplicate ID gets its entity once.
+     */
+    @Test
+    void testGetByIdsWithDuplicateIdsGetsEachEntityOnce() {
+        var persons = personService().getByIds(List.of(1L, 2L, 1L, 2L, 2L));
+        assertEquals(List.of(2L, 1L), persons.stream().map(Person::getId).toList(), "Each person once, by ID descending");
     }
 
     @Test
@@ -1069,6 +1083,88 @@ public abstract class OmniPersistenceIT {
         var result = personService().getPage(Page.with().allMatch(Map.of("phones.owner", person)).build(), true);
         assertEquals(List.of(person.getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phones");
         assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count");
+    }
+
+    /**
+     * An entity criteria directly on a <code>@OneToMany</code> matches the entities of which the collection contains that entity. A multi-value matches those
+     * of which it contains all of them, and a nested multi-value any of its items, the same as on an <code>@ElementCollection</code>.
+     */
+    @Test
+    void testEntityCriteriaDirectlyOnOneToMany() {
+        var person = personWithSeveralPhones();
+        var phone = person.getPhones().get(0);
+        assertEquals(List.of(person.getId()), idsOfPersonsWithPhones(phone), "Only the owner of the phone");
+
+        var phonesOfOwner = List.of(phone, person.getPhones().get(1));
+        assertEquals(List.of(person.getId()), idsOfPersonsWithPhones(phonesOfOwner), "The owner of both phones");
+
+        var phonesOfTwoOwners = List.of(phone, phoneOfOtherThan(person));
+        assertEquals(List.of(), idsOfPersonsWithPhones(phonesOfTwoOwners), "Nobody owns both phones");
+
+        var anyOfTwoOwnersAndOfOwner = List.of(phonesOfTwoOwners, person.getPhones().get(1));
+        assertEquals(List.of(person.getId()), idsOfPersonsWithPhones(anyOfTwoOwnersAndOfOwner), "The owner of either phone and of the other phone");
+    }
+
+    /**
+     * A negated entity criteria directly on a <code>@OneToMany</code> matches the entities of which the collection does not contain that entity, and a negated
+     * multi-value those of which it does not contain all of them.
+     */
+    @Test
+    void testNegatedEntityCriteriaDirectlyOnOneToMany() {
+        var person = personWithSeveralPhones();
+        var phone = person.getPhones().get(0);
+        var negated = personService().getPage(Page.with().allMatch(Map.of("phones", Not.value(phone))).build(), false);
+        assertEquals(TOTAL_RECORDS - 1, negated.size(), "All but the owner of the phone");
+        assertTrue(negated.stream().noneMatch(p -> p.getId().equals(person.getId())), "Not the owner of the phone");
+
+        var otherPhone = phoneOfOtherThan(person);
+        var phonesOfTwoOwners = List.of(phone, otherPhone);
+        var notAllOfTwoOwners = personService().getPage(Page.with().allMatch(Map.of("phones", Not.value(phonesOfTwoOwners))).build(), false);
+        assertEquals(TOTAL_RECORDS, notAllOfTwoOwners.size(), "Everybody, because nobody owns both phones");
+
+        var phonesOfOwner = List.of(phone, person.getPhones().get(1));
+        assertAllButOwner(person, Not.value(phonesOfOwner), "Everybody but the owner of both phones");
+        assertEquals(List.of(person.getId()), idsOfPersonsWithPhones(List.of(phone, Not.value(otherPhone))), "The owner of the one phone and not the other");
+        assertAllButOwner(person, Not.value(List.of(phonesOfTwoOwners, person.getPhones().get(1))), "Everybody but the owner of either phone and the other");
+    }
+
+    private void assertAllButOwner(Person owner, Object phones, String message) {
+        var ids = idsOfPersonsWithPhones(phones);
+        assertEquals(TOTAL_RECORDS - 1, ids.size(), message);
+        assertFalse(ids.contains(owner.getId()), message);
+    }
+
+    /**
+     * The total count of a page with an entity criteria directly on a <code>@OneToMany</code> counts the same entities as the page holds.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
+    void testEntityCriteriaDirectlyOnOneToManyIsCounted() {
+        var person = personWithSeveralPhones();
+        var phone = person.getPhones().get(0);
+        assertEquals(1, countOfPersonsWithPhones(phone), "Count of the owner of the phone");
+        assertEquals(0, countOfPersonsWithPhones(List.of(phone, phoneOfOtherThan(person))), "Count of nobody, who owns both phones");
+        assertEquals(TOTAL_RECORDS - 1, countOfPersonsWithPhones(Not.value(phone)), "Count of all but the owner of the phone");
+    }
+
+    private Person personWithSeveralPhones() {
+        return personService().getAllWithPhones().stream().filter(p -> p.getPhones().size() > 1).findFirst().orElseThrow();
+    }
+
+    private Phone phoneOfOtherThan(Person person) {
+        return phoneService().getPageWithOwners(Page.with().allMatch(Map.of("owner.id", Not.value(person.getId()))).build(), false).get(0);
+    }
+
+    private List<Long> idsOfPersonsWithPhones(Object phones) {
+        return idsOfPersons(personService().getPage(Page.with().allMatch(Map.of("phones", phones)).build(), false));
+    }
+
+    private long countOfPersonsWithPhones(Object phones) {
+        return personService().getPage(Page.with().allMatch(Map.of("phones", phones)).build(), true).getEstimatedTotalNumberOfResults();
+    }
+
+    private static List<Long> idsOfPersons(List<Person> persons) {
+        return persons.stream().map(Person::getId).toList();
     }
 
     @Test
@@ -3287,6 +3383,18 @@ public abstract class OmniPersistenceIT {
         trackingTextService().clearInvocations();
         trackingTextService().getPage(Page.of(0, 10), true);
         assertTrackedInvocations(List.of("beforePage", "onPage", "onPage", "afterPage"));
+    }
+
+    /**
+     * The callback after a page is also invoked when getting the page fails, so that it can undo what the callback before the page did. The failure is a
+     * {@link RuntimeException}, because an EJB service wraps the {@link IllegalArgumentException} in an <code>EJBException</code>.
+     */
+    @Test
+    void testGetPageInvokesAfterPageCallbackWhenItFails() {
+        trackingTextService().clearInvocations();
+        var page = Page.with().allMatch(Map.of("nonexistent", "x")).build();
+        assertThrows(RuntimeException.class, () -> trackingTextService().getPage(page, true), "Criteria on nonexistent field");
+        assertTrackedInvocations(List.of("beforePage", "afterPage"));
     }
 
     @Test

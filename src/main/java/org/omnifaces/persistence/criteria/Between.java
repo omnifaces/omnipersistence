@@ -91,7 +91,24 @@ public final class Between<T extends Comparable<T>> extends Criteria<Range<T>> {
     @Override
     @SuppressWarnings("unchecked")
     public boolean applies(@Nullable Object modelValue) {
-        return modelValue instanceof Comparable && getValue().contains((T) modelValue);
+        if (!(modelValue instanceof Comparable)) {
+            return false;
+        }
+
+        var range = getValue();
+
+        if (modelValue instanceof Number number && range.getMin() instanceof Number min && range.getMax() instanceof Number max) {
+            var lower = Numeric.compare(number, min);
+            var upper = Numeric.compare(number, max);
+            return (range.isMinInclusive() ? lower >= 0 : lower > 0) && (range.isMaxInclusive() ? upper <= 0 : upper < 0);
+        }
+
+        try {
+            return range.contains((T) modelValue);
+        }
+        catch (ClassCastException e) {
+            throw incomparable(modelValue, range.getMin(), e);
+        }
     }
 
     @Override

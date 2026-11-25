@@ -76,6 +76,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import jakarta.annotation.Nullable;
@@ -2916,11 +2917,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns whether given path may be <code>NULL</code>. Only a non-optional attribute and an ID of the root are not, so that their value based paging
      * predicate needs no <code>IS NULL</code>, which would prevent the use of an index on some databases. Such an attribute of a joined entity may still be
-     * <code>NULL</code>, because the join may be a <code>LEFT JOIN</code>.
+     * <code>NULL</code>, because the join may be a <code>LEFT JOIN</code>. A collection itself is never <code>NULL</code> either.
      */
     private static boolean isNullable(Expression<?> path) {
-        return !(path instanceof Path<?> attributePath && attributePath.getParentPath() instanceof Root<?>
+        return !isCollectionValued(path) && !(path instanceof Path<?> attributePath && attributePath.getParentPath() instanceof Root<?>
             && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute && (attribute.isId() || !attribute.isOptional()));
+    }
+
+    /**
+     * Returns whether given path is a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> itself, which is never
+     * <code>NULL</code>.
+     */
+    private static boolean isCollectionValued(Expression<?> path) {
+        return path instanceof Path<?> attributePath && attributePath.getModel() instanceof PluralAttribute<?, ?, ?>;
     }
 
     private List<Predicate> buildPredicates(
@@ -3012,6 +3021,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             }
             else if (value instanceof Criteria<?> criteriaObject) {
                 predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
+            }
+            else if (isEntity(value) && isCollectionValued(path)) {
+                predicate = buildMemberPredicate(type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
+                negationApplied = true;
             }
             else if (isEntity(value)) {
                 predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
@@ -3190,6 +3203,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!oneToManyField && !elementCollections.test(field)) {
+            if (isCollectionValued(path)) {
+                return buildContainsAllPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
+            }
+
             var in = buildEqualityInPredicate(path, type, value, parameterBuilder);
 
             if (in != null) {
@@ -3316,11 +3333,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
             return null;
         }
 
-        var subquery = query.subquery(Object.class);
-        Root<E> subqueryRoot = subquery.from(entityType);
-        joinCollection(subqueryRoot, field, JoinType.INNER);
-        subquery.select(buildSubquerySelection(subqueryRoot)).where(buildCorrelationPredicate(subqueryRoot, pathResolver, criteriaBuilder));
-        var exists = criteriaBuilder.exists(subquery);
+        var exists = buildCollectionExistsPredicate(field, null, query, criteriaBuilder, pathResolver);
         var predicate = isNegated(criteria) ? exists : criteriaBuilder.not(exists);
         Alias.create(provider, pathResolver.get(idAttribute.getName()), field).set(predicate);
         return predicate;
@@ -3391,6 +3404,92 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         return predicate != null && isNegated(criteria) ? criteriaBuilder.not(predicate) : predicate;
+    }
+
+    /**
+     * Returns a predicate matching the entities whose collection at given collection-valued path contains all items of given multi-value, the same as on an
+     * <code>@ElementCollection</code>. A multi-valued item matches when the collection contains any of its items, and a <code>null</code> item is skipped,
+     * because such a collection holds no <code>NULL</code> element. The negation negates each item, so that no <code>NOT</code> wraps a conjunction of
+     * <code>EXISTS</code>, which OpenJPA renders as invalid SQL. Where a nested subquery is not supported, it is skipped, see
+     * {@link #isNestedSubquerySupported(AbstractQuery)}.
+     */
+    private Predicate buildContainsAllPredicate(
+        Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver, ParameterBuilder parameterBuilder
+    )
+    {
+        if (!isNestedSubquerySupported(query)) {
+            // The count ignores this criteria, see isNestedSubquerySupported.
+            logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, value));
+            return null;
+        }
+
+        var predicates = new ArrayList<Predicate>();
+
+        for (var item : (Iterable<?>) stream(value)::iterator) {
+            var anyOf = (isMultiValued(item) ? stream(item) : Stream.ofNullable(item))
+                .filter(Objects::nonNull)
+                .map(anyItem -> negated ? negateItem(anyItem) : anyItem)
+                .map(anyItem -> buildTypedPredicate(path, type, field, anyItem, query, criteriaBuilder, pathResolver, parameterBuilder))
+                .filter(Objects::nonNull)
+                .toList();
+
+            if (!anyOf.isEmpty()) {
+                predicates.add(negated ? criteriaBuilder.and(toArray(anyOf)) : criteriaBuilder.or(toArray(anyOf)));
+            }
+        }
+
+        if (predicates.isEmpty()) {
+            throw new IllegalArgumentException(value.toString());
+        }
+
+        return negated ? criteriaBuilder.or(toArray(predicates)) : criteriaBuilder.and(toArray(predicates));
+    }
+
+    private static Object negateItem(Object item) {
+        return item instanceof Not not ? not.getValue() : Not.value(item);
+    }
+
+    /**
+     * Builds a correlated <code>EXISTS</code> subquery which matches the entities whose collection of given field contains given entity, or when negated a
+     * <code>NOT EXISTS</code>, which matches those whose collection does not. <code>MEMBER OF</code> must not be used: EclipseLink renders it as a join, so
+     * that two of them cannot both match, and EclipseLink and OpenJPA render its negation wrongly. Where a nested subquery is not supported, it is skipped, see
+     * {@link #isNestedSubquerySupported(AbstractQuery)}.
+     */
+    private Predicate buildMemberPredicate(
+        Class<?> type, String field, Object entity, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder, PathResolver pathResolver,
+        ParameterBuilder parameterBuilder
+    )
+    {
+        if (!isNestedSubquerySupported(query)) {
+            // The count ignores this criteria, see isNestedSubquerySupported.
+            logger.log(WARNING, () -> format(LOG_WARNING_UNSUPPORTED_SUBQUERY_PREDICATE, field, type, entity));
+            return null;
+        }
+
+        var exists = buildCollectionExistsPredicate(
+            field, element -> criteriaBuilder.equal(element, parameterBuilder.create(entity)), query, criteriaBuilder, pathResolver
+        );
+        return negated ? criteriaBuilder.not(exists) : exists;
+    }
+
+    /**
+     * Builds a correlated <code>EXISTS</code> subquery on the elements of given <code>@OneToMany</code>, <code>@ManyToMany</code> or
+     * <code>@ElementCollection</code> field, which matches the entities with an element matching given restriction, or with any element when it is
+     * <code>null</code>.
+     */
+    private Predicate buildCollectionExistsPredicate(
+        String field, @Nullable Function<From<?, ?>, Predicate> elementRestriction, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver
+    )
+    {
+        var subquery = query.subquery(Object.class);
+        Root<E> subqueryRoot = subquery.from(entityType);
+        var element = joinCollection(subqueryRoot, field, JoinType.INNER);
+        var correlation = buildCorrelationPredicate(subqueryRoot, pathResolver, criteriaBuilder);
+        subquery.select(buildSubquerySelection(subqueryRoot))
+            .where(elementRestriction == null ? correlation : criteriaBuilder.and(elementRestriction.apply(element), correlation));
+        return criteriaBuilder.exists(subquery);
     }
 
     /**

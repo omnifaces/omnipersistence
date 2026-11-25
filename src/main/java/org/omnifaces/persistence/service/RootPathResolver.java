@@ -14,10 +14,12 @@ package org.omnifaces.persistence.service;
 
 import static jakarta.persistence.metamodel.Type.PersistenceType.EMBEDDABLE;
 import static java.lang.String.format;
+import static java.util.Collections.sort;
 import static org.omnifaces.persistence.query.Page.ID;
 import static org.omnifaces.utils.reflect.Reflections.findField;
 import static org.omnifaces.utils.reflect.Reflections.findGetter;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +36,7 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Bindable;
 import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
@@ -47,6 +50,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
  */
 class RootPathResolver implements PathResolver {
 
+    private static final String ERROR_AMBIGUOUS_FIELD = "Field %s cannot be resolved on %s, because it is declared by several @ManyToOne/@OneToOne children: %s. Use the path of one of them instead.";
     private static final String ERROR_UNKNOWN_FIELD = "Field %s cannot be found on %s. If this represents a transient field, make sure that it is delegating to @ManyToOne/@OneToOne children.";
 
     private final Root<?> root;
@@ -145,12 +149,16 @@ class RootPathResolver implements PathResolver {
     }
 
     private static Optional<SingularAttribute<?, ?>> findSingularAttribute(Path<?> path, String attribute) {
-        var type = getManagedType(path.getModel());
+        return findSingularAttribute(getManagedType(path.getModel()), attribute);
+    }
 
+    private static Optional<SingularAttribute<?, ?>> findSingularAttribute(ManagedType<?> type, String attribute) {
+        return findAttribute(type, attribute).filter(SingularAttribute.class::isInstance).map(singularAttribute -> (SingularAttribute<?, ?>) singularAttribute);
+    }
+
+    private static Optional<Attribute<?, ?>> findAttribute(ManagedType<?> type, String attribute) {
         try {
-            return type != null && type.getAttribute(attribute) instanceof SingularAttribute<?, ?> singularAttribute
-                ? Optional.of(singularAttribute)
-                : Optional.empty();
+            return type != null ? Optional.of(type.getAttribute(attribute)) : Optional.empty();
         }
         catch (IllegalArgumentException e) {
             return Optional.empty(); // The attribute is not declared on the static type, e.g. on a subtype.
@@ -181,17 +189,47 @@ class RootPathResolver implements PathResolver {
             || findGetter(type, property).map(m -> m.isAnnotationPresent(Transient.class)).orElse(false);
     }
 
+    /**
+     * Returns the path of given attribute on the nearest {@code @ManyToOne} or {@code @OneToOne} which declares it, or <code>null</code> when none does. Only a
+     * path of singular associations counts, because a transient getter has one value per entity, which a path through a collection does not have. The
+     * candidates are checked against the metamodel, so that only the returned path adds joins to the query.
+     *
+     * @throws UnknownFieldException When several of the nearest ones declare it.
+     */
     private Path<?> guessManyOrOneToOnePath(String attribute) {
+        var nearest = new ArrayList<String>();
+        var nearestDepth = Integer.MAX_VALUE;
+
         for (String manyOrOneToOne : manyOrOneToOnes.get()) {
-            try {
-                return (Path<?>) get(manyOrOneToOne + "." + attribute);
-            }
-            catch (IllegalArgumentException ignore) {
-                continue;
+            var associations = manyOrOneToOne.split("\\.");
+            var depth = associations.length;
+
+            if (depth <= nearestDepth && declares(associations, attribute)) {
+                if (depth < nearestDepth) {
+                    nearest.clear();
+                    nearestDepth = depth;
+                }
+
+                nearest.add(manyOrOneToOne);
             }
         }
 
-        return null;
+        if (nearest.size() > 1) {
+            sort(nearest);
+            throw new UnknownFieldException(format(ERROR_AMBIGUOUS_FIELD, attribute, root.getJavaType(), nearest), null);
+        }
+
+        return nearest.isEmpty() ? null : (Path<?>) get(nearest.get(0) + "." + attribute);
+    }
+
+    private boolean declares(String[] associations, String attribute) {
+        var type = getManagedType(root.getModel());
+
+        for (String association : associations) {
+            type = findSingularAttribute(type, association).map(RootPathResolver::getManagedType).orElse(null);
+        }
+
+        return findAttribute(type, attribute).isPresent();
     }
 
     /**
