@@ -329,6 +329,80 @@ class AuditListenerTest {
         assertEquals(List.of("amount: 5.0 -> 5.01"), changes(entity));
     }
 
+    @Test
+    void nullToValueIsAChange() {
+        var entity = loaded(new AuditedEntity(), null);
+        entity.setValue("new");
+        assertEquals(List.of("value: null -> new"), changes(entity));
+    }
+
+    @Test
+    void valueToNullIsAChange() {
+        var entity = loaded(new AuditedEntity(), "old");
+        entity.setValue(null);
+        assertEquals(List.of("value: old -> null"), changes(entity));
+    }
+
+    @Test
+    void nullToNullIsNotAChange() {
+        var entity = loaded(new AuditedEntity(), null);
+        entity.setValue(null);
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void booleanFlipIsAChange() {
+        var entity = new TypedAuditedEntity();
+        listener.beforeUpdate(entity);
+        entity.setActive(true);
+        assertEquals(List.of("active: false -> true"), changes(entity));
+    }
+
+    @Test
+    void booleanUnchangedIsNotAChange() {
+        var entity = new TypedAuditedEntity();
+        listener.beforeUpdate(entity);
+        entity.setActive(false);
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void enumChangeIsAChange() {
+        var entity = new TypedAuditedEntity();
+        entity.setStatus(Status.NEW);
+        listener.beforeUpdate(entity);
+        entity.setStatus(Status.DONE);
+        assertEquals(List.of("status: NEW -> DONE"), changes(entity));
+    }
+
+    @Test
+    void enumToNullAndBackAreChanges() {
+        var entity = new TypedAuditedEntity();
+        entity.setStatus(Status.NEW);
+        listener.beforeUpdate(entity);
+        entity.setStatus(null);
+        assertEquals(List.of("status: NEW -> null"), changes(entity));
+        entity.setStatus(Status.NEW);
+        assertEquals(List.of("status: null -> NEW"), changes(entity));
+    }
+
+    @Test
+    void enumUnchangedIsNotAChange() {
+        var entity = new TypedAuditedEntity();
+        entity.setStatus(Status.NEW);
+        listener.beforeUpdate(entity);
+        entity.setStatus(Status.NEW);
+        assertEquals(List.of(), changes(entity));
+    }
+
+    @Test
+    void auditedFieldWithoutGetterIsNotAudited() {
+        var entity = new TypedAuditedEntity();
+        listener.beforeUpdate(entity);
+        entity.hide("changed");
+        assertEquals(List.of(), changes(entity));
+    }
+
     /**
      * An {@link AuditedChange} is fired as soon as CDI is available, also when it was not available during an earlier update.
      */
@@ -916,6 +990,45 @@ class AuditListenerTest {
 
         public void setOther(String other) {
             this.other = other;
+        }
+
+    }
+
+    public enum Status {
+        NEW,
+        DONE
+    }
+
+    @Entity
+    public static class TypedAuditedEntity extends CodedEntity {
+
+        @Audit
+        private boolean active;
+
+        @Audit
+        private Status status;
+
+        @Audit
+        private String hidden;
+
+        public boolean isActive() {
+            return active;
+        }
+
+        public void setActive(boolean active) {
+            this.active = active;
+        }
+
+        public Status getStatus() {
+            return status;
+        }
+
+        public void setStatus(Status status) {
+            this.status = status;
+        }
+
+        void hide(String hidden) {
+            this.hidden = hidden;
         }
 
     }

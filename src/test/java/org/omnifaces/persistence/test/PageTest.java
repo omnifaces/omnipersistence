@@ -608,6 +608,32 @@ public class PageTest {
         }
 
         @Test
+        void differentOrderingNotEqual() {
+            assertNotEquals(Page.with().orderBy("name", true).build(), Page.with().orderBy("name", false).build());
+            assertNotEquals(Page.with().orderBy("name", true).build(), Page.with().orderBy("id", true).build());
+        }
+
+        @Test
+        void differentRequiredCriteriaNotEqual() {
+            assertNotEquals(Page.with().allMatch(Map.of("name", "a")).build(), Page.with().allMatch(Map.of("name", "b")).build());
+        }
+
+        @Test
+        void differentOptionalCriteriaNotEqual() {
+            assertNotEquals(Page.with().anyMatch(Map.of("name", "a")).build(), Page.with().anyMatch(Map.of("name", "b")).build());
+        }
+
+        @Test
+        void requiredCriteriaNotEqualToSameOptionalCriteria() {
+            assertNotEquals(Page.with().allMatch(Map.of("name", "a")).build(), Page.with().anyMatch(Map.of("name", "a")).build());
+        }
+
+        @Test
+        void differentReversedNotEqual() {
+            assertNotEquals(Page.with().range(40, 10, Map.of("id", 1L), false).build(), Page.with().range(40, 10, Map.of("id", 1L), true).build());
+        }
+
+        @Test
         void differentResidualOffsetNotEqual() {
             assertNotEquals(Page.with().range(40, 10, Map.of("id", 1L), 0, false).build(), Page.with().range(40, 10, Map.of("id", 1L), 10, false).build());
         }
@@ -641,6 +667,12 @@ public class PageTest {
         @Test
         void notEqualToDifferentType() {
             assertFalse("not a page".equals(Page.of(0, 10)));
+        }
+
+        @Test
+        void toStringListsAllProperties() {
+            var page = Page.with().range(5, 20).orderBy("name", true).allMatch(Map.of("a", 1)).anyMatch(Map.of("b", 2)).build();
+            assertEquals("Page[5,20,{},0,false,{name=true},{a=1},{b=2}]", page.toString());
         }
 
         @Test

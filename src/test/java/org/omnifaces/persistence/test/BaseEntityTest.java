@@ -184,6 +184,56 @@ public class BaseEntityTest {
 
     }
 
+    /**
+     * Entities are equal when one is an instance of the class of the other and their IDs match, so a superclass instance equals a subclass instance, as with a
+     * proxy of the entity class. Instances of sibling subclasses are not equal.
+     */
+    @Nested
+    class SubclassIdentity {
+
+        @Test
+        void entityEqualsSubclassInstanceWithSameIdInBothDirections() {
+            var parent = new Parent(1L);
+            var child = new ChildA(1L);
+            assertTrue(parent.equals(child));
+            assertTrue(child.equals(parent));
+        }
+
+        @Test
+        void entityDoesNotEqualSubclassInstanceWithOtherId() {
+            assertFalse(new Parent(1L).equals(new ChildA(2L)));
+            assertFalse(new ChildA(2L).equals(new Parent(1L)));
+        }
+
+        @Test
+        void entityAndSubclassInstanceWithSameIdHaveSameHashCode() {
+            assertEquals(new Parent(1L).hashCode(), new ChildA(1L).hashCode());
+        }
+
+        @Test
+        void entityAndSubclassInstanceWithSameIdWorkInHashSet() {
+            Set<Parent> set = new HashSet<>();
+            set.add(new Parent(1L));
+            set.add(new ChildA(1L));
+            assertEquals(1, set.size());
+        }
+
+        @Test
+        void siblingSubclassInstancesWithSameIdAreNotEqual() {
+            var childA = new ChildA(1L);
+            var childB = new ChildB(1L);
+            assertFalse(childA.equals(childB));
+            assertFalse(childB.equals(childA));
+        }
+
+        @Test
+        void entityAndSubclassInstanceWithNullIdAreNotEqual() {
+            assertFalse(new Parent(null).equals(new ChildA(null)));
+            assertFalse(new ChildA(null).equals(new Parent(null)));
+        }
+
+    }
+
     @Nested
     class DefaultCompareTo {
 
@@ -759,6 +809,48 @@ public class BaseEntityTest {
         @Override
         protected Stream<Function<TaggedEntity, Object>> identityGetters() {
             return Stream.of(e -> e.tag);
+        }
+
+    }
+
+    private static class Parent extends BaseEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+        private Long id;
+
+        Parent(Long id) {
+            this.id = id;
+        }
+
+        @Override
+        @Nullable
+        public Long getId() {
+            return id;
+        }
+
+        @Override
+        public void setId(@Nullable Long id) {
+            this.id = id;
+        }
+
+    }
+
+    private static class ChildA extends Parent {
+
+        private static final long serialVersionUID = 1L;
+
+        ChildA(Long id) {
+            super(id);
+        }
+
+    }
+
+    private static class ChildB extends Parent {
+
+        private static final long serialVersionUID = 1L;
+
+        ChildB(Long id) {
+            super(id);
         }
 
     }

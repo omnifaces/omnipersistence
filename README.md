@@ -957,6 +957,9 @@ These changes in behavior need your attention as well:
    - A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
    - `Bool#applies()` does not match `null` anymore, the same as `Bool` does in SQL.
    - `Not#applies()` negates a wrapped `Criteria`, and matches a multi-value when none of its values matches, the same as `Not` does in SQL.
+   - A number matches an integral field by its numeric value, so `1.0` and `"1.0"` match `1`. A value with a fraction, or beyond the range of the field, matches nothing.
+   - `Order#applies()` and `Between#applies()` throw `IllegalArgumentException` when the model value cannot be compared with the criteria value. `Between#applies()` compares numbers of different types by their numeric value, the same as `Order#applies()`.
+   - A criteria or an ordering on a `@Transient` field resolves to the nearest `@ManyToOne` or `@OneToOne` which declares it, via a path of only `@ManyToOne` and `@OneToOne`. When several of the same depth declare it, or when only a path through a collection reaches it, it throws `IllegalArgumentException`. Use the explicit path instead, such as `lines.product.name`.
 
 - **Auditing and configuration**
    - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.

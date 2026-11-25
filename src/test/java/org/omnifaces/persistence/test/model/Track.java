@@ -34,6 +34,7 @@ public class Track {
     private String title;
 
     private int disc;
+    private Double minutes;
 
     @ManyToOne
     private Album album;
@@ -56,6 +57,14 @@ public class Track {
 
     public void setDisc(int disc) {
         this.disc = disc;
+    }
+
+    public Double getMinutes() {
+        return minutes;
+    }
+
+    public void setMinutes(Double minutes) {
+        this.minutes = minutes;
     }
 
     public Album getAlbum() {

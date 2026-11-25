@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.omnifaces.persistence.Database.DB2;
@@ -462,7 +463,9 @@ public abstract class OmniPersistenceIT {
     void testPersistExistingPerson() {
         var existingPerson = createNewPerson("testPersistExistingPerson@example.com");
         existingPerson.setId(1L);
-        assertThrows(IllegalEntityStateException.class, () -> personService().persist(existingPerson));
+        var exception = assertThrows(IllegalEntityStateException.class, () -> personService().persist(existingPerson));
+        assertSame(existingPerson, exception.getEntity(), "Entity of exception");
+        assertEquals("Entity is already persisted. Use update() instead.", exception.getMessage(), "Message of exception");
     }
 
     @Test
@@ -479,7 +482,9 @@ public abstract class OmniPersistenceIT {
     @Test
     void testUpdateNewPerson() {
         var newPerson = createNewPerson("testUpdateNewPerson@example.com");
-        assertThrows(IllegalEntityStateException.class, () -> personService().update(newPerson));
+        var exception = assertThrows(IllegalEntityStateException.class, () -> personService().update(newPerson));
+        assertSame(newPerson, exception.getEntity(), "Entity of exception");
+        assertEquals("Entity is not persisted. Use persist() instead.", exception.getMessage(), "Message of exception");
     }
 
     @Test
@@ -601,6 +606,15 @@ public abstract class OmniPersistenceIT {
         var persons = personService().getByIds(List.of(1L, 999999L));
         assertEquals(1, persons.size(), "Should find only 1 existing person");
         assertEquals(1L, persons.get(0).getId(), "Found person has correct ID");
+    }
+
+    /**
+     * A duplicate ID gets its entity once.
+     */
+    @Test
+    void testGetByIdsWithDuplicateIdsGetsEachEntityOnce() {
+        var persons = personService().getByIds(List.of(1L, 2L, 1L, 2L, 2L));
+        assertEquals(List.of(2L, 1L), persons.stream().map(Person::getId).toList(), "Each person once, by ID descending");
     }
 
     @Test
@@ -1068,6 +1082,17 @@ public abstract class OmniPersistenceIT {
         var person = personService().getById(1L);
         var result = personService().getPage(Page.with().allMatch(Map.of("phones.owner", person)).build(), true);
         assertEquals(List.of(person.getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phones");
+        assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count");
+    }
+
+    /**
+     * An entity criteria directly on a <code>@OneToMany</code> matches the entities of which the collection contains that entity.
+     */
+    @Test
+    void testSingleEntityCriteriaDirectlyOnOneToMany() {
+        var phone = phoneService().getPageWithOwners(Page.of(0, 1), false).get(0);
+        var result = personService().getPage(Page.with().allMatch(Map.of("phones", phone)).build(), true);
+        assertEquals(List.of(phone.getOwner().getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phone");
         assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count");
     }
 
@@ -3287,6 +3312,18 @@ public abstract class OmniPersistenceIT {
         trackingTextService().clearInvocations();
         trackingTextService().getPage(Page.of(0, 10), true);
         assertTrackedInvocations(List.of("beforePage", "onPage", "onPage", "afterPage"));
+    }
+
+    /**
+     * The callback after a page is also invoked when getting the page fails, so that it can undo what the callback before the page did. The failure is a
+     * {@link RuntimeException}, because an EJB service wraps the {@link IllegalArgumentException} in an <code>EJBException</code>.
+     */
+    @Test
+    void testGetPageInvokesAfterPageCallbackWhenItFails() {
+        trackingTextService().clearInvocations();
+        var page = Page.with().allMatch(Map.of("nonexistent", "x")).build();
+        assertThrows(RuntimeException.class, () -> trackingTextService().getPage(page, true), "Criteria on nonexistent field");
+        assertTrackedInvocations(List.of("beforePage", "afterPage"));
     }
 
     @Test

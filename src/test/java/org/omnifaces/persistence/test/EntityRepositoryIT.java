@@ -78,7 +78,9 @@ import org.omnifaces.persistence.criteria.Criteria;
 import org.omnifaces.persistence.criteria.IgnoreCase;
 import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
+import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.criteria.Order;
+import org.omnifaces.persistence.event.Updated;
 import org.omnifaces.persistence.exception.IllegalEntityStateException;
 import org.omnifaces.persistence.exception.NonDeletableEntityException;
 import org.omnifaces.persistence.model.BaseEntity;
@@ -97,10 +99,12 @@ import org.omnifaces.persistence.test.model.Category;
 import org.omnifaces.persistence.test.model.Club;
 import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Credit;
+import org.omnifaces.persistence.test.model.Delivery;
 import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Invoice;
 import org.omnifaces.persistence.test.model.Letter;
+import org.omnifaces.persistence.test.model.LocalGeneratedIdEntity;
 import org.omnifaces.persistence.test.model.Locker;
 import org.omnifaces.persistence.test.model.Membership;
 import org.omnifaces.persistence.test.model.MembershipId;
@@ -164,6 +168,8 @@ public class EntityRepositoryIT {
     private EntityRepository<Long, Track> trackRepository;
     @Inject
     private EntityRepository<Long, Club> clubRepository;
+    @Inject
+    private EntityRepository<Long, Delivery> deliveryRepository;
     @Inject
     private EntityRepository<MembershipId, Membership> membershipRepository;
     @Inject
@@ -1026,6 +1032,24 @@ public class EntityRepositoryIT {
         assertEquals(List.of("Created Text", "Deleted Text"), entityEvents.get(), "Fired events");
     }
 
+    /**
+     * A soft delete and a soft undelete update the entity, so each fires {@link Updated}.
+     */
+    @Test
+    void testEntityListenerFiresUpdatedEventOnSoftDeleteAndSoftUndelete() {
+        var id = transactionServiceCDI.call(() -> textRepository.persist(new Text()));
+
+        try {
+            entityEvents.clear();
+            transactionServiceCDI.run(() -> textRepository.softDelete(textRepository.getById(id)));
+            transactionServiceCDI.run(() -> textRepository.softUndelete(textRepository.getSoftDeletedById(id)));
+            assertEquals(List.of("Updated Text", "Updated Text"), entityEvents.get(), "Fired events");
+        }
+        finally {
+            transactionServiceCDI.run(() -> Optional.ofNullable(textRepository.getById(id)).ifPresent(textRepository::delete));
+        }
+    }
+
     @Test
     void testAuditTracksChangeOfDetachedEntityWithoutBaseEntity() {
         var article = newArticle("audit", null);
@@ -1171,11 +1195,13 @@ public class EntityRepositoryIT {
                 "Reference"
             );
             assertNotNull(configRepository.getById(id), "Config still exists after failed delete via reference");
-            assertThrows(NonDeletableEntityException.class, () -> configRepository.delete(new Config() {
+            var subclass = new Config() {
 
                 private static final long serialVersionUID = 1L;
 
-            }), "Subclass");
+            };
+            var exception = assertThrows(NonDeletableEntityException.class, () -> configRepository.delete(subclass), "Subclass");
+            assertSame(subclass, exception.getEntity(), "Entity of exception");
         }
         finally {
             transactionServiceCDI.run(() -> {
@@ -1213,6 +1239,35 @@ public class EntityRepositoryIT {
         assertDoesNotThrow(() -> personRepository.reset(reference), "Reset of reference");
         var provider = personRepository.getProvider();
         assertTrue(!provider.isProxy(reference) || provider.isProxyUninitialized(reference), "Reference is left as is");
+    }
+
+    /**
+     * An entity criteria given as an uninitialized reference matches the same entities as the loaded entity does, without loading the reference.
+     */
+    @Test
+    void testPageWithEntityCriteriaAsUninitializedReference() {
+        var owner = phoneRepository.getPage(Page.ONE, false, "owner").get(0).getOwner();
+        var reference = transactionServiceCDI.call(() -> personRepository.getEntityManager().getReference(Person.class, owner.getId()));
+        var expected = idsOf(phoneRepository.getPage(Page.with().allMatch(Map.of("owner", owner)).build(), false));
+        assertEquals(expected, idsOf(phoneRepository.getPage(Page.with().allMatch(Map.of("owner", reference)).build(), false)), "Phones of owner");
+        var provider = personRepository.getProvider();
+        assertTrue(!provider.isProxy(reference) || provider.isProxyUninitialized(reference), "Reference is left as is");
+    }
+
+    /**
+     * A loaded entity and a reference of it are equal both ways and have the same hash code, also when the reference is a proxy subclass.
+     */
+    @Test
+    void testLoadedEntityAndReferenceAreEqual() {
+        var loaded = personRepository.getPage(Page.ONE, false).get(0);
+        var reference = transactionServiceCDI.call(() -> {
+            var person = personRepository.getEntityManager().getReference(Person.class, loaded.getId());
+            person.getEmail();
+            return person;
+        });
+        assertEquals(loaded, reference, "Loaded equals reference");
+        assertEquals(reference, loaded, "Reference equals loaded");
+        assertEquals(loaded.hashCode(), reference.hashCode(), "Hash code");
     }
 
     /**
@@ -1575,6 +1630,67 @@ public class EntityRepositoryIT {
 
         assertThrows(IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, "nonexistent"), "Fetch of nonexistent");
         assertThrows(IllegalArgumentException.class, () -> personRepository.getPage(Page.ONE, false, "phones.nonexistent"), "Fetch of phones.nonexistent");
+    }
+
+    /**
+     * A criteria on a transient field resolves to the nearest <code>@ManyToOne</code> child declaring it, not to a deeper one declaring it as well.
+     */
+    @Test
+    void testPageWithCriteriaOnTransientFieldResolvesToNearestManyToOne() {
+        var persons = personRepository.getPage(Page.of(0, 2), false);
+        var personStreet = transactionServiceCDI.call(() -> personRepository.getById(persons.get(0).getId()).getAddress().getStreet());
+        var originStreet = transactionServiceCDI.call(() -> personRepository.getById(persons.get(1).getId()).getAddress().getStreet());
+        var delivery = new Delivery();
+
+        try {
+            transactionServiceCDI.run(() -> {
+                var person = personRepository.getById(persons.get(0).getId());
+                delivery.setSender(person);
+                delivery.setRecipient(person);
+                delivery.setOrigin(personRepository.getById(persons.get(1).getId()).getAddress());
+                deliveryRepository.persist(delivery);
+            });
+
+            assertEquals(
+                List.of(delivery.getId()), idsOf(deliveryRepository.getPage(Page.with().allMatch(Map.of("street", originStreet)).build(), false)),
+                "Street of origin"
+            );
+            assertEquals(
+                List.of(), idsOf(deliveryRepository.getPage(Page.with().allMatch(Map.of("street", personStreet)).build(), false)),
+                "Street of address of sender and recipient"
+            );
+        }
+        finally {
+            transactionServiceCDI.run(() -> Optional.ofNullable(delivery.getId()).map(deliveryRepository::getById).ifPresent(deliveryRepository::delete));
+        }
+    }
+
+    /**
+     * A criteria on a transient field which several <code>@ManyToOne</code> children at the same depth declare is rejected, because it cannot tell which one is
+     * meant.
+     */
+    @Test
+    void testPageWithCriteriaOnTransientFieldOfSeveralManyToOnesThrowsIllegalArgumentException() {
+        var exception = assertThrows(
+            IllegalArgumentException.class, () -> deliveryRepository.getPage(Page.with().allMatch(Map.of("email", "x")).build(), false)
+        );
+        assertEquals(
+            "Field email cannot be resolved on " + Delivery.class
+                + ", because it is declared by several @ManyToOne/@OneToOne children: [recipient, sender]. Use the path of one of them instead.",
+            exception.getMessage()
+        );
+    }
+
+    /**
+     * A criteria on a transient field which only a <code>@ManyToOne</code> reached through a collection declares is rejected, because the collection has no
+     * single value for it.
+     */
+    @Test
+    void testPageWithCriteriaOnTransientFieldThroughCollectionThrowsIllegalArgumentException() {
+        var exception = assertThrows(
+            IllegalArgumentException.class, () -> deliveryRepository.getPage(Page.with().allMatch(Map.of("title", "x")).build(), false)
+        );
+        assertTrue(exception.getMessage().startsWith("Field title cannot be found on " + Delivery.class), exception.getMessage());
     }
 
     @Test
@@ -2088,6 +2204,58 @@ public class EntityRepositoryIT {
 
     private static List<String> namesOf(List<Credit> credits) {
         return credits.stream().map(Credit::getName).toList();
+    }
+
+    /**
+     * A numeric criteria on an <code>int</code> field matches by numeric value, the same as {@link Numeric#applies(Object)} does, and a value beyond the range
+     * of the field matches nothing.
+     */
+    @Test
+    void testPageWithNumericCriteriaOfOtherTypeOnIntFieldMatchesByNumericValue() {
+        var album = persistAlbum();
+
+        try {
+            for (var value : List.<Object>of(1, 1L, 1.0, new BigDecimal("1.00"), Numeric.value(1.0))) {
+                assertEquals(List.of("a", "b", "c"), titlesOfTracksOf(album, value), "Disc " + value);
+            }
+
+            for (var value : List.<Object>of(5_000_000_000L, 1.5, Numeric.value(5_000_000_000L))) {
+                assertEquals(List.of(), titlesOfTracksOf(album, value), "Disc " + value);
+            }
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    private List<String> titlesOfTracksOf(Album album, Object disc) {
+        var page = Page.with().allMatch(Map.of("album.id", album.getId(), "disc", disc)).orderBy("title", true).build();
+        return titlesOf(trackRepository.getPage(page, false));
+    }
+
+    /**
+     * A {@link Like} on a <code>Double</code> field matches its decimal string form.
+     */
+    @Test
+    void testPageWithLikeOnDoubleField() {
+        var album = new Album();
+        album.setTitle("album");
+        addTrack(album, 1, "a");
+        addTrack(album, 1, "b");
+        album.getTracks().get(0).setMinutes(3.25);
+        album.getTracks().get(1).setMinutes(4.5);
+
+        try {
+            transactionServiceCDI.run(() -> albumRepository.persist(album));
+
+            for (var like : List.of(Like.contains("3.2"), Like.startsWith("3."), Like.endsWith(".25"))) {
+                var page = Page.with().allMatch(Map.of("album.id", album.getId(), "minutes", like)).build();
+                assertEquals(List.of("a"), titlesOf(trackRepository.getPage(page, false)), "Minutes " + like);
+            }
+        }
+        finally {
+            deleteAlbum(album);
+        }
     }
 
     private Album persistAlbum() {
@@ -2749,8 +2917,8 @@ public class EntityRepositoryIT {
         return articles.stream().map(Article::getCode).toList();
     }
 
-    private static List<Long> idsOf(List<Text> texts) {
-        return texts.stream().map(Text::getId).toList();
+    private static List<Long> idsOf(List<? extends LocalGeneratedIdEntity> entities) {
+        return entities.stream().map(LocalGeneratedIdEntity::getId).toList();
     }
 
 }

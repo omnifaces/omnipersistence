@@ -23,6 +23,7 @@ import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,6 +45,8 @@ import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.Attribute.PersistentAttributeType;
 import jakarta.persistence.metamodel.EntityType;
@@ -98,6 +101,142 @@ class EntityMetadataTest {
         void entityWithoutSoftDeletableFieldIsNotSoftDeletable() {
             var softDeleteData = new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData();
             assertThrows(NonSoftDeletableEntityException.class, softDeleteData::checkSoftDeletable);
+        }
+
+        @Test
+        void isSoftDeletedOfDeletedTypeIsFieldValue() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            var entity = new SoftDeletableEntity();
+            assertFalse(softDeleteData.isSoftDeleted(entity));
+            entity.deleted = true;
+            assertTrue(softDeleteData.isSoftDeleted(entity));
+        }
+
+        @Test
+        void isSoftDeletedOfActiveTypeIsInverseOfFieldValue() {
+            var softDeleteData = new EntityMetadata(ActiveEntity.class).getSoftDeleteData();
+            var entity = new ActiveEntity();
+            assertTrue(softDeleteData.isSoftDeleted(entity));
+            entity.active = true;
+            assertFalse(softDeleteData.isSoftDeleted(entity));
+        }
+
+        @Test
+        void isSoftDeletedOfNonSoftDeletableEntityIsFalse() {
+            var softDeleteData = new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData();
+            assertFalse(softDeleteData.isSoftDeleted(new AssignedIdEntity()));
+        }
+
+        @Test
+        void setSoftDeletedOfDeletedTypeSetsFieldToGivenValue() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            var entity = new SoftDeletableEntity();
+            softDeleteData.setSoftDeleted(entity, true);
+            assertTrue(entity.deleted);
+            softDeleteData.setSoftDeleted(entity, false);
+            assertFalse(entity.deleted);
+        }
+
+        @Test
+        void setSoftDeletedOfActiveTypeSetsFieldToInverseOfGivenValue() {
+            var softDeleteData = new EntityMetadata(ActiveEntity.class).getSoftDeleteData();
+            var entity = new ActiveEntity();
+            softDeleteData.setSoftDeleted(entity, true);
+            assertFalse(entity.active);
+            softDeleteData.setSoftDeleted(entity, false);
+            assertTrue(entity.active);
+        }
+
+        @Test
+        void isRestrictedByCriteriaContainingSoftDeletableField() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            assertTrue(softDeleteData.isRestrictedBy(Map.of("deleted", true)));
+            assertTrue(softDeleteData.isRestrictedBy(Map.of("deleted", List.of(true, false))));
+        }
+
+        @Test
+        void isNotRestrictedByCriteriaWithoutOrWithEmptySoftDeletableField() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            assertFalse(softDeleteData.isRestrictedBy(Map.of()));
+            assertFalse(softDeleteData.isRestrictedBy(Map.of("name", "x")));
+            assertFalse(softDeleteData.isRestrictedBy(Map.of("deleted", List.of())));
+        }
+
+        @Test
+        void isNotRestrictedByNonSoftDeletableEntity() {
+            var softDeleteData = new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData();
+            assertFalse(softDeleteData.isRestrictedBy(Map.of("deleted", true)));
+        }
+
+        @Test
+        void notSoftDeletedPredicateRestrictsFieldToNotDeleted() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            assertEquals("deleted=false", predicate(softDeleteData));
+        }
+
+        @Test
+        void notSoftDeletedPredicateOfActiveTypeRestrictsFieldToActive() {
+            var softDeleteData = new EntityMetadata(ActiveEntity.class).getSoftDeleteData();
+            assertEquals("active=true", predicate(softDeleteData));
+        }
+
+        @Test
+        void notSoftDeletedPredicateOfNonSoftDeletableEntityIsNull() {
+            var softDeleteData = new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData();
+            assertNull(softDeleteData.buildNotSoftDeletedPredicate(null, null));
+        }
+
+        @Test
+        void whereClauseExcludesSoftDeletedUnlessIncluded() {
+            var softDeleteData = new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData();
+            assertEquals(" WHERE e.deleted=false", softDeleteData.getWhereClause(false));
+            assertEquals("", softDeleteData.getWhereClause(true));
+        }
+
+        @Test
+        void whereClauseOfSoftDeletedSelectsSoftDeleted() {
+            assertEquals(" WHERE e.deleted=true", new EntityMetadata(SoftDeletableEntity.class).getSoftDeleteData().getWhereClauseOfSoftDeleted());
+            assertEquals(" WHERE e.active=false", new EntityMetadata(ActiveEntity.class).getSoftDeleteData().getWhereClauseOfSoftDeleted());
+        }
+
+        @Test
+        void whereClausesOfNonSoftDeletableEntityAreEmpty() {
+            var softDeleteData = new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData();
+            assertEquals("", softDeleteData.getWhereClause(false));
+            assertEquals("", softDeleteData.getWhereClauseOfSoftDeleted());
+        }
+
+        @Test
+        void entityWithMultipleSoftDeletableFieldsIsRejected() {
+            assertThrows(IllegalStateException.class, () -> new EntityMetadata(DoubleSoftDeletableEntity.class));
+        }
+
+        @Test
+        void toStringDescribesSoftDeleteData() {
+            assertEquals(
+                "SoftDeleteData[softDeletable=true, fieldName=active, setterName=setActive, typeActive=true]",
+                new EntityMetadata(ActiveEntity.class).getSoftDeleteData().toString()
+            );
+            assertEquals(
+                "SoftDeleteData[softDeletable=false, fieldName=null, setterName=null, typeActive=false]",
+                new EntityMetadata(AssignedIdEntity.class).getSoftDeleteData().toString()
+            );
+        }
+
+        private String predicate(SoftDeleteData softDeleteData) {
+            var fieldNames = new ArrayList<String>();
+            var root = (Path<?>) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] { Path.class }, (proxy, method, args) -> {
+                fieldNames.add((String) args[0]);
+                return proxy;
+            });
+            var values = new ArrayList<Object>();
+            var criteriaBuilder = (CriteriaBuilder) Proxy
+                .newProxyInstance(getClass().getClassLoader(), new Class<?>[] { CriteriaBuilder.class }, (proxy, method, args) -> {
+                    values.add(args[1]);
+                    return null;
+                });
+            softDeleteData.buildNotSoftDeletedPredicate(root, criteriaBuilder);
+            return fieldNames.get(0) + "=" + values.get(0);
         }
 
     }
@@ -244,6 +383,27 @@ class EntityMetadataTest {
         @Test
         void collectsManyOrOneToOnesIncludingNestedOnes() {
             assertEquals(Set.of("parent", "detail", "detail.other", "children.root"), mappings(new EntityMetadata(Root.class)).getManyOrOneToOnes());
+        }
+
+        @Test
+        void collectsManyOrOneToOnesNestedInEachOfTwoAssociationsOfSameType() {
+            var twoPathsMetamodel = new StubMetamodel()
+                .entity(Order.class, attribute("billingAddress", MANY_TO_ONE, Address.class), attribute("shippingAddress", MANY_TO_ONE, Address.class))
+                .entity(Address.class, attribute("country", MANY_TO_ONE, Country.class))
+                .entity(Country.class, attribute("name", BASIC, String.class));
+            var mappings = new EntityMetadata(Order.class).getMappings(twoPathsMetamodel.entityManagerFactory(), HIBERNATE);
+            assertEquals(Set.of("billingAddress", "shippingAddress", "billingAddress.country", "shippingAddress.country"), mappings.getManyOrOneToOnes());
+        }
+
+        @Test
+        void collectsManyOrOneToOnesNestedInTypeViaItsShortestPath() {
+            var shortcutMetamodel = new StubMetamodel()
+                .entity(Order.class, attribute("billingAddress", MANY_TO_ONE, Address.class), attribute("country", MANY_TO_ONE, Country.class))
+                .entity(Address.class, attribute("country", MANY_TO_ONE, Country.class))
+                .entity(Country.class, attribute("continent", MANY_TO_ONE, Parent.class))
+                .entity(Parent.class, attribute("name", BASIC, String.class));
+            var mappings = new EntityMetadata(Order.class).getMappings(shortcutMetamodel.entityManagerFactory(), HIBERNATE);
+            assertEquals(Set.of("billingAddress", "country", "billingAddress.country", "country.continent"), mappings.getManyOrOneToOnes());
         }
 
         @Test
@@ -516,6 +676,35 @@ class EntityMetadataTest {
         public boolean isDeleted() {
             return deleted;
         }
+
+        public void setDeleted(boolean deleted) {
+            this.deleted = deleted;
+        }
+
+    }
+
+    static class ActiveEntity extends GeneratedIdEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+
+        @SoftDeletable(type = SoftDeletable.Type.ACTIVE)
+        private boolean active;
+
+        public void setActive(boolean active) {
+            this.active = active;
+        }
+
+    }
+
+    static class DoubleSoftDeletableEntity extends GeneratedIdEntity<Long> {
+
+        private static final long serialVersionUID = 1L;
+
+        @SoftDeletable
+        private boolean deleted;
+
+        @SoftDeletable
+        private boolean removed;
 
     }
 

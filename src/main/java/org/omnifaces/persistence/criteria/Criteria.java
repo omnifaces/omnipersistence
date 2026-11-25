@@ -96,6 +96,7 @@ public abstract class Criteria<T> implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    private static final String ERROR_INCOMPARABLE = "Model value '%s' of type %s cannot be compared with criteria value '%s' of type %s.";
     private static final String DATE_PATTERN = "yyyy-MM-dd";
     private static final String TIME_PATTERN = "HH:mm:ss";
     private static final DateTimeFormatter LOCAL_TIME = ofPattern(TIME_PATTERN);
@@ -224,6 +225,18 @@ public abstract class Criteria<T> implements Serializable {
         else {
             return modelValue.toString();
         }
+    }
+
+    /**
+     * Returns the exception for a model value which cannot be compared with the given criteria value, because their types differ.
+     */
+    static IllegalArgumentException incomparable(Object modelValue, Object criteriaValue, ClassCastException cause) {
+        return new IllegalArgumentException(
+            String.format(
+                ERROR_INCOMPARABLE, modelValue, modelValue.getClass().getName(), criteriaValue,
+                criteriaValue.getClass().getName()
+            ), cause
+        );
     }
 
     /**

@@ -171,7 +171,7 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
 
         var comparison = value instanceof Number number && getValue() instanceof Number criteriaNumber
             ? Numeric.compare(number, criteriaNumber)
-            : ((T) value).compareTo(getValue());
+            : compare((T) value);
 
         if (greaterThan()) {
             return comparison > 0;
@@ -184,6 +184,15 @@ public final class Order<T extends Comparable<T>> extends Criteria<T> {
         }
         else {
             return comparison <= 0;
+        }
+    }
+
+    private int compare(T value) {
+        try {
+            return value.compareTo(getValue());
+        }
+        catch (ClassCastException e) {
+            throw incomparable(value, getValue(), e);
         }
     }
 

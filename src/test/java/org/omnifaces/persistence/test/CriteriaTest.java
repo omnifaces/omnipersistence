@@ -17,12 +17,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.omnifaces.persistence.test.Serializations.serializeAndDeserialize;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -48,6 +50,7 @@ import org.omnifaces.persistence.criteria.Like;
 import org.omnifaces.persistence.criteria.Not;
 import org.omnifaces.persistence.criteria.Numeric;
 import org.omnifaces.persistence.criteria.Order;
+import org.omnifaces.utils.data.Range;
 
 /**
  * Unit tests for all {@link Criteria} subclasses.
@@ -59,6 +62,7 @@ import org.omnifaces.persistence.criteria.Order;
  */
 public class CriteriaTest {
 
+    private static final Duration MAX_PARSE_DURATION = Duration.ofSeconds(1);
     private static final LocalDateTime LOCAL_DATE_TIME = LocalDateTime.of(2026, 11, 14, 13, 14, 0, 123_000_000);
     private static final OffsetDateTime OFFSET_DATE_TIME = OffsetDateTime.of(LOCAL_DATE_TIME, ZoneOffset.ofHours(2));
 
@@ -288,6 +292,14 @@ public class CriteriaTest {
         }
 
         @Test
+        void appliesOnValueOfIncomparableTypeThrowsIllegalArgumentException() {
+            var exception = assertThrows(IllegalArgumentException.class, () -> Order.greaterThan(5).applies("6"));
+            assertEquals(
+                "Model value '6' of type java.lang.String cannot be compared with criteria value '5' of type java.lang.Integer.", exception.getMessage()
+            );
+        }
+
+        @Test
         void appliesComparesInfinityAsDouble() {
             assertTrue(Order.greaterThan(0.0).applies(Double.POSITIVE_INFINITY));
             assertFalse(Order.greaterThan(0.0).applies(Double.NEGATIVE_INFINITY));
@@ -404,6 +416,22 @@ public class CriteriaTest {
         }
 
         @Test
+        void appliesComparesByNumericValueAcrossType() {
+            assertTrue(Between.range(1, 10).applies(5L));
+            assertTrue(Between.range(1, 10).applies(new BigDecimal("10.0")));
+            assertFalse(Between.range(1, 10).applies(10.5));
+            assertFalse(Between.range(1L, 10L).applies(0));
+        }
+
+        @Test
+        void appliesComparesByNumericValueAcrossTypeHonoringExclusiveBound() {
+            var range = Range.of(1, 10);
+            assertFalse(range.isMaxInclusive(), "Range.of has an exclusive max");
+            assertFalse(Between.value(range).applies(10L));
+            assertTrue(Between.value(range).applies(9.5));
+        }
+
+        @Test
         void appliesWithDates() {
             var start = LocalDate.of(2025, 1, 1);
             var end = LocalDate.of(2025, 12, 31);
@@ -433,6 +461,14 @@ public class CriteriaTest {
         @Test
         void appliesReturnsFalseForNonComparable() {
             assertFalse(Between.range(1, 10).applies(new Object()));
+        }
+
+        @Test
+        void appliesOnValueOfIncomparableTypeThrowsIllegalArgumentException() {
+            var exception = assertThrows(IllegalArgumentException.class, () -> Between.range(1, 10).applies("5"));
+            assertEquals(
+                "Model value '5' of type java.lang.String cannot be compared with criteria value '1' of type java.lang.Integer.", exception.getMessage()
+            );
         }
 
         @Test
@@ -636,6 +672,50 @@ public class CriteriaTest {
         void parseBigDecimal() {
             var numeric = Numeric.parse("42.5", (Class<Number>) (Class<?>) BigDecimal.class);
             assertEquals(new BigDecimal("42.5"), numeric.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        void parseIntegralTypeByNumericValue() {
+            assertEquals(1, Numeric.parse("1.0", (Class<Number>) (Class<?>) Integer.class).getValue());
+            assertEquals(1L, Numeric.parse(1.0, (Class<Number>) (Class<?>) Long.class).getValue());
+            assertEquals((short) 100, Numeric.parse("1E+2", (Class<Number>) (Class<?>) Short.class).getValue());
+            assertEquals(BigInteger.valueOf(1000), Numeric.parse(new BigDecimal("1E+3"), (Class<Number>) (Class<?>) BigInteger.class).getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        void parseIntegralTypeWithFractionOrBeyondRangeThrowsIllegalArgumentException() {
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse("1.5", (Class<Number>) (Class<?>) Integer.class));
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse(5_000_000_000L, (Class<Number>) (Class<?>) Integer.class));
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse("128", (Class<Number>) (Class<?>) Byte.class));
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse("1E999999999", (Class<Number>) (Class<?>) BigInteger.class));
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse("1E-999999999", (Class<Number>) (Class<?>) BigInteger.class));
+            assertThrows(IllegalArgumentException.class, () -> Numeric.parse("1.5", (Class<Number>) (Class<?>) BigInteger.class));
+        }
+
+        @ParameterizedTest
+        @MethodSource("integralAndDecimalTypes")
+        void parseOfHugeSearchValueThrowsIllegalArgumentExceptionInstantly(Class<Number> type) {
+            var digits = "1" + "0".repeat(1_000_000);
+            var nonString = new Object() {
+
+                @Override
+                public String toString() {
+                    return digits;
+                }
+
+            };
+
+            for (var value : List.of("1E-50000000", "1E50000000", digits, "1." + "0".repeat(1_000_000), nonString)) {
+                assertTimeoutPreemptively(
+                    MAX_PARSE_DURATION, () -> assertThrows(IllegalArgumentException.class, () -> Numeric.parse(value, type)), type::getName
+                );
+            }
+        }
+
+        static Stream<Class<?>> integralAndDecimalTypes() {
+            return Stream.of(BigInteger.class, Long.class, Integer.class, Short.class, Byte.class, long.class, int.class, short.class, byte.class);
         }
 
         @SuppressWarnings("unchecked")
