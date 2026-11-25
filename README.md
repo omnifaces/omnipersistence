@@ -933,23 +933,33 @@ The integration tests of OptimusFaces therefore run on H2 only, and cover the Da
 2.0 is not binary compatible with 1.x, so recompile your code against it.
 In the source, these changes need your attention:
 
-- `Page` has moved from the package `org.omnifaces.persistence.model.dto` to `org.omnifaces.persistence.query`. Update its import.
-- `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
-- `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
-- `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
+- **Entities and services**
+   - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
+   - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
+
+- **Paging and fetching**
+   - `Page` has moved from the package `org.omnifaces.persistence.model.dto` to `org.omnifaces.persistence.query`. Update its import.
+
+- **Auditing and configuration**
+   - `getEntity()` of `AuditedChange` and of `BaseEntityException` and its subclasses is no longer bound to `BaseEntity`. A method call chained on it, such as `change.getEntity().getId()`, no longer compiles. Assign it to a variable of your entity type first, or use `change.getEntityId()`.
 
 These changes in behavior need your attention as well:
 
-- `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
-- `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
-- `Criteria#applies()` of `Like` and `IgnoreCase` ignores accents, so that it agrees with an accent-insensitive collation of the column. An in-memory filter on it, such as of a non-lazy OptimusFaces table, matches `Émile` by `emil`.
-- An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
-- A fetched collection which the ordering of the page does not reference is ordered by its `@OrderBy`: a plain one by the basic ID of an entity element or by the value of a basic element, else by the named fields with an optional `ASC` or `DESC`. Any other `@OrderBy` leaves the order to the provider. Without `@OrderBy` or `@OrderColumn`, it is sorted by the natural order of its elements, if they are `Comparable`.
-- An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
-- `Not.value(v)` also matches when the property is `NULL`, the same as `Not#applies()`. `Not.value(null)` still matches only when it is not `NULL`.
-- A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
-- `Bool#applies()` does not match `null` anymore, the same as `Bool` does in SQL.
-- `Not#applies()` negates a wrapped `Criteria`, and matches a multi-value when none of its values matches, the same as `Not` does in SQL.
+- **Paging and fetching**
+   - An entity without a fetched association is returned as well, because fetch fields are fetched with a `LEFT JOIN`.
+   - A fetched collection which the ordering of the page does not reference is ordered by its `@OrderBy`: a plain one by the basic ID of an entity element or by the value of a basic element, else by the named fields with an optional `ASC` or `DESC`. Any other `@OrderBy` leaves the order to the provider. Without `@OrderBy` or `@OrderColumn`, it is sorted by the natural order of its elements, if they are `Comparable`.
+   - An entity without an optional association is kept by an ordering, by an optional criteria, by a `null` criteria and by a `Not` criteria on a property of that association, because the association is joined with a `LEFT JOIN`.
+
+- **Criteria**
+   - `Like` matches its value literally. `%` and `_`, and `[` on SQL Server, are no wildcards anymore. Use `Like.pattern()` to match by wildcards.
+   - `Criteria#applies()` of `Like` and `IgnoreCase` ignores accents, so that it agrees with an accent-insensitive collation of the column. An in-memory filter on it, such as of a non-lazy OptimusFaces table, matches `Émile` by `emil`.
+   - `Not.value(v)` also matches when the property is `NULL`, the same as `Not#applies()`. `Not.value(null)` still matches only when it is not `NULL`.
+   - A criteria value which cannot be parsed into the type of the field matches nothing. It is not skipped anymore.
+   - `Bool#applies()` does not match `null` anymore, the same as `Bool` does in SQL.
+   - `Not#applies()` negates a wrapped `Criteria`, and matches a multi-value when none of its values matches, the same as `Not` does in SQL.
+
+- **Auditing and configuration**
+   - `AuditedChange` is fired after the JTA transaction is committed, and not fired when it is rolled back. An observer which persists an audit log must start a transaction of its own, for example via `@Transactional(REQUIRES_NEW)`.
 
 OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 
