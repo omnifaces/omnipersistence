@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.omnifaces.persistence.Database.DB2;
 import static org.omnifaces.persistence.JPA.LIKE_ESCAPE;
 import static org.omnifaces.persistence.JPA.escapeLike;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.ECLIPSELINK;
@@ -71,7 +72,6 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.omnifaces.persistence.Database;
 import org.omnifaces.persistence.Provider;
 import org.omnifaces.persistence.criteria.Bool;
 import org.omnifaces.persistence.criteria.Criteria;
@@ -2234,7 +2234,8 @@ public class EntityRepositoryIT {
     }
 
     /**
-     * A {@link Like} on a <code>Double</code> field matches its decimal string form.
+     * A {@link Like} on a <code>Double</code> field matches its decimal string form. DB2 renders a double in scientific notation, such as <code>3.25E0</code>,
+     * so a match on its end is skipped there.
      */
     @Test
     void testPageWithLikeOnDoubleField() {
@@ -2248,7 +2249,13 @@ public class EntityRepositoryIT {
         try {
             transactionServiceCDI.run(() -> albumRepository.persist(album));
 
-            for (var like : List.of(Like.contains("3.2"), Like.startsWith("3."), Like.endsWith(".25"))) {
+            var likes = new ArrayList<>(List.of(Like.contains("3.2"), Like.startsWith("3.")));
+
+            if (trackRepository.getDatabase() != DB2) {
+                likes.add(Like.endsWith(".25"));
+            }
+
+            for (var like : likes) {
                 var page = Page.with().allMatch(Map.of("album.id", album.getId(), "minutes", like)).build();
                 assertEquals(List.of("a"), titlesOf(trackRepository.getPage(page, false)), "Minutes " + like);
             }

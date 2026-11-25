@@ -76,6 +76,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import jakarta.annotation.Nullable;
@@ -2916,11 +2917,19 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
     /**
      * Returns whether given path may be <code>NULL</code>. Only a non-optional attribute and an ID of the root are not, so that their value based paging
      * predicate needs no <code>IS NULL</code>, which would prevent the use of an index on some databases. Such an attribute of a joined entity may still be
-     * <code>NULL</code>, because the join may be a <code>LEFT JOIN</code>.
+     * <code>NULL</code>, because the join may be a <code>LEFT JOIN</code>. A collection itself is never <code>NULL</code> either.
      */
     private static boolean isNullable(Expression<?> path) {
-        return !(path instanceof Path<?> attributePath && attributePath.getParentPath() instanceof Root<?>
+        return !isCollectionValued(path) && !(path instanceof Path<?> attributePath && attributePath.getParentPath() instanceof Root<?>
             && attributePath.getModel() instanceof SingularAttribute<?, ?> attribute && (attribute.isId() || !attribute.isOptional()));
+    }
+
+    /**
+     * Returns whether given path is a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> itself, which is never
+     * <code>NULL</code>.
+     */
+    private static boolean isCollectionValued(Expression<?> path) {
+        return path instanceof Path<?> attributePath && attributePath.getModel() instanceof PluralAttribute<?, ?, ?>;
     }
 
     private List<Predicate> buildPredicates(
@@ -3014,7 +3023,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
                 predicate = criteriaObject.build(path, criteriaBuilder, parameterBuilder);
             }
             else if (isEntity(value)) {
-                predicate = criteriaBuilder.equal(path, parameterBuilder.create(value));
+                predicate = buildEntityPredicate(path, value, criteriaBuilder, parameterBuilder);
             }
             else {
                 var typedCriteria = createTypedCriteria(type, value);
@@ -3190,6 +3199,10 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         if (!oneToManyField && !elementCollections.test(field)) {
+            if (isCollectionValued(path)) {
+                return buildContainsAllPredicate(path, type, field, value, negated, query, criteriaBuilder, pathResolver, parameterBuilder);
+            }
+
             var in = buildEqualityInPredicate(path, type, value, parameterBuilder);
 
             if (in != null) {
@@ -3391,6 +3404,54 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         return predicate != null && isNegated(criteria) ? criteriaBuilder.not(predicate) : predicate;
+    }
+
+    /**
+     * Returns a predicate matching the entities whose collection at given collection-valued path contains all items of given multi-value, the same as on an
+     * <code>@ElementCollection</code>. A multi-valued item matches when the collection contains any of its items, and a <code>null</code> item is skipped,
+     * because such a collection holds no <code>NULL</code> element.
+     */
+    private Predicate buildContainsAllPredicate(
+        Expression<?> path, Class<?> type, String field, Object value, boolean negated, AbstractQuery<?> query, CriteriaBuilder criteriaBuilder,
+        PathResolver pathResolver, ParameterBuilder parameterBuilder
+    )
+    {
+        var predicates = new ArrayList<Predicate>();
+
+        for (var item : (Iterable<?>) stream(value)::iterator) {
+            var anyOf = (isMultiValued(item) ? stream(item) : Stream.ofNullable(item))
+                .filter(Objects::nonNull)
+                .map(anyItem -> buildTypedPredicate(path, type, field, anyItem, query, criteriaBuilder, pathResolver, parameterBuilder))
+                .filter(Objects::nonNull)
+                .toList();
+
+            if (!anyOf.isEmpty()) {
+                predicates.add(criteriaBuilder.or(toArray(anyOf)));
+            }
+        }
+
+        if (predicates.isEmpty()) {
+            throw new IllegalArgumentException(value.toString());
+        }
+
+        var predicate = criteriaBuilder.and(toArray(predicates));
+        return negated ? criteriaBuilder.not(predicate) : predicate;
+    }
+
+    /**
+     * Returns a predicate matching given entity: on a collection-valued path as <code>MEMBER OF</code>, else by equality.
+     */
+    @SuppressWarnings("unchecked")
+    private static Predicate buildEntityPredicate(Expression<?> path, Object entity, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
+        if (isCollectionValued(path)) {
+            return isMember(criteriaBuilder, parameterBuilder.create(entity), (Expression<Collection<Object>>) path);
+        }
+
+        return criteriaBuilder.equal(path, parameterBuilder.create(entity));
+    }
+
+    private static <E, C extends Collection<E>> Predicate isMember(CriteriaBuilder criteriaBuilder, Expression<E> element, Expression<C> collection) {
+        return criteriaBuilder.isMember(element, collection);
     }
 
     /**

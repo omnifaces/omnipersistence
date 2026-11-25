@@ -1086,14 +1086,36 @@ public abstract class OmniPersistenceIT {
     }
 
     /**
-     * An entity criteria directly on a <code>@OneToMany</code> matches the entities of which the collection contains that entity.
+     * An entity criteria directly on a <code>@OneToMany</code> matches the entities of which the collection contains that entity, and a negated one those of
+     * which it does not. A multi-value matches those of which it contains all of them, and a nested multi-value any of its items, the same as on an
+     * <code>@ElementCollection</code>.
      */
     @Test
-    void testSingleEntityCriteriaDirectlyOnOneToMany() {
-        var phone = phoneService().getPageWithOwners(Page.of(0, 1), false).get(0);
+    void testEntityCriteriaDirectlyOnOneToMany() {
+        var person = personService().getAllWithPhones().stream().filter(p -> p.getPhones().size() > 1).findFirst().orElseThrow();
+        var phone = person.getPhones().get(0);
+
         var result = personService().getPage(Page.with().allMatch(Map.of("phones", phone)).build(), true);
-        assertEquals(List.of(phone.getOwner().getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phone");
+        assertEquals(List.of(person.getId()), result.stream().map(Person::getId).toList(), "Only the owner of the phone");
         assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count");
+
+        var negated = personService().getPage(Page.with().allMatch(Map.of("phones", Not.value(phone))).build(), true);
+        assertEquals(TOTAL_RECORDS - 1, negated.getEstimatedTotalNumberOfResults(), "Count of all but the owner of the phone");
+        assertTrue(negated.stream().noneMatch(p -> p.getId().equals(person.getId())), "Not the owner of the phone");
+
+        var phonesOfOwner = List.of(phone, person.getPhones().get(1));
+        var allOfOwner = personService().getPage(Page.with().allMatch(Map.of("phones", phonesOfOwner)).build(), true);
+        assertEquals(List.of(person.getId()), allOfOwner.stream().map(Person::getId).toList(), "The owner of both phones");
+
+        var phoneOfOther = phoneService().getPageWithOwners(Page.with().allMatch(Map.of("owner.id", Not.value(person.getId()))).build(), false).get(0);
+        var phonesOfTwoOwners = List.of(phone, phoneOfOther);
+        var allOfTwoOwners = personService().getPage(Page.with().allMatch(Map.of("phones", phonesOfTwoOwners)).build(), true);
+        assertEquals(List.of(), allOfTwoOwners.stream().map(Person::getId).toList(), "Nobody owns both phones");
+        assertEquals(0, allOfTwoOwners.getEstimatedTotalNumberOfResults(), "Count of nobody");
+
+        var anyOfTwoOwnersAndOfOwner = List.of(phonesOfTwoOwners, person.getPhones().get(1));
+        var nested = personService().getPage(Page.with().allMatch(Map.of("phones", anyOfTwoOwnersAndOfOwner)).build(), true);
+        assertEquals(List.of(person.getId()), nested.stream().map(Person::getId).toList(), "The owner of either phone and of the other phone");
     }
 
     @Test

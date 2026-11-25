@@ -984,6 +984,7 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
 - On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
+- On DB2, `Like` on a `Double` field matches the string form of DB2, which is in scientific notation, such as `3.25E0`. So `Like.contains("3.2")` and `Like.startsWith("3.")` match `3.25`, but `Like.endsWith(".25")` does not.
 - On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.
 
