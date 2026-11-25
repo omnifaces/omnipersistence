@@ -81,14 +81,14 @@
         <test.tomee.version>10.2.0</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
         <test.tomee.openjpa.version>4.1.1</test.tomee.openjpa.version> <!-- https://mvnrepository.com/artifact/org.apache.openjpa/openjpa-all --> <!-- NOTE: This must be OpenJPA version bundled in test.tomee.version -->
         <test.h2.version>2.5.252</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
-        <test.mysql-driver.version>26.10.0</test.mysql-driver.version> <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-        <test.mysql.url>jdbc:mysql://localhost:3306/</test.mysql.url> <!-- The persistence unit name is appended as database name. -->
         <test.postgresql-driver.version>42.7.14</test.postgresql-driver.version> <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
         <test.postgresql.url>jdbc:postgresql://localhost:5432/</test.postgresql.url> <!-- The persistence unit name is appended as database name. -->
+        <test.mysql-driver.version>26.10.0</test.mysql-driver.version> <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
+        <test.mysql.url>jdbc:mysql://localhost:3306/</test.mysql.url> <!-- The persistence unit name is appended as database name. -->
         <test.sqlserver-driver.version>13.6.2.jre11</test.sqlserver-driver.version> <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc -->
         <test.sqlserver.url>jdbc:sqlserver://localhost:1433;trustServerCertificate=true;sendTimeAsDatetime=false;databaseName=</test.sqlserver.url> <!-- The persistence unit name is appended as database name. -->
         <test.db2-driver.version>12.1.5.0</test.db2-driver.version> <!-- https://mvnrepository.com/artifact/com.ibm.db2/jcc -->
-        <test.database>H2</test.database> <!-- H2, MySQL, PostgreSQL, SQLServer or DB2 -->
+        <test.database>H2</test.database> <!-- H2, PostgreSQL, MySQL, SQLServer or DB2 -->
     </properties>
 
     <dependencies>
@@ -357,11 +357,11 @@
                     <systemPropertyVariables>
                         <profile.id>${project.activeProfiles[0].id}</profile.id>
                         <test.h2.version>${test.h2.version}</test.h2.version>
-                        <test.mysql-driver.version>${test.mysql-driver.version}</test.mysql-driver.version>
                         <test.postgresql-driver.version>${test.postgresql-driver.version}</test.postgresql-driver.version>
+                        <test.mysql-driver.version>${test.mysql-driver.version}</test.mysql-driver.version>
                         <test.database>${test.database}</test.database>
-                        <test.mysql.url>${test.mysql.url}</test.mysql.url>
                         <test.postgresql.url>${test.postgresql.url}</test.postgresql.url>
+                        <test.mysql.url>${test.mysql.url}</test.mysql.url>
                         <test.sqlserver-driver.version>${test.sqlserver-driver.version}</test.sqlserver-driver.version>
                         <test.sqlserver.url>${test.sqlserver.url}</test.sqlserver.url>
                         <test.db2-driver.version>${test.db2-driver.version}</test.db2-driver.version>
@@ -512,16 +512,16 @@
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
                                         <artifactItem>
-                                            <groupId>com.mysql</groupId>
-                                            <artifactId>mysql-connector-j</artifactId>
-                                            <version>${test.mysql-driver.version}</version>
+                                            <groupId>org.postgresql</groupId>
+                                            <artifactId>postgresql</artifactId>
+                                            <version>${test.postgresql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
                                         <artifactItem>
-                                            <groupId>org.postgresql</groupId>
-                                            <artifactId>postgresql</artifactId>
-                                            <version>${test.postgresql-driver.version}</version>
+                                            <groupId>com.mysql</groupId>
+                                            <artifactId>mysql-connector-j</artifactId>
+                                            <version>${test.mysql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/glassfish8/glassfish/modules</outputDirectory>
                                         </artifactItem>
@@ -608,16 +608,16 @@
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>
                                         <artifactItem>
-                                            <groupId>com.mysql</groupId>
-                                            <artifactId>mysql-connector-j</artifactId>
-                                            <version>${test.mysql-driver.version}</version>
+                                            <groupId>org.postgresql</groupId>
+                                            <artifactId>postgresql</artifactId>
+                                            <version>${test.postgresql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>
                                         <artifactItem>
-                                            <groupId>org.postgresql</groupId>
-                                            <artifactId>postgresql</artifactId>
-                                            <version>${test.postgresql-driver.version}</version>
+                                            <groupId>com.mysql</groupId>
+                                            <artifactId>mysql-connector-j</artifactId>
+                                            <version>${test.mysql-driver.version}</version>
                                             <type>jar</type>
                                             <outputDirectory>${project.build.directory}/apache-tomee-webprofile-${test.tomee.version}/lib</outputDirectory>
                                         </artifactItem>

@@ -49,14 +49,14 @@ public enum Database {
     H2(true),
 
     /**
-     * MySQL database. Also matches MariaDB.
-     */
-    MYSQL(true, "MARIA"),
-
-    /**
      * PostgreSQL database.
      */
     POSTGRESQL(false, "POSTGRES"),
+
+    /**
+     * MySQL database. Also matches MariaDB.
+     */
+    MYSQL(true, "MARIA"),
 
     /**
      * SQL Server database.

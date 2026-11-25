@@ -214,8 +214,8 @@ public abstract class OmniPersistenceIT {
     private static String jdbcDriverOf(Database database) {
         return switch (database) {
             case H2 -> "com.h2database:h2:" + getProperty("test.h2.version");
-            case MYSQL -> "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version");
             case POSTGRESQL -> "org.postgresql:postgresql:" + getProperty("test.postgresql-driver.version");
+            case MYSQL -> "com.mysql:mysql-connector-j:" + getProperty("test.mysql-driver.version");
             case SQLSERVER -> "com.microsoft.sqlserver:mssql-jdbc:" + getProperty("test.sqlserver-driver.version");
             case DB2 -> "com.ibm.db2:jcc:" + getProperty("test.db2-driver.version");
             case UNKNOWN -> throw new UnsupportedOperationException(database.name());
@@ -231,15 +231,15 @@ public abstract class OmniPersistenceIT {
                 persistenceUnitName, "org.h2.jdbcx.JdbcDataSource", urlOf("jdbc:h2:mem:" + persistenceUnitName + ";DB_CLOSE_DELAY=-1;MODE=LEGACY"),
                 READ_COMMITTED
             );
+            case POSTGRESQL -> dataSourceOf(
+                persistenceUnitName, "org.postgresql.ds.PGSimpleDataSource",
+                urlOf(getProperty("test.postgresql.url") + persistenceUnitName) + credentialsOf("test", "test"), READ_COMMITTED
+            );
             case MYSQL -> dataSourceOf(
                 persistenceUnitName, "com.mysql.cj.jdbc.MysqlDataSource",
                 urlOf(getProperty("test.mysql.url") + persistenceUnitName + "?fallbackToSystemKeyStore=false") // Avoids GlassFish keystore.
                     + credentialsOf("test", "test"),
                 READ_COMMITTED
-            );
-            case POSTGRESQL -> dataSourceOf(
-                persistenceUnitName, "org.postgresql.ds.PGSimpleDataSource",
-                urlOf(getProperty("test.postgresql.url") + persistenceUnitName) + credentialsOf("test", "test"), READ_COMMITTED
             );
             case SQLSERVER -> dataSourceOf(
                 persistenceUnitName, "com.microsoft.sqlserver.jdbc.SQLServerDataSource",
@@ -260,8 +260,8 @@ public abstract class OmniPersistenceIT {
      */
     private static String ormOf(Database database) {
         var columnDefinition = switch (database) {
-            case MYSQL -> "VARCHAR(255) COLLATE utf8mb4_0900_ai_ci";
             case POSTGRESQL -> "VARCHAR(255) COLLATE &quot;und-x-icu&quot;";
+            case MYSQL -> "VARCHAR(255) COLLATE utf8mb4_0900_ai_ci";
             case SQLSERVER -> "VARCHAR(255) COLLATE Latin1_General_100_CI_AI";
             default -> null;
         };
