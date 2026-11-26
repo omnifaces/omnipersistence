@@ -21,7 +21,7 @@ on:
 
 jobs:
   test:
-    name: Run tests on ${{matrix.server}} + ${{matrix.database}}
+    name: ${{matrix.server}} + ${{matrix.database}}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
