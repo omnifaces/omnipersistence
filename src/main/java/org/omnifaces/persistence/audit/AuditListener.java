@@ -383,16 +383,16 @@ public class AuditListener {
      * Compares by {@link Comparable#compareTo(Object)} when one value is an instance of the class of the other: a provider may load a <code>Date</code> as a
      * <code>Timestamp</code>, and <code>BigDecimal</code> equals takes the scale into account.
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings("unchecked")
     private static boolean isSameValue(Object oldValue, Object newValue) {
         if (Objects.deepEquals(oldValue, newValue)) {
             return true;
         }
-        else if (oldValue instanceof Comparable comparable && oldValue.getClass().isInstance(newValue)) {
-            return comparable.compareTo(newValue) == 0;
+        else if (oldValue instanceof Comparable<?> comparable && oldValue.getClass().isInstance(newValue)) {
+            return ((Comparable<Object>) comparable).compareTo(newValue) == 0;
         }
-        else if (newValue instanceof Comparable comparable && newValue.getClass().isInstance(oldValue)) {
-            return comparable.compareTo(oldValue) == 0;
+        else if (newValue instanceof Comparable<?> comparable && newValue.getClass().isInstance(oldValue)) {
+            return ((Comparable<Object>) comparable).compareTo(oldValue) == 0;
         }
         else {
             return false;
