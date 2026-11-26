@@ -937,7 +937,7 @@ The integration tests of OptimusFaces therefore run on H2 only, and cover the Da
 In the source, these changes need your attention:
 
 - **Entities and services**
-   - `Identifiable` is removed. Replace `Identifiable.ID` with `Page.ID`.
+   - `Identifiable` is removed. The ID of an entity is read from its `@Id` or `@EmbeddedId` via the JPA metamodel, so an entity only needs to drop `implements Identifiable`. Replace `Identifiable.ID` with `Page.ID`.
    - `Provider#getIdentifier()` is removed. Use `getId()` of `EntityRepository` or `BaseEntityService` instead.
 
 - **Paging and fetching**
