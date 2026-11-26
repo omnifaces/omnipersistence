@@ -44,7 +44,7 @@ public class Person extends LocalGeneratedIdEntity {
     public static final String BY_EMAIL = "Person.byEmail";
 
     private @NotNull String email;
-    private @NotNull @Enumerated Gender gender;
+    private @NotNull @Enumerated Status status;
     private @NotNull LocalDate dateOfBirth;
     private String nickname;
 
@@ -66,12 +66,12 @@ public class Person extends LocalGeneratedIdEntity {
         this.email = email;
     }
 
-    public Gender getGender() {
-        return gender;
+    public Status getStatus() {
+        return status;
     }
 
-    public void setGender(Gender gender) {
-        this.gender = gender;
+    public void setStatus(Status status) {
+        this.status = status;
     }
 
     public LocalDate getDateOfBirth() {

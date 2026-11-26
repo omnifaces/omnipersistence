@@ -124,7 +124,7 @@ personRepository.delete(List.of(a, b, c));
 Optional<Person> p = personRepository.find("SELECT p FROM Person p WHERE p.email = ?1", email);
 Optional<Person> p = personRepository.find("WHERE e.email = ?1", email);
 
-List<Person> list  = personRepository.list("WHERE e.gender = :g", Map.of("g", MALE));
+List<Person> list  = personRepository.list("WHERE e.status = :s", Map.of("s", ACTIVE));
 int affected       = personRepository.update("SET e.active = false WHERE e.lastLogin < ?1", cutoff);
 ```
 
@@ -401,7 +401,7 @@ Criteria objects are the values in the `requiredCriteria` / `optionalCriteria` m
 | `Between.range(lo, hi)` | `BETWEEN lo AND hi` | `"age", Between.range(18, 65)` |
 | `Bool.value(v)` | `= TRUE / NOT (= TRUE)` | `"verified", Bool.value(true)` |
 | `Numeric.value(v)` | `= v` (parsed) | `"id", Numeric.value(42)` |
-| `Enumerated.value(v)` | `= 'ENUM_NAME'` | `"gender", Enumerated.value(MALE)` |
+| `Enumerated.value(v)` | `= 'ENUM_NAME'` | `"status", Enumerated.value(ACTIVE)` |
 | `Not.value(v)` | `NOT (…) OR f IS NULL` | `"status", Not.value("INACTIVE")` |
 | `Not.value(null)` | `IS NOT NULL` | `"nickname", Not.value(null)` |
 
@@ -419,7 +419,7 @@ Both hold for a plain `null` only: a `null` item in a multi-value on such a fiel
 Map<String, Object> criteria = new LinkedHashMap<>();
 criteria.put("lastName",  Like.contains("smith"));
 criteria.put("age",       Between.range(18, 65));
-criteria.put("gender",    Enumerated.value(Gender.FEMALE));
+criteria.put("status",    Enumerated.value(Status.INACTIVE));
 criteria.put("status",    Not.value("BANNED"));              // NOT = 'BANNED'
 criteria.put("email",     Not.value(Like.contains("spam"))); // NOT LIKE '%spam%'
 criteria.put("age",       Not.value(Between.range(18, 25))); // NOT BETWEEN 18 AND 25

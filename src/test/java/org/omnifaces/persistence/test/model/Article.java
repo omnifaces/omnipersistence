@@ -64,13 +64,13 @@ public class Article {
     @SoftDeletable
     private boolean deleted;
 
-    private Gender audience;
+    private Status status;
 
     @ElementCollection
-    private Set<Gender> audiences = new HashSet<>();
+    private Set<Status> statuses = new HashSet<>();
 
-    @Convert(converter = GenderCodeConverter.class)
-    private Gender audienceCode;
+    @Convert(converter = StatusCodeConverter.class)
+    private Status statusCode;
 
     @ManyToMany
     private Set<Category> categories = new HashSet<>();
@@ -134,28 +134,28 @@ public class Article {
         this.deleted = deleted;
     }
 
-    public Gender getAudience() {
-        return audience;
+    public Status getStatus() {
+        return status;
     }
 
-    public void setAudience(Gender audience) {
-        this.audience = audience;
+    public void setStatus(Status status) {
+        this.status = status;
     }
 
-    public Set<Gender> getAudiences() {
-        return audiences;
+    public Set<Status> getStatuses() {
+        return statuses;
     }
 
-    public void setAudiences(Set<Gender> audiences) {
-        this.audiences = audiences;
+    public void setStatuses(Set<Status> statuses) {
+        this.statuses = statuses;
     }
 
-    public Gender getAudienceCode() {
-        return audienceCode;
+    public Status getStatusCode() {
+        return statusCode;
     }
 
-    public void setAudienceCode(Gender audienceCode) {
-        this.audienceCode = audienceCode;
+    public void setStatusCode(Status statusCode) {
+        this.statusCode = statusCode;
     }
 
     public Set<Category> getCategories() {
