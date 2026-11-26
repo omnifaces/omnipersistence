@@ -1342,13 +1342,14 @@ public class EntityRepositoryIT {
 
     /**
      * On SQL Server, <code>getPage()</code> fails when its query holds more than {@value #SQL_SERVER_MAX_QUERY_PARAMETERS} parameters: the values of its
-     * criteria, plus the {@value #RANGE_PARAMETERS} of the range of the page.
+     * criteria, plus on Hibernate and EclipseLink the {@value #RANGE_PARAMETERS} of the range of the page. OpenJPA does not bind the range as parameters.
      */
     @Test
     @DisabledIfSystemProperty(named = TEST_DATABASE, matches = "(?i)(?!sqlserver$).*", disabledReason = "The parameter limit is specific to SQL Server")
     void testPageWithIdsBeyondParameterLimitFailsOnSqlServer() {
         assertPageOfIdsFailsBeyond(SQL_SERVER_MAX_QUERY_PARAMETERS, UnaryOperator.identity());
-        assertPageOfIdsFailsBeyond(SQL_SERVER_MAX_QUERY_PARAMETERS - RANGE_PARAMETERS, builder -> builder.range(ROWS_PER_PAGE, ROWS_PER_PAGE));
+        var rangeParameters = personRepository.getProvider() == Provider.OPENJPA ? 0 : RANGE_PARAMETERS;
+        assertPageOfIdsFailsBeyond(SQL_SERVER_MAX_QUERY_PARAMETERS - rangeParameters, builder -> builder.range(ROWS_PER_PAGE, ROWS_PER_PAGE));
     }
 
     private void assertPageOfIdsFailsBeyond(int maxIds, UnaryOperator<Page.Builder> range) {
