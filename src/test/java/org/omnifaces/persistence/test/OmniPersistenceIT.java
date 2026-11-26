@@ -101,12 +101,13 @@ import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
 import org.omnifaces.persistence.test.model.Config;
-import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.DateOfBirth;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.InventoryItem;
 import org.omnifaces.persistence.test.model.Lookup;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Status;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
 import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
@@ -148,7 +149,6 @@ public abstract class OmniPersistenceIT {
     private static final int STRING_IDS = 3;
     private static final long MIN_ID = 10;
     private static final long MAX_ID = 190;
-    private static final LocalDate MAX_DATE_OF_BIRTH = LocalDate.of(1970, 1, 1);
     private static final long TOTAL_PHONES = 3;
     private static final String HOUR_FORMAT = "%02d:";
     private static final String MINUTES_AND_SECONDS_OF_FIRST_APPOINTMENT = ":14:15";
@@ -424,7 +424,7 @@ public abstract class OmniPersistenceIT {
     private static Person createNewPerson(String email) {
         var person = new Person();
         person.setEmail(email);
-        person.setGender(Gender.OTHER);
+        person.setStatus(Status.BLOCKED);
         person.setDateOfBirth(LocalDate.now());
         return person;
     }
@@ -630,7 +630,7 @@ public abstract class OmniPersistenceIT {
         var persons = personService().getPage(Page.ALL, true);
         assertEquals(TOTAL_RECORDS, persons.size(), "There are 200 records");
         assertEquals(TOTAL_RECORDS, persons.getEstimatedTotalNumberOfResults(), "Count of all records");
-        assertPage(persons, person -> person.getGender() == Gender.MALE, Map.of(), Map.of("gender", Gender.MALE), personService()::getPage, true);
+        assertPage(persons, person -> person.getStatus() == Status.ACTIVE, Map.of(), Map.of("status", Status.ACTIVE), personService()::getPage, true);
     }
 
     @Test
@@ -686,11 +686,11 @@ public abstract class OmniPersistenceIT {
     void testPageWithMultipleRequiredCriteria() {
         var person1 = personService().getById(1L);
         var criteria = Map.<String, Object>of(
-            "gender", person1.getGender(),
+            "status", person1.getStatus(),
             "email", IgnoreCase.value(person1.getEmail())
         );
         var result = personService().getPage(Page.with().allMatch(criteria).build(), true);
-        assertEquals(1, result.size(), "Exact match by gender and email should return 1 record");
+        assertEquals(1, result.size(), "Exact match by status and email should return 1 record");
         assertEquals(person1.getId(), result.get(0).getId(), "Found the correct person");
     }
 
@@ -700,10 +700,10 @@ public abstract class OmniPersistenceIT {
         var person2 = personService().getById(2L);
         var criteria = Map.<String, Object>of(
             "email", person1.getEmail(),
-            "gender", person2.getGender()
+            "status", person2.getStatus()
         );
         assertPage(
-            personService().list(), person -> person.getEmail().equals(person1.getEmail()) || person.getGender() == person2.getGender(), Map.of(), criteria,
+            personService().list(), person -> person.getEmail().equals(person1.getEmail()) || person.getStatus() == person2.getStatus(), Map.of(), criteria,
             personService()::getPage, true
         );
     }
@@ -713,8 +713,8 @@ public abstract class OmniPersistenceIT {
      */
     @Test
     void testPageWithOptionalCriteriaPagesByOrderingValues() {
-        var optional = Map.<String, Object>of("email", Like.contains("1"), "gender", Gender.FEMALE);
-        Predicate<Person> anyOptional = person -> likes("1", person.getEmail()) || person.getGender() == Gender.FEMALE;
+        var optional = Map.<String, Object>of("email", Like.contains("1"), "status", Status.INACTIVE);
+        Predicate<Person> anyOptional = person -> likes("1", person.getEmail()) || person.getStatus() == Status.INACTIVE;
 
         for (var ascending : List.of(true, false)) {
             assertOrderedPages(
@@ -763,15 +763,15 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithEnumCriteria() {
-        var maleResult = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
-        var femaleResult = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.FEMALE))).build(), true);
-        assertTrue(maleResult.size() > 0, "Some males exist");
-        assertTrue(femaleResult.size() > 0, "Some females exist");
+        var activeResult = personService().getPage(Page.with().allMatch(Map.of("status", Enumerated.value(Status.ACTIVE))).build(), true);
+        var inactiveResult = personService().getPage(Page.with().allMatch(Map.of("status", Enumerated.value(Status.INACTIVE))).build(), true);
+        assertTrue(activeResult.size() > 0, "Some active exist");
+        assertTrue(inactiveResult.size() > 0, "Some inactive exist");
         assertEquals(
-            TOTAL_RECORDS, maleResult.size() + femaleResult.size()
-                + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.TRANS))).build(), true).size()
-                + personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.OTHER))).build(), true).size(),
-            "All genders sum up to total"
+            TOTAL_RECORDS, activeResult.size() + inactiveResult.size()
+                + personService().getPage(Page.with().allMatch(Map.of("status", Enumerated.value(Status.PENDING))).build(), true).size()
+                + personService().getPage(Page.with().allMatch(Map.of("status", Enumerated.value(Status.BLOCKED))).build(), true).size(),
+            "All statuses sum up to total"
         );
     }
 
@@ -820,8 +820,8 @@ public abstract class OmniPersistenceIT {
 
         var persons = personService().list();
 
-        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Gender.MALE), Between.range(Gender.FEMALE, Gender.TRANS))) {
-            assertPage(persons, person -> criteria.applies(person.getGender()), Map.of("gender", criteria), Map.of(), personService()::getPage, true);
+        for (var criteria : List.<Criteria<?>>of(Order.greaterThan(Status.PENDING), Between.range(Status.ACTIVE, Status.INACTIVE))) {
+            assertPage(persons, person -> criteria.applies(person.getStatus()), Map.of("status", criteria), Map.of(), personService()::getPage, true);
         }
     }
 
@@ -924,19 +924,19 @@ public abstract class OmniPersistenceIT {
 
     @Test
     void testPageWithNotCriteria() {
-        var allMales = personService().getPage(Page.with().allMatch(Map.of("gender", Enumerated.value(Gender.MALE))).build(), true);
-        var notMales = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(Gender.MALE))).build(), true);
-        assertEquals(TOTAL_RECORDS, allMales.size() + notMales.size(), "Males + not-males = total");
+        var allActive = personService().getPage(Page.with().allMatch(Map.of("status", Enumerated.value(Status.ACTIVE))).build(), true);
+        var notActive = personService().getPage(Page.with().allMatch(Map.of("status", Not.value(Status.ACTIVE))).build(), true);
+        assertEquals(TOTAL_RECORDS, allActive.size() + notActive.size(), "Active + not active = total");
     }
 
     @Test
     void testPageWithNullCriteriaValues() {
         var isNullCriteria = new HashMap<String, Object>();
-        isNullCriteria.put("gender", null);
+        isNullCriteria.put("status", null);
         var isNull = personService().getPage(Page.with().allMatch(isNullCriteria).build(), true);
-        var isNotNull = personService().getPage(Page.with().allMatch(Map.of("gender", Not.value(null))).build(), true);
-        assertEquals(0, isNull.size(), "No records have null gender");
-        assertEquals(TOTAL_RECORDS, isNotNull.size(), "All records have non-null gender");
+        var isNotNull = personService().getPage(Page.with().allMatch(Map.of("status", Not.value(null))).build(), true);
+        assertEquals(0, isNull.size(), "No records have null status");
+        assertEquals(TOTAL_RECORDS, isNotNull.size(), "All records have non-null status");
     }
 
     @Test
@@ -1430,11 +1430,11 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithGlobalSearchOverAllPathTypesOrderedByOneToMany() {
         var term = "11";
-        var fields = List.of("email", "gender", "dateOfBirth", "address.street", "phones.number", "groups");
+        var fields = List.of("email", "status", "dateOfBirth", "address.street", "phones.number", "groups");
         var addresses = personService().getAllWithAddress().stream().collect(toMap(Person::getId, Person::getAddress));
         var all = personService().getAllWithGroups();
         var phones = personService().getAllWithPhones().stream().collect(toMap(Person::getId, Person::getPhones));
-        Predicate<Person> anyMatches = person -> likes(term, person.getEmail()) || likes(term, person.getGender()) || likes(term, person.getDateOfBirth())
+        Predicate<Person> anyMatches = person -> likes(term, person.getEmail()) || likes(term, person.getStatus()) || likes(term, person.getDateOfBirth())
             || likes(term, addresses.get(person.getId()).getStreet()) || phones.get(person.getId()).stream().anyMatch(phone -> likes(term, phone.getNumber()))
             || person.getGroups().stream().anyMatch(group -> likes(term, group));
         var optional = likeOnAll(term, fields.toArray(String[]::new));
@@ -1726,7 +1726,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithOwnerPhonesAndCriteriaCounts() {
         assertPage(
-            phoneService().getAllWithOwners(), phone -> phone.getOwner().getGender() == Gender.FEMALE, Map.of("owner.gender", Gender.FEMALE), Map.of(),
+            phoneService().getAllWithOwners(), phone -> phone.getOwner().getStatus() == Status.INACTIVE, Map.of("owner.status", Status.INACTIVE), Map.of(),
             phoneService()::getPageWithOwnerPhones, true
         );
     }
@@ -1770,7 +1770,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithLikeOnOrdinalEnum() {
         assertPage(
-            personService().list(), person -> likes("fem", person.getGender()), Map.of("gender", Like.contains("fem")), Map.of(), personService()::getPage, true
+            personService().list(), person -> likes("ina", person.getStatus()), Map.of("status", Like.contains("ina")), Map.of(), personService()::getPage, true
         );
     }
 
@@ -1838,7 +1838,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithIgnoreCaseAgreesWithAppliesOnEachType() {
         var person = personService().list().get(0);
-        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, IgnoreCase.value("fEmAlE"));
+        assertPageAgreesWithAppliesOnPerson("status", Person::getStatus, IgnoreCase.value("iNaCtIvE"));
         assertPageAgreesWithAppliesOnPerson("id", Person::getId, IgnoreCase.value(String.valueOf(person.getId())));
         assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, IgnoreCase.value(person.getDateOfBirth().toString()));
 
@@ -1857,8 +1857,8 @@ public abstract class OmniPersistenceIT {
         var dateOfBirth = personService().list().get(0).getDateOfBirth().toString();
         assertPageAgreesWithAppliesOnPerson("id", Person::getId, Like.startsWith("1"));
         assertPageAgreesWithAppliesOnPerson("id", Person::getId, Like.endsWith("1"));
-        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, Like.startsWith("fe"));
-        assertPageAgreesWithAppliesOnPerson("gender", Person::getGender, Like.endsWith("ale"));
+        assertPageAgreesWithAppliesOnPerson("status", Person::getStatus, Like.startsWith("in"));
+        assertPageAgreesWithAppliesOnPerson("status", Person::getStatus, Like.endsWith("ive"));
         assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, Like.startsWith(dateOfBirth.substring(0, "yyyy".length())));
         assertPageAgreesWithAppliesOnPerson("dateOfBirth", Person::getDateOfBirth, Like.endsWith(dateOfBirth.substring("yyyy-MM".length())));
 
@@ -1872,7 +1872,7 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithLikeOnOrdinalEnumOfManyToOne() {
         assertPage(
-            phoneService().getAllWithOwners(), phone -> likes("fem", phone.getOwner().getGender()), Map.of("owner.gender", Like.contains("fem")), Map.of(),
+            phoneService().getAllWithOwners(), phone -> likes("ina", phone.getOwner().getStatus()), Map.of("owner.status", Like.contains("ina")), Map.of(),
             phoneService()::getPageWithOwners, true
         );
     }
@@ -1946,9 +1946,10 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageWithStringValuesOfEnum() {
         var all = personService().getAllWithGroups();
-        assertPage(all, person -> person.getGender() == Gender.FEMALE, Map.of("gender", "FEMALE"), Map.of(), personService()::getPageWithGroups, true);
+        assertPage(all, person -> person.getStatus() == Status.INACTIVE, Map.of("status", "INACTIVE"), Map.of(), personService()::getPageWithGroups, true);
         assertPage(
-            all, person -> person.getGender() != Gender.TRANS && person.getGender() != Gender.OTHER, Map.of("gender", Set.of("MALE", "FEMALE")), Map.of(),
+            all, person -> person.getStatus() != Status.PENDING && person.getStatus() != Status.BLOCKED, Map.of("status", Set.of("ACTIVE", "INACTIVE")),
+            Map.of(),
             personService()::getPageWithGroups, true
         );
         assertPage(
@@ -1962,8 +1963,8 @@ public abstract class OmniPersistenceIT {
         assertPage(
             personService().list(),
             person -> likes("2", person.getId())
-                && Stream.of(person.getId(), person.getEmail(), person.getGender(), person.getDateOfBirth()).anyMatch(value -> likes("1", value)),
-            Map.of("id", Like.contains("2")), likeOnAll("1", "id", "email", "gender", "dateOfBirth"), personService()::getPage, true
+                && Stream.of(person.getId(), person.getEmail(), person.getStatus(), person.getDateOfBirth()).anyMatch(value -> likes("1", value)),
+            Map.of("id", Like.contains("2")), likeOnAll("1", "id", "email", "status", "dateOfBirth"), personService()::getPage, true
         );
     }
 
@@ -2004,8 +2005,8 @@ public abstract class OmniPersistenceIT {
         assertPage(
             phoneService().getAllWithOwners(),
             phone -> likes("1", phone.getNumber())
-                && (likes("mob", phone.getType()) || likes("name1", phone.getEmail()) || likes("fem", phone.getOwner().getGender())),
-            Map.of("number", Like.contains("1")), Map.of("type", Like.contains("mob"), "email", Like.contains("name1"), "owner.gender", Like.contains("fem")),
+                && (likes("mob", phone.getType()) || likes("name1", phone.getEmail()) || likes("ina", phone.getOwner().getStatus())),
+            Map.of("number", Like.contains("1")), Map.of("type", Like.contains("mob"), "email", Like.contains("name1"), "owner.status", Like.contains("ina")),
             phoneService()::getPageWithOwners, true
         );
     }
@@ -2015,10 +2016,11 @@ public abstract class OmniPersistenceIT {
         var emailStart = Like.startsWith("name1");
         assertPage(
             personService().list(),
-            person -> person.getId() >= MIN_ID && person.getId() <= MAX_ID && emailStart.applies(person.getEmail()) && person.getGender() != Gender.OTHER
-                && person.getDateOfBirth().isBefore(MAX_DATE_OF_BIRTH),
+            person -> person.getId() >= MIN_ID && person.getId() <= MAX_ID && emailStart.applies(person.getEmail()) && person.getStatus() != Status.BLOCKED
+                && person.getDateOfBirth().isBefore(DateOfBirth.THRESHOLD),
             Map.of(
-                "id", Between.range(MIN_ID, MAX_ID), "email", emailStart, "gender", Not.value(Gender.OTHER), "dateOfBirth", Order.lessThan(MAX_DATE_OF_BIRTH)
+                "id", Between.range(MIN_ID, MAX_ID), "email", emailStart, "status", Not.value(Status.BLOCKED), "dateOfBirth",
+                Order.lessThan(DateOfBirth.THRESHOLD)
             ),
             Map.of(), personService()::getPage, true
         );
@@ -2055,7 +2057,7 @@ public abstract class OmniPersistenceIT {
     void testPageWithEmptyMultiValuedCriteriaImposesNoRestriction() {
         var allPhones = personService().getAllWithPhones().stream().collect(toMap(Person::getId, person -> Set.copyOf(person.getPhones())));
 
-        for (var field : List.of("gender", "phones.type", "groups")) {
+        for (var field : List.of("status", "phones.type", "groups")) {
             for (var value : List.of(Set.of(), Not.value(Set.of()), List.of(Set.of()))) {
                 var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of(field, value)).build(), true);
                 assertEquals(TOTAL_RECORDS, page.getEstimatedTotalNumberOfResults(), "Count of persons matching " + value + " on " + field);
@@ -2164,8 +2166,8 @@ public abstract class OmniPersistenceIT {
                 person -> orderingValues("email", person.getEmail(), person), personService()::getPage
             );
             assertOrderedPages(
-                all, expected, required, ordering("gender", ascending), byKey(Person::getGender, ascending),
-                person -> orderingValues("gender", person.getGender(), person), personService()::getPage
+                all, expected, required, ordering("status", ascending), byKey(Person::getStatus, ascending),
+                person -> orderingValues("status", person.getStatus(), person), personService()::getPage
             );
             assertOrderedPages(
                 all, expected, required, ordering("dateOfBirth", ascending), byKey(Person::getDateOfBirth, ascending),
@@ -2177,11 +2179,11 @@ public abstract class OmniPersistenceIT {
     @Test
     void testPageOrderedByMultipleFields() {
         var ordering = new LinkedHashMap<String, Boolean>();
-        ordering.put("gender", true);
+        ordering.put("status", true);
         ordering.put("email", false);
         assertOrderedPages(
-            personService().list(), person -> true, Map.of(), ordering, byKey(Person::getGender, true).thenComparing(byKey(Person::getEmail, false)),
-            person -> Map.of("gender", person.getGender(), "email", person.getEmail(), Page.ID, person.getId()), personService()::getPage
+            personService().list(), person -> true, Map.of(), ordering, byKey(Person::getStatus, true).thenComparing(byKey(Person::getEmail, false)),
+            person -> Map.of("status", person.getStatus(), "email", person.getEmail(), Page.ID, person.getId()), personService()::getPage
         );
     }
 
@@ -2562,7 +2564,7 @@ public abstract class OmniPersistenceIT {
         var persons = personService().getAllWithPhones().stream().collect(toMap(Person::getId, Function.identity()));
 
         for (var getPage : personCardLoaders()) {
-            assertPage(all, card -> persons.get(card.getId()).getGender() == Gender.FEMALE, Map.of("gender", Gender.FEMALE), Map.of(), getPage, true);
+            assertPage(all, card -> persons.get(card.getId()).getStatus() == Status.INACTIVE, Map.of("status", Status.INACTIVE), Map.of(), getPage, true);
             assertPage(
                 all, card -> phoneTypes(persons.get(card.getId())).contains(Phone.Type.MOBILE), Map.of("phones.type", Phone.Type.MOBILE), Map.of(), getPage,
                 true

@@ -101,7 +101,6 @@ import org.omnifaces.persistence.test.model.Config;
 import org.omnifaces.persistence.test.model.Credit;
 import org.omnifaces.persistence.test.model.Delivery;
 import org.omnifaces.persistence.test.model.Document;
-import org.omnifaces.persistence.test.model.Gender;
 import org.omnifaces.persistence.test.model.Invoice;
 import org.omnifaces.persistence.test.model.Letter;
 import org.omnifaces.persistence.test.model.LocalGeneratedIdEntity;
@@ -114,6 +113,7 @@ import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
 import org.omnifaces.persistence.test.model.Recipient;
 import org.omnifaces.persistence.test.model.Remark;
+import org.omnifaces.persistence.test.model.Status;
 import org.omnifaces.persistence.test.model.Text;
 import org.omnifaces.persistence.test.model.Track;
 import org.omnifaces.persistence.test.model.dto.PersonCard;
@@ -1442,10 +1442,10 @@ public class EntityRepositoryIT {
      */
     @Test
     void testLikeOnEnumWithoutEnumeratedMatchesConstantName() {
-        withFemaleAndMaleAudienceArticles(femaleArticle -> {
-            var result = pageOfArticlesWithFemAudience("audience");
-            assertEquals(List.of(femaleArticle.getCode()), codesOf(result), "Articles whose audience contains fem");
-            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose audience contains fem");
+        withInactiveAndActiveStatusArticles(inactiveArticle -> {
+            var result = pageOfArticlesWithInaStatus("status");
+            assertEquals(List.of(inactiveArticle.getCode()), codesOf(result), "Articles whose status contains ina");
+            assertEquals(1, result.getEstimatedTotalNumberOfResults(), "Count of articles whose status contains ina");
         });
     }
 
@@ -1456,8 +1456,8 @@ public class EntityRepositoryIT {
     @Test
     @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
     void testLikeOnEnumElementCollectionWithoutEnumeratedMatchesConstantName() {
-        withFemaleAndMaleAudienceArticles(
-            femaleArticle -> assertEquals(List.of(femaleArticle.getCode()), codesOf(pageOfArticlesWithFemAudience("audiences")), "Articles")
+        withInactiveAndActiveStatusArticles(
+            inactiveArticle -> assertEquals(List.of(inactiveArticle.getCode()), codesOf(pageOfArticlesWithInaStatus("statuses")), "Articles")
         );
     }
 
@@ -1465,32 +1465,32 @@ public class EntityRepositoryIT {
     @DisabledIfSystemProperty(named = PROFILE_ID, matches = ECLIPSELINK, disabledReason = ECLIPSELINK_ENUM_COLLECTION)
     @DisabledIfSystemProperty(named = PROFILE_ID, matches = OPENJPA, disabledReason = OPENJPA_COUNT)
     void testLikeOnEnumElementCollectionWithoutEnumeratedCountsMatchingArticles() {
-        withFemaleAndMaleAudienceArticles(
-            femaleArticle -> assertEquals(1, pageOfArticlesWithFemAudience("audiences").getEstimatedTotalNumberOfResults(), "Count of articles")
+        withInactiveAndActiveStatusArticles(
+            inactiveArticle -> assertEquals(1, pageOfArticlesWithInaStatus("statuses").getEstimatedTotalNumberOfResults(), "Count of articles")
         );
     }
 
-    private PartialResultList<Article> pageOfArticlesWithFemAudience(String field) {
-        return articleRepository.getPage(Page.with().allMatch(Map.of(field, Like.contains("fem"))).build(), true);
+    private PartialResultList<Article> pageOfArticlesWithInaStatus(String field) {
+        return articleRepository.getPage(Page.with().allMatch(Map.of(field, Like.contains("ina"))).build(), true);
     }
 
     /**
-     * Runs given test with two persisted articles, one with a female audience, which is passed to the test, and one with a male audience.
+     * Runs given test with two persisted articles, one with an inactive status, which is passed to the test, and one with an active status.
      */
-    private void withFemaleAndMaleAudienceArticles(Consumer<Article> test) {
-        var femaleArticle = newArticle("female", null);
-        femaleArticle.setAudience(Gender.FEMALE);
-        femaleArticle.getAudiences().add(Gender.FEMALE);
-        var maleArticle = newArticle("male", null);
-        maleArticle.setAudience(Gender.MALE);
-        maleArticle.getAudiences().add(Gender.MALE);
-        transactionServiceCDI.run(() -> List.of(femaleArticle, maleArticle).forEach(articleRepository::persist));
+    private void withInactiveAndActiveStatusArticles(Consumer<Article> test) {
+        var inactiveArticle = newArticle("inactive", null);
+        inactiveArticle.setStatus(Status.INACTIVE);
+        inactiveArticle.getStatuses().add(Status.INACTIVE);
+        var activeArticle = newArticle("active", null);
+        activeArticle.setStatus(Status.ACTIVE);
+        activeArticle.getStatuses().add(Status.ACTIVE);
+        transactionServiceCDI.run(() -> List.of(inactiveArticle, activeArticle).forEach(articleRepository::persist));
 
         try {
-            test.accept(femaleArticle);
+            test.accept(inactiveArticle);
         }
         finally {
-            deleteArticles(List.of(femaleArticle, maleArticle));
+            deleteArticles(List.of(inactiveArticle, activeArticle));
         }
     }
 
@@ -2408,19 +2408,20 @@ public class EntityRepositoryIT {
         var articles = new ArrayList<Article>();
 
         try {
-            for (var gender : Gender.values()) {
-                var article = newArticle("converted-" + gender, null);
-                article.setAudienceCode(gender);
+            for (var status : Status.values()) {
+                var article = newArticle("converted-" + status, null);
+                article.setStatusCode(status);
                 transactionServiceCDI.run(() -> articleRepository.persist(article));
                 articles.add(article);
             }
 
             for (var criteria : List.<Criteria<?>>of(
-                Like.startsWith("mal"), Like.contains("male"), IgnoreCase.value("male"), Order.greaterThan(Gender.FEMALE), Order.lessThanOrEqualTo(Gender.TRANS)
+                Like.startsWith("act"), Like.contains("active"), IgnoreCase.value("active"), Order.greaterThan(Status.ACTIVE),
+                Order.lessThanOrEqualTo(Status.INACTIVE)
             )) {
-                var expected = articles.stream().filter(article -> criteria.applies(article.getAudienceCode())).map(Article::getCode).sorted().toList();
+                var expected = articles.stream().filter(article -> criteria.applies(article.getStatusCode())).map(Article::getCode).sorted().toList();
                 var criteriaMap = new HashMap<>(TITLED);
-                criteriaMap.put("audienceCode", criteria);
+                criteriaMap.put("statusCode", criteria);
                 var page = articleRepository.getPage(Page.with().allMatch(criteriaMap).orderBy("id", true).build(), true);
                 assertEquals(expected, codesOf(page), criteria.toString());
             }

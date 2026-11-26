@@ -28,10 +28,11 @@ import jakarta.ejb.Startup;
 import org.omnifaces.persistence.test.model.Address;
 import org.omnifaces.persistence.test.model.Appointment;
 import org.omnifaces.persistence.test.model.Comment;
-import org.omnifaces.persistence.test.model.Gender;
+import org.omnifaces.persistence.test.model.DateOfBirth;
 import org.omnifaces.persistence.test.model.Group;
 import org.omnifaces.persistence.test.model.Person;
 import org.omnifaces.persistence.test.model.Phone;
+import org.omnifaces.persistence.test.model.Status;
 import org.omnifaces.persistence.test.model.Text;
 
 @Startup
@@ -66,7 +67,7 @@ public class StartupServiceEJB {
     }
 
     private void createTestPersons() {
-        var genders = Gender.values();
+        var statuses = Status.values();
         var phoneTypes = Phone.Type.values();
         var groups = Arrays.asList(Group.values());
         var random = new Random(TEST_DATA_SEED);
@@ -75,8 +76,8 @@ public class StartupServiceEJB {
             var person = new Person();
             person.setEmail("name" + i + "@example.com");
             person.setNickname(i % NICKNAMELESS_EVERY == NICKNAMELESS_REMAINDER ? null : "nick" + i);
-            person.setGender(genders[random.nextInt(genders.length)]);
-            person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(LocalDate.of(1900, 1, 1).toEpochDay(), LocalDate.of(2000, 1, 1).toEpochDay())));
+            person.setStatus(statuses[random.nextInt(statuses.length)]);
+            person.setDateOfBirth(LocalDate.ofEpochDay(random.nextLong(DateOfBirth.OLDEST.toEpochDay(), DateOfBirth.YOUNGEST.toEpochDay())));
 
             var address = new Address();
             address.setStreet("Street" + i);

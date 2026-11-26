@@ -16,25 +16,25 @@ import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 
 /**
- * Stores a {@link Gender} as the first letter of its name.
+ * Stores a {@link Status} as the first letter of its name.
  */
 @Converter
-public class GenderCodeConverter implements AttributeConverter<Gender, String> {
+public class StatusCodeConverter implements AttributeConverter<Status, String> {
 
     @Override
-    public String convertToDatabaseColumn(Gender gender) {
-        return gender == null ? null : gender.name().substring(0, 1);
+    public String convertToDatabaseColumn(Status status) {
+        return status == null ? null : status.name().substring(0, 1);
     }
 
     @Override
-    public Gender convertToEntityAttribute(String code) {
+    public Status convertToEntityAttribute(String code) {
         if (code == null) {
             return null;
         }
 
-        for (var gender : Gender.values()) {
-            if (gender.name().startsWith(code)) {
-                return gender;
+        for (var status : Status.values()) {
+            if (status.name().startsWith(code)) {
+                return status;
             }
         }
 
