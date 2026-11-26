@@ -18,7 +18,7 @@
  * <li>{@link Like} - case-insensitive substring, prefix or suffix match</li>
  * <li>{@link Between} - range match on any {@link Comparable}</li>
  * <li>{@link Order} - less than or greater than comparison, with or without equality ({@code <}, {@code <=}, {@code >}, {@code >=})</li>
- * <li>{@link Not} - negation of a plain value or of another criteria value</li>
+ * <li>{@link Not} - negation of a plain value or of another criteria value other than {@link Not}</li>
  * <li>{@link IgnoreCase} - case-insensitive exact match</li>
  * <li>{@link Enumerated} - match on an enum constant, optionally parsed case-insensitively from a string</li>
  * <li>{@link Numeric} - converts a string value to a number before matching</li>

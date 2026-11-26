@@ -39,6 +39,7 @@ Requires a _minimum_ of **Java 17** and **Jakarta EE 10**.
 14. [Integration tests and further examples](#14-integration-tests-and-further-examples)
 15. [Upgrading from 1.x](#15-upgrading-from-1x)
 16. [Known issues](#16-known-issues)
+17. [Commercial support](#17-commercial-support)
 
 ---
 
@@ -420,7 +421,7 @@ Map<String, Object> criteria = new LinkedHashMap<>();
 criteria.put("lastName",  Like.contains("smith"));
 criteria.put("age",       Between.range(18, 65));
 criteria.put("status",    Enumerated.value(Status.INACTIVE));
-criteria.put("status",    Not.value("BANNED"));              // NOT = 'BANNED'
+criteria.put("nickname",  Not.value(null));                  // IS NOT NULL
 criteria.put("email",     Not.value(Like.contains("spam"))); // NOT LIKE '%spam%'
 criteria.put("age",       Not.value(Between.range(18, 25))); // NOT BETWEEN 18 AND 25
 
@@ -430,7 +431,7 @@ PartialResultList<Person> result = personRepository.getPage(
 );
 ```
 
-`Like` is case-insensitive and also works on enum fields (matches `name().contains(pattern)`) and boolean fields (delegates to `Bool`).
+`Like` is case-insensitive and also works on enum fields (matches the constants whose name matches the `Like`) and boolean fields (delegates to `Bool`).
 On a `java.time` field, `Like` and `IgnoreCase` match the date as `yyyy-MM-dd` and the time as `HH:mm:ss`, with a space in between.
 Whether the offset and fractional seconds follow depends on the database.
 
@@ -463,7 +464,7 @@ public class Comment extends GeneratedIdEntity<Long> {
     private boolean deleted;
 
     // or:
-    @SoftDeletable(Type.ACTIVE)   // active = false means "gone"
+    @SoftDeletable(type = Type.ACTIVE)   // active = false means "gone"
     private boolean active;
 }
 ```
@@ -751,7 +752,7 @@ Jakarta Data exposes three query paths:
 
 ```java
 // OmniPersistence — JPQL fragment (alias e is predefined)
-List<Book> books = books.list("WHERE e.year > ?1 ORDER BY e.title", 2020);
+List<Book> found = books.list("WHERE e.year > ?1 ORDER BY e.title", 2020);
 
 // Jakarta Data — @Find (parameter name matches entity field)
 @Find
@@ -908,7 +909,7 @@ OmniPersistence is **exclusively Jakarta Persistence (relational)**. It exposes 
 
 ## 14. Integration tests and further examples
 
-OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, PostgreSQL, MySQL, SQL Server and DB2:
+OmniPersistence ships its own Arquillian-based integration test suite. The scenarios of `BaseEntityService` are exercised twice, once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans, and those of `EntityRepository` once. The full suite is run against three server/provider combinations, each on H2, PostgreSQL, MySQL, SQL Server and DB2:
 
 | Server | JPA Provider |
 |---|---|

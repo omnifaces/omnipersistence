@@ -832,7 +832,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getPage(Page, boolean)}.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @return A partial result list based on given {@link Page}.
      */
     public PartialResultList<E> getPage(Page page, boolean count) {
@@ -843,7 +843,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getPage(Page, boolean, String...)}.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query.
      * @return A partial result list based on given {@link Page}.
      */
@@ -855,7 +855,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getPage(Page, boolean, boolean, String...)}.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param cacheable Whether the results should be cacheable.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query.
      * @return A partial result list based on given {@link Page}.
@@ -868,7 +868,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getPage(Page, boolean, QueryBuilder)}.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
      */
@@ -880,7 +880,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      * See {@link BaseEntityService#getPage(Page, boolean, boolean, QueryBuilder)}.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param cacheable Whether the results should be cacheable.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
@@ -894,7 +894,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths.
      * @return A partial result list based on given {@link Page} and {@link MappedQueryBuilder}.
@@ -908,7 +908,7 @@ public final class EntityRepository<I extends Comparable<I> & Serializable, E> i
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results.
+     * @param count Whether to run the count query to estimate total number of results.
      * @param cacheable Whether the results should be cacheable.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths when result type does not
