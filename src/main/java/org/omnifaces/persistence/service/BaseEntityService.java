@@ -82,7 +82,6 @@ import java.util.stream.StreamSupport;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -92,7 +91,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.NonUniqueResultException;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
@@ -186,9 +184,8 @@ import org.omnifaces.utils.reflect.Getter;
  * <ul>
  * <li>{@link Level#FINER} will log the {@link #getPage(Page, boolean)} arguments, the set parameter values and the full query result.
  * <li>{@link Level#FINE} will log computed type mapping (the actual values of <code>I</code> and <code>E</code> type paramters), and whether the ID is
- * generated, and whether the entity is {@link SoftDeletable}, and any discovered {@link ElementCollection}, {@link ManyToOne}, {@link OneToOne} and
- * {@link OneToMany} mappings of the entity. This is internally used in order to be able to build proper queries to perform a search inside those fields.
- * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. The {@link BaseEntityService} will skip them and continue.
+ * generated, and whether the entity is {@link SoftDeletable}, and any discovered {@link ManyToOne} and {@link OneToOne} mappings of the entity.
+ * <li>{@link Level#WARNING} will log unparseable or illegal criteria values. Such a criteria matches nothing.
  * <li>{@link Level#SEVERE} will log constraint violations wrapped in any {@link ConstraintViolationException} during {@link #persist(Object)} and
  * {@link #update(Object)}. Due to technical limitations, it will during <code>update()</code> only happen when <code>jakarta.persistence.validation.mode</code>
  * property in <code>persistence.xml</code> is explicitly set to <code>CALLBACK</code> (and thus not to its default of <code>AUTO</code>).
@@ -548,7 +545,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      * &#64;Stateless
-     * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+     * public class YourEntityService extends BaseEntityService&lt;Long, YourEntity&gt; {
      *
      *     public List&lt;YourEntity&gt; getFooByType(Type type) {
      *         return list((criteriaBuilder, query, root) -&gt; {
@@ -637,11 +634,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example:
      *
      * <pre>
+     *
      * Optional&lt;Foo&gt; foo = find(
-     *         (criteriaBuilder, query, root) -&gt; {
-     *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
-     *         },
-     *         Map.of("foo", Type.FOO)
+     *     (criteriaBuilder, query, root) -&gt; {
+     *         query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo")));
+     *     },
+     *     Map.of("foo", Type.FOO)
      * );
      * </pre>
      * <p>
@@ -753,11 +751,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example:
      *
      * <pre>
+     *
      * Optional&lt;Foo&gt; foo = findFirst(
-     *         (criteriaBuilder, query, root) -&gt; {
-     *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
-     *         },
-     *         Map.of("foo", Type.FOO)
+     *     (criteriaBuilder, query, root) -&gt; {
+     *         query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo")));
+     *     },
+     *     Map.of("foo", Type.FOO)
      * );
      * </pre>
      * <p>
@@ -1076,11 +1075,12 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Usage example:
      *
      * <pre>
+     *
      * List&lt;Foo&gt; foo = list(
-     *         (criteriaBuilder, query, root) -&gt; {
-     *             query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo"));
-     *         },
-     *         Map.of("foo", Type.FOO)
+     *     (criteriaBuilder, query, root) -&gt; {
+     *         query.where(criteriaBuilder.equal(root.get("type"), criteriaBuilder.parameter(Type.class, "foo")));
+     *     },
+     *     Map.of("foo", Type.FOO)
      * );
      * </pre>
      * <p>
@@ -1670,7 +1670,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Foo fooWithBarsAndBazs = fetchLazyCollections(getById(fooId), Foo::getBars, Foo::getBazs);
+     * Foo fooWithBarsAndBazs = fetchLazyMaps(getById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
      *
      * @param entity Entity instance to fetch lazy maps on.
@@ -1690,7 +1690,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      *
-     * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyCollections(findById(fooId), Foo::getBars, Foo::getBazs);
+     * Optional&lt;Foo&gt; fooWithBarsAndBazs = fetchLazyMaps(findById(fooId), Foo::getBars, Foo::getBazs);
      * </pre>
      *
      * @param entity Optional entity instance to fetch lazy maps on.
@@ -1764,9 +1764,9 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      * &#64;Stateless
-     * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+     * public class YourEntityService extends BaseEntityService&lt;Long, YourEntity&gt; {
      *
-     *     public void getPageOfFooType(Page page, boolean count) {
+     *     public PartialResultList&lt;YourEntity&gt; getPageOfFooType(Page page, boolean count) {
      *         return getPage(page, count, (criteriaBuilder, query, root) -&gt; {
      *             query.where(criteriaBuilder.equal(root.get("type"), Type.FOO));
      *         });
@@ -1820,16 +1820,16 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * <pre>
      * &#64;Stateless
-     * public class YourEntityService extends BaseEntityService&lt;YourEntity&gt; {
+     * public class YourEntityService extends BaseEntityService&lt;Long, YourEntity&gt; {
      *
-     *     public void getPageOfYourEntityDTO(Page page, boolean count) {
-     *         return getPage(page, count, YourEntityDTO.class (criteriaBuilder, query, root) -&gt; {
-     *             Join&lt;YourEntityDTO, YourChildEntity&gt; child = root.join("child");
+     *     public PartialResultList&lt;YourEntityDTO&gt; getPageOfYourEntityDTO(Page page, boolean count) {
+     *         return getPage(page, count, YourEntityDTO.class, (criteriaBuilder, query, root) -&gt; {
+     *             Join&lt;?, YourChildEntity&gt; child = root.join("child");
      *
      *             LinkedHashMap&lt;Getter&lt;YourEntityDTO&gt;, Expression&lt;?&gt;&gt; mapping = new LinkedHashMap&lt;&gt;();
      *             mapping.put(YourEntityDTO::getId, root.get("id"));
      *             mapping.put(YourEntityDTO::getName, root.get("name"));
-     *             mapping.put(YourEntityDTO::getTotalPrice, builder.sum(child.get("price")));
+     *             mapping.put(YourEntityDTO::getTotalPrice, criteriaBuilder.sum(child.get("price")));
      *
      *             return mapping;
      *         });
@@ -1914,7 +1914,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @return A partial result list based on given {@link Page}.
      * @see Page
@@ -1964,7 +1964,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field can represent a JavaBean path, like as you
      * would do in EL, such as <code>parent.child.subchild</code>.
@@ -1997,7 +1997,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param cacheable Whether the results should be cacheable.
      * @param fetchFields Optionally, all (lazy loaded) fields to be explicitly fetched during the query. Each field can represent a JavaBean path, like as you
@@ -2028,7 +2028,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
      * @return A partial result list based on given {@link Page} and {@link QueryBuilder}.
@@ -2047,7 +2047,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      * Soft deleted entities, see {@link SoftDeletable}, are excluded, unless the criteria of the page are on the soft deletable field.
      *
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param cacheable Whether the results should be cacheable.
      * @param queryBuilder This allows fine-graining the Jakarta Persistence criteria query.
@@ -2075,7 +2075,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
      * @param mappedQueryBuilder This allows fine-graining the Jakarta Persistence criteria query and must return a mapping of getters-paths.
@@ -2101,7 +2101,7 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
      *
      * @param <T> The generic type of the entity or a DTO subclass thereof.
      * @param page The page to return a partial result list for.
-     * @param count Whether to run the <code>COUNT(id)</code> query to estimate total number of results. This will be available by
+     * @param count Whether to run the count query to estimate total number of results. This will be available by
      * {@link PartialResultList#getEstimatedTotalNumberOfResults()}.
      * @param cacheable Whether the results should be cacheable.
      * @param resultType The result type which can be the entity type itself or a DTO subclass thereof.
@@ -2540,7 +2540,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         }
 
         var reversed = pageBuilder.canBuildValueBasedPagingPredicate() && page.isReversed();
-        var root = pathResolver.get(null);
         var orders = new ArrayList<Order>(ordering.size() + 1);
         Entry<String, Boolean> lastCollectionOrder = null;
         var orderedBySubquery = false;
@@ -3136,7 +3135,6 @@ public abstract class BaseEntityService<I extends Comparable<I> & Serializable, 
         return criteria instanceof Not not ? not.getValue() : criteria;
     }
 
-    @SuppressWarnings("unchecked")
     private static Predicate buildInPredicate(
         Alias alias, Expression<?> path, Class<?> type, Object value, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder
     )

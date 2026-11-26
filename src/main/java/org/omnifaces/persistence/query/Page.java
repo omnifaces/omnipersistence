@@ -238,8 +238,8 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
      * record, which may be <code>null</code>. If not empty, then value based paging will be performed instead of offset based paging when applicable. Value
      * based paging is not applicable when the query is fine-grained with a <code>QueryBuilder</code> of {@link BaseEntityService}, or when the query is
      * fine-grained with a <code>MappedQueryBuilder</code> and the ordering contains an aggregated field, or when the ordering contains a field of a
-     * <code>@OneToMany</code> or <code>@ElementCollection</code>. A <code>null</code> value is placed where the database sorts <code>NULL</code>, see
-     * <code>Database#sortsNullsLow()</code>.
+     * <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code>. A <code>null</code> value is placed where the database sorts
+     * <code>NULL</code>, see <code>Database#sortsNullsLow()</code>.
      *
      * @return The ordering values of the record bounding the page, or an empty map if there is none.
      * @since 1.2
@@ -506,8 +506,9 @@ public final class Page implements Serializable { // This class MAY NOT be mutab
         /**
          * Set the ordering. This can be invoked multiple times and will be remembered in same order. The default ordering is <code>{"id",false}</code>.
          * <p>
-         * A field of a <code>@OneToMany</code> or <code>@ElementCollection</code> orders the entities by the smallest value among the elements when ascending,
-         * or else by the largest one. This ordering is skipped when the query is distinct because it joins a collection, unless that collection is fetched.
+         * A field of a <code>@OneToMany</code>, <code>@ManyToMany</code> or <code>@ElementCollection</code> orders the entities by the smallest value among the
+         * elements when ascending, or else by the largest one. This ordering is skipped when the query is distinct because it joins a collection, unless that
+         * collection is fetched.
          *
          * @param field The field. May not be <code>null</code>.
          * @param ascending Whether to sort ascending.

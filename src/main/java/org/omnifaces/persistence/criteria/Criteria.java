@@ -51,7 +51,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * <p>
  * There are so far the following criteria:
  * <ul>
- * <li>{@link Not} - to negate any criteria value
+ * <li>{@link Not} - to negate any criteria value other than {@link Not}
  * <li>{@link Like} - to search a string value (case insensitive; supports starts with, ends with, and contains)
  * <li>{@link Order} - to perform "less than" or "greater than" searches
  * <li>{@link Between} - to perform "between" searches on any {@link Comparable}
@@ -68,7 +68,7 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * criteria.put("name", Like.contains("john")); // LIKE '%john%'
  * criteria.put("email", IgnoreCase.value("FOO@BAR")); // LOWER(email) = LOWER('FOO@BAR')
  * criteria.put("age", Order.greaterThan(18)); // age &gt; 18
- * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE'
+ * criteria.put("status", Not.value("INACTIVE")); // status &lt;&gt; 'INACTIVE' OR status IS NULL
  * criteria.put("created", Between.range(start, end)); // created BETWEEN start AND end
  * criteria.put("role", Enumerated.value(Role.ADMIN)); // role = 'ADMIN'
  * criteria.put("active", Bool.value(true)); // active = TRUE
@@ -80,9 +80,9 @@ import org.omnifaces.persistence.service.BaseEntityService;
  * You can create your own ones if you want to have more fine grained control over how criteria values are parsed and turned into a predicate. Simply extend
  * this class, implement {@link #build(Expression, CriteriaBuilder, ParameterBuilder)}, and optionally override {@link #applies(Object)}.
  * <p>
- * A criteria value may by default not be <code>null</code>; the constructor then throws {@link NullPointerException}. The only exception is {@link Not}:
- * <code>Not.value(null)</code> matches <code>path IS NOT NULL</code>. To match <code>path IS NULL</code>, put a plain <code>null</code> value in the criteria
- * map.
+ * A criteria value may by default not be <code>null</code>; the constructor then throws {@link NullPointerException}. The exceptions are {@link Not}, as
+ * <code>Not.value(null)</code> matches <code>path IS NOT NULL</code>, and an {@link Enumerated} parsed from a criteria which matches no constant. To match
+ * <code>path IS NULL</code>, put a plain <code>null</code> value in the criteria map.
  * <p>
  * An elaborate use case can be found in <a href="https://github.com/omnifaces/optimusfaces">OptimusFaces</a> project.
  *

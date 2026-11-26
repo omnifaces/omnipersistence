@@ -39,6 +39,7 @@ Requires a _minimum_ of **Java 17** and **Jakarta EE 10**.
 14. [Integration tests and further examples](#14-integration-tests-and-further-examples)
 15. [Upgrading from 1.x](#15-upgrading-from-1x)
 16. [Known issues](#16-known-issues)
+17. [Commercial support](#17-commercial-support)
 
 ---
 
@@ -383,7 +384,7 @@ An unknown database is assumed to sort `NULL` first in ascending order.
 
 ## 5. Search criteria
 
-Criteria objects are the values in the `requiredCriteria` / `optionalCriteria` maps. Plain values produce an exact-equality predicate. Wrap them to get richer matching:
+Criteria objects are the values in the `requiredCriteria` / `optionalCriteria` maps. A plain value on an entity, `String`, enum, number or boolean field produces an exact-equality predicate. A plain value of another type, such as a `LocalDate`, throws `UnsupportedOperationException`. Wrap values to get richer matching:
 
 | Wrapper | SQL equivalent | Example |
 |---|---|---|
@@ -420,7 +421,7 @@ Map<String, Object> criteria = new LinkedHashMap<>();
 criteria.put("lastName",  Like.contains("smith"));
 criteria.put("age",       Between.range(18, 65));
 criteria.put("status",    Enumerated.value(Status.INACTIVE));
-criteria.put("status",    Not.value("BANNED"));              // NOT = 'BANNED'
+criteria.put("nickname",  Not.value(null));                  // IS NOT NULL
 criteria.put("email",     Not.value(Like.contains("spam"))); // NOT LIKE '%spam%'
 criteria.put("age",       Not.value(Between.range(18, 25))); // NOT BETWEEN 18 AND 25
 
@@ -430,7 +431,7 @@ PartialResultList<Person> result = personRepository.getPage(
 );
 ```
 
-`Like` is case-insensitive and also works on enum fields (matches `name().contains(pattern)`) and boolean fields (delegates to `Bool`).
+`Like` is case-insensitive and also works on enum fields (matches the constants whose name matches the `Like`) and boolean fields (delegates to `Bool`).
 On a `java.time` field, `Like` and `IgnoreCase` match the date as `yyyy-MM-dd` and the time as `HH:mm:ss`, with a space in between.
 Whether the offset and fractional seconds follow depends on the database.
 
@@ -443,6 +444,8 @@ Give a searchable column, or on H2 the database, an accent-insensitive collation
 | PostgreSQL | a nondeterministic ICU collation, such as `CREATE COLLATION ignore_accents (provider = icu, locale = 'und-u-ks-level1', deterministic = false)`. `LIKE` on it needs PostgreSQL 18. |
 | MySQL, MariaDB | `utf8mb4_0900_ai_ci`, the default of MySQL 8, or `utf8mb4_general_ci` |
 | SQL Server | `Latin1_General_100_CI_AI` |
+
+The integration tests cover the collations of MySQL and SQL Server in this table, not those of H2, PostgreSQL and MariaDB.
 
 The collation also orders the column linguistically, such as `c`, `ç`, `d`, `e`, `é`.
 `Criteria#applies()` of `Like` and `IgnoreCase` always ignores accents, so it agrees with such a collation.
@@ -463,7 +466,7 @@ public class Comment extends GeneratedIdEntity<Long> {
     private boolean deleted;
 
     // or:
-    @SoftDeletable(Type.ACTIVE)   // active = false means "gone"
+    @SoftDeletable(type = Type.ACTIVE)   // active = false means "gone"
     private boolean active;
 }
 ```
@@ -751,7 +754,7 @@ Jakarta Data exposes three query paths:
 
 ```java
 // OmniPersistence — JPQL fragment (alias e is predefined)
-List<Book> books = books.list("WHERE e.year > ?1 ORDER BY e.title", 2020);
+List<Book> found = books.list("WHERE e.year > ?1 ORDER BY e.title", 2020);
 
 // Jakarta Data — @Find (parameter name matches entity field)
 @Find
@@ -908,7 +911,7 @@ OmniPersistence is **exclusively Jakarta Persistence (relational)**. It exposes 
 
 ## 14. Integration tests and further examples
 
-OmniPersistence ships its own Arquillian-based integration test suite. Every scenario is exercised twice — once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans — and the full suite is run against three server/provider combinations, each on H2, PostgreSQL, MySQL, SQL Server and DB2:
+OmniPersistence ships its own Arquillian-based integration test suite. The scenarios of `BaseEntityService` are exercised twice, once with services as `@ApplicationScoped` CDI beans and once with services as `@Stateless` EJB beans, and those of `EntityRepository` once. The full suite is run against three server/provider combinations, each on H2, PostgreSQL, MySQL, SQL Server and DB2:
 
 | Server | JPA Provider |
 |---|---|
@@ -983,7 +986,7 @@ OptimusFaces 1.x does not run on OmniPersistence 2.0. Use OptimusFaces 2.0.
 - On OpenJPA, persisting an enum field with an `AttributeConverter` fails with a `ClassCastException`, so `Like` and `IgnoreCase` on such a field cannot be used either.
 - On OpenJPA, `getByIdWithLoadGraph()` is not supported, because OpenJPA does not support `EntityManager#getEntityGraph()`.
 - On Hibernate with SQL Server, `Like` on the hour of an `OffsetTime` field does not match.
-- On SQL Server, `getPage()` fails when its criteria hold more than 2100 values in total, because SQL Server supports at most 2100 parameters per statement. `getByIds()` splits its IDs over several queries.
+- On SQL Server, `getPage()` fails when its query holds more than 2098 parameters: the values of its criteria, plus on Hibernate and EclipseLink two for the range of the page. `getByIds()` splits its IDs over several queries.
 - On SQL Server, `Order` and `Between` on a `LocalTime` or `OffsetTime` field need the connection property `sendTimeAsDatetime=false`, because the Microsoft JDBC driver sends a time as `DATETIME` by default.
 - On DB2, a DTO page cannot be ordered by a field of a `@OneToMany`, `@ManyToMany` or `@ElementCollection` which the DTO does not map, because DB2 does not accept a correlated subquery as order expression. `getPage()` then throws `IllegalArgumentException`, which an EJB wraps in an `EJBException`. Map an aggregate of the field instead, such as `MIN` over a join of the collection, and order by that mapped field.
 - On DB2, `Like` on a `Double` field matches the string form of DB2, which is in scientific notation, such as `3.25E0`. So `Like.contains("3.2")` and `Like.startsWith("3.")` match `3.25`, but `Like.endsWith(".25")` does not.

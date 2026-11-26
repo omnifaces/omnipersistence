@@ -119,8 +119,8 @@ public final class Like extends Criteria<String> {
     /**
      * Returns a new LIKE criteria that matches values matching the given pattern. In the pattern, <code>%</code> matches any characters, <code>_</code> matches
      * any single character, and {@link JPA#LIKE_ESCAPE} escapes the next character, so that <code>\%</code>, <code>\_</code> and <code>\\</code> match
-     * literally. Any other character matches literally, on every database. On DB2, {@link JPA#LIKE_ESCAPE} may only precede <code>%</code>, <code>_</code> or
-     * itself. A trailing {@link JPA#LIKE_ESCAPE} matches itself.
+     * literally. Any other character, also one after {@link JPA#LIKE_ESCAPE}, matches literally, on every database. A trailing {@link JPA#LIKE_ESCAPE} matches
+     * itself.
      *
      * @param pattern The pattern.
      * @return A new PATTERN LIKE criteria.

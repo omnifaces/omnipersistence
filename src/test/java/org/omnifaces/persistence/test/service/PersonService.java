@@ -218,6 +218,17 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
     }
 
     public PartialResultList<PersonPhoneStats> getPageOfPersonPhoneStats(Page page, boolean count) {
+        return getPageOfPersonPhoneStats(page, count, true);
+    }
+
+    /**
+     * The same person phone stats as {@link #getPageOfPersonPhoneStats(Page, boolean)}, without a <code>GROUP BY</code> of its own.
+     */
+    public PartialResultList<PersonPhoneStats> getPageOfPersonPhoneStatsWithoutGroupBy(Page page, boolean count) {
+        return getPageOfPersonPhoneStats(page, count, false);
+    }
+
+    private PartialResultList<PersonPhoneStats> getPageOfPersonPhoneStats(Page page, boolean count, boolean groupBy) {
         return getPage(page, count, PersonPhoneStats.class, (builder, query, person) -> {
             Join<Person, Phone> personPhones = person.join("phones");
             Expression<Long> phoneId = personPhones.get("id");
@@ -229,7 +240,10 @@ public abstract class PersonService extends BaseEntityService<Long, Person> {
             mapping.put(PersonPhoneStats::getTotalPhoneTypes, builder.countDistinct(personPhones.get("type")));
             mapping.put(PersonPhoneStats::getSumPhoneIdOrZero, builder.coalesce(builder.sum(phoneId), 0L));
 
-            query.groupBy(person.get("id"));
+            if (groupBy) {
+                query.groupBy(person.get("id"));
+            }
+
             return mapping;
         });
     }

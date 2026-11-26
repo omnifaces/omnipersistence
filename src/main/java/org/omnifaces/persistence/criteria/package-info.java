@@ -13,12 +13,13 @@
 /**
  * Criteria values for use in {@link org.omnifaces.persistence.query.Page} search criteria maps.
  * <p>
- * A plain value in a criteria map matches by equality. Wrap it in one of the {@link Criteria} subclasses for other matching:
+ * A plain value in a criteria map matches by equality on an entity, <code>String</code>, enum, number or boolean field. A plain value of another type, such as
+ * a <code>LocalDate</code>, throws {@link UnsupportedOperationException}. Wrap it in one of the {@link Criteria} subclasses for other matching:
  * <ul>
  * <li>{@link Like} - case-insensitive substring, prefix or suffix match</li>
  * <li>{@link Between} - range match on any {@link Comparable}</li>
  * <li>{@link Order} - less than or greater than comparison, with or without equality ({@code <}, {@code <=}, {@code >}, {@code >=})</li>
- * <li>{@link Not} - negation of a plain value or of another criteria value</li>
+ * <li>{@link Not} - negation of a plain value or of another criteria value other than {@link Not}</li>
  * <li>{@link IgnoreCase} - case-insensitive exact match</li>
  * <li>{@link Enumerated} - match on an enum constant, optionally parsed case-insensitively from a string</li>
  * <li>{@link Numeric} - converts a string value to a number before matching</li>

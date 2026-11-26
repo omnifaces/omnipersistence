@@ -35,6 +35,7 @@ public class Track {
 
     private int disc;
     private Double minutes;
+    private Boolean explicit;
 
     @ManyToOne
     private Album album;
@@ -65,6 +66,14 @@ public class Track {
 
     public void setMinutes(Double minutes) {
         this.minutes = minutes;
+    }
+
+    public Boolean getExplicit() {
+        return explicit;
+    }
+
+    public void setExplicit(Boolean explicit) {
+        this.explicit = explicit;
     }
 
     public Album getAlbum() {

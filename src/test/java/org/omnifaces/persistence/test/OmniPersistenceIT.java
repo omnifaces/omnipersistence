@@ -114,6 +114,7 @@ import org.omnifaces.persistence.test.model.dto.PersonPhoneStats;
 import org.omnifaces.persistence.test.service.AuditLogService;
 import org.omnifaces.persistence.test.service.AuditLogger;
 import org.omnifaces.persistence.test.service.ConfigService;
+import org.omnifaces.persistence.test.service.DocumentAndInvoiceRepositories;
 import org.omnifaces.persistence.test.service.PersonService;
 import org.omnifaces.persistence.test.service.PhoneService;
 import org.omnifaces.persistence.test.service.PlainConfigUpdater;
@@ -171,6 +172,7 @@ public abstract class OmniPersistenceIT {
         var archive = create(WebArchive.class)
             .addPackages(true, testClass.getPackage())
             .deleteClass(excludedStartupService)
+            .deleteClass(DocumentAndInvoiceRepositories.class)
             .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
             .addAsResource(
                 new StringAsset(
@@ -195,15 +197,22 @@ public abstract class OmniPersistenceIT {
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
             .addAsResource(new StringAsset(ormOf(database)), "META-INF/orm.xml")
-            .addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
-            .addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
             .addAsLibraries(maven.resolve(jdbcDriverOf(database)).withTransitivity().asFile());
+        withOmniPersistence(archive);
 
         if (wildFlyDB2) {
             archive.addAsWebInfResource(new StringAsset(wildFlyDB2DataSourceOf(jtaDataSource, persistenceUnitName)), "db2-ds.xml");
         }
 
         return archive;
+    }
+
+    /**
+     * Adds OmniPersistence and its compile and runtime dependencies to given archive.
+     */
+    static WebArchive withOmniPersistence(WebArchive archive) {
+        return archive.addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
+            .addAsLibraries(Maven.resolver().loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile());
     }
 
     /**
@@ -1909,6 +1918,11 @@ public abstract class OmniPersistenceIT {
             personService()::getPage, true
         );
 
+        assertPage(
+            personService().list(), person -> Like.pattern("\\name1\\@%").applies(person.getEmail()), Map.of("email", Like.pattern("\\name1\\@%")),
+            Map.of(), personService()::getPage, true
+        );
+
         for (var pattern : List.of("[n]ame1_@%", "name1\\")) { // The [ only differs on SQL Server.
             var page = personService().getPage(Page.with().range(0, ROWS_PER_PAGE).allMatch(Map.of("email", Like.pattern(pattern))).build(), true);
             assertEquals(List.of(), page, "No email matches " + pattern);
@@ -2859,6 +2873,38 @@ public abstract class OmniPersistenceIT {
         }
 
         assertAll(assertions);
+    }
+
+    /**
+     * A DTO mapping with an aggregate needs no <code>GROUP BY</code> of its own, because <code>getPage()</code> then groups by the root.
+     */
+    @Test
+    void testPageOfDtoWithAggregateGroupsByRoot() {
+        var page = Page.with().range(0, ROWS_PER_PAGE).orderBy("sumPhoneId", false).build();
+        var grouped = personService().getPageOfPersonPhoneStats(page, true);
+        var ungrouped = personService().getPageOfPersonPhoneStatsWithoutGroupBy(page, true);
+        assertEquals(statsOf(grouped), statsOf(ungrouped), "Stats without GROUP BY");
+        assertEquals(grouped.getEstimatedTotalNumberOfResults(), ungrouped.getEstimatedTotalNumberOfResults(), "Count of stats without GROUP BY");
+    }
+
+    private static List<List<Long>> statsOf(List<PersonPhoneStats> stats) {
+        return stats.stream()
+            .map(s -> List.of(s.getId(), s.getMaxPhoneId(), s.getSumPhoneId(), s.getTotalPhoneTypes(), s.getSumPhoneIdOrZero()))
+            .toList();
+    }
+
+    /**
+     * A plain value matches by equality on an entity, String, enum, number or boolean field only. A plain value of another type, such as a
+     * <code>LocalDate</code>, throws {@link UnsupportedOperationException}, which an EJB wraps in an <code>EJBException</code>.
+     */
+    @Test
+    void testPageWithPlainLocalDateValueThrows() {
+        var page = Page.with().allMatch(Map.of("dateOfBirth", LocalDate.of(1980, 1, 1))).build();
+        var exception = assertThrows(RuntimeException.class, () -> personService().getPage(page, false), "Plain LocalDate value");
+        assertTrue(
+            Stream.iterate((Throwable) exception, Objects::nonNull, Throwable::getCause).anyMatch(UnsupportedOperationException.class::isInstance),
+            "Thrown as or caused by UnsupportedOperationException"
+        );
     }
 
     // Page with cursor-based paging ----------------------------------------------------------------------------------

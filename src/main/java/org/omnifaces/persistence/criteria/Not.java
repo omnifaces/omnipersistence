@@ -21,6 +21,8 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
+import org.omnifaces.persistence.service.BaseEntityService;
+
 /**
  * Creates <code>NOT (predicate) OR path IS NULL</code>, or <code>path IS NOT NULL</code> for <code>Not.value(null)</code>.
  * <p>
@@ -60,6 +62,11 @@ public final class Not extends Criteria<Object> {
         return new Not(value);
     }
 
+    /**
+     * Not supported, because {@link BaseEntityService} unwraps a NOT criteria and negates the predicate of its value.
+     *
+     * @throws UnsupportedOperationException Always.
+     */
     @Override
     public Predicate build(Expression<?> path, CriteriaBuilder criteriaBuilder, ParameterBuilder parameterBuilder) {
         throw new UnsupportedOperationException();

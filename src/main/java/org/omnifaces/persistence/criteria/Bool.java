@@ -21,7 +21,7 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * Creates <code>path IS (NOT) TRUE</code>.
+ * Matches <code>TRUE</code> for <code>true</code>, and <code>FALSE</code> for <code>false</code>. <code>NULL</code> matches neither.
  * <p>
  * Supports truthy value parsing: besides actual {@link Boolean} values, it also accepts numeric values (where &gt; 0 is considered truthy) and string values
  * (parsed via {@link Boolean#parseBoolean(String)} or as number).
