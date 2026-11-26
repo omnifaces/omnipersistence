@@ -197,15 +197,22 @@ public abstract class OmniPersistenceIT {
             .addAsResource("META-INF/sql/drop-test.sql")
             .addAsResource("META-INF/sql/load-test.sql")
             .addAsResource(new StringAsset(ormOf(database)), "META-INF/orm.xml")
-            .addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
-            .addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
             .addAsLibraries(maven.resolve(jdbcDriverOf(database)).withTransitivity().asFile());
+        withOmniPersistence(archive);
 
         if (wildFlyDB2) {
             archive.addAsWebInfResource(new StringAsset(wildFlyDB2DataSourceOf(jtaDataSource, persistenceUnitName)), "db2-ds.xml");
         }
 
         return archive;
+    }
+
+    /**
+     * Adds OmniPersistence and its compile and runtime dependencies to given archive.
+     */
+    static WebArchive withOmniPersistence(WebArchive archive) {
+        return archive.addAsLibrary(create(MavenImporter.class).loadPomFromFile("pom.xml").importBuildOutput().as(JavaArchive.class))
+            .addAsLibraries(Maven.resolver().loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile());
     }
 
     /**

@@ -12,20 +12,24 @@
  */
 package org.omnifaces.persistence.test;
 
+import static org.jboss.shrinkwrap.api.ShrinkWrap.create;
 import static org.omnifaces.persistence.test.OmniPersistenceIT.PROFILE_ID;
+import static org.omnifaces.persistence.test.OmniPersistenceIT.withOmniPersistence;
 
 import jakarta.enterprise.inject.AmbiguousResolutionException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.ShouldThrowException;
 import org.jboss.arquillian.junit5.ArquillianExtension;
+import org.jboss.shrinkwrap.api.asset.EmptyAsset;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.omnifaces.persistence.service.EntityRepository;
+import org.omnifaces.persistence.test.model.Document;
 import org.omnifaces.persistence.test.service.DocumentAndInvoiceRepositories;
-import org.omnifaces.persistence.test.service.StartupServiceEJB;
 
 /**
  * On OpenWebBeans, the CDI implementation of TomEE, a deployment which injects an {@link EntityRepository} of an entity and one of its subclass fails with
@@ -37,10 +41,25 @@ import org.omnifaces.persistence.test.service.StartupServiceEJB;
 )
 class EntityRepositoryOfSubclassOnOpenWebBeansIT {
 
+    private static final String PERSISTENCE_XML = """
+        <persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.0">
+            <persistence-unit name="EntityRepositoryOfSubclassOnOpenWebBeansIT" />
+        </persistence>
+        """;
+
+    /**
+     * The deployment holds no EJB and its own persistence unit on the default data source of TomEE, because TomEE keeps the EJBs and the persistence unit of a
+     * failed deployment, so that a later deployment with the same EJBs or persistence unit fails.
+     */
     @Deployment
     @ShouldThrowException(AmbiguousResolutionException.class)
     public static WebArchive createDeployment() {
-        return OmniPersistenceIT.createDeployment(EntityRepositoryIT.class, StartupServiceEJB.class).addClass(DocumentAndInvoiceRepositories.class);
+        var archive = create(WebArchive.class)
+            .addPackage(Document.class.getPackage())
+            .addClass(DocumentAndInvoiceRepositories.class)
+            .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
+            .addAsResource(new StringAsset(PERSISTENCE_XML), "META-INF/persistence.xml");
+        return withOmniPersistence(archive);
     }
 
     @Test
