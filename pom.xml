@@ -79,6 +79,7 @@
         <test.glassfish.version>8.0.5</test.glassfish.version> <!-- https://mvnrepository.com/artifact/org.glassfish.main.distributions/glassfish --> <!-- NOTE: needs Java 21 instead of 17! Else it complains that it's unable eo execute bin/asadmin -->
         <test.glassfish.eclipselink.version>5.0.2</test.glassfish.eclipselink.version> <!-- https://mvnrepository.com/artifact/org.eclipse.persistence/eclipselink --> <!-- NOTE: This must be EclipseLink version bundled in test.glassfish.version -->
         <test.tomee.version>10.2.0</test.tomee.version> <!-- https://mvnrepository.com/artifact/org.apache.tomee/apache-tomee -->
+        <test.openwebbeans.version>4.0.3</test.openwebbeans.version> <!-- https://mvnrepository.com/artifact/org.apache.openwebbeans/openwebbeans-impl --> <!-- NOTE: This must be OpenWebBeans version bundled in test.tomee.version -->
         <test.tomee.openjpa.version>4.1.1</test.tomee.openjpa.version> <!-- https://mvnrepository.com/artifact/org.apache.openjpa/openjpa-all --> <!-- NOTE: This must be OpenJPA version bundled in test.tomee.version -->
         <test.h2.version>2.5.252</test.h2.version> <!-- https://mvnrepository.com/artifact/com.h2database/h2 -->
         <test.postgresql-driver.version>42.7.14</test.postgresql-driver.version> <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
@@ -565,6 +566,12 @@
                     <groupId>org.apache.tomee</groupId>
                     <artifactId>arquillian-tomee-remote</artifactId>
                     <version>${test.tomee.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-impl</artifactId>
+                    <version>${test.openwebbeans.version}</version>
                     <scope>test</scope>
                 </dependency>
             </dependencies>

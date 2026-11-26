@@ -57,13 +57,18 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import jakarta.ejb.EJB;
+import jakarta.enterprise.inject.UnsatisfiedResolutionException;
+import jakarta.enterprise.inject.spi.CDI;
+import jakarta.enterprise.util.TypeLiteral;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.NonUniqueResultException;
+import jakarta.persistence.PersistenceException;
 import jakarta.persistence.TransactionRequiredException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -134,6 +139,8 @@ public class EntityRepositoryIT {
 
     private static final String TITLE_PREFIX = "plain-";
     private static final int SQL_SERVER_MAX_PARAMETERS = 2100;
+    private static final int SQL_SERVER_MAX_QUERY_PARAMETERS = 2098;
+    private static final int RANGE_PARAMETERS = 2;
     private static final Instant PAST_LAST_MODIFIED = Instant.parse("2000-01-01T00:00:00Z");
     private static final String ECLIPSELINK_ENUM_COLLECTION = "EclipseLink maps an enum element collection without @Enumerated to a VARCHAR column, which PostgreSQL does not compare to the bound ordinal";
     private static final Map<String, Object> TITLED = Map.of("title", Like.startsWith(TITLE_PREFIX));
@@ -1334,6 +1341,23 @@ public class EntityRepositoryIT {
     }
 
     /**
+     * On SQL Server, <code>getPage()</code> fails when its query holds more than {@value #SQL_SERVER_MAX_QUERY_PARAMETERS} parameters: the values of its
+     * criteria, plus the {@value #RANGE_PARAMETERS} of the range of the page.
+     */
+    @Test
+    @DisabledIfSystemProperty(named = TEST_DATABASE, matches = "(?i)(?!sqlserver$).*", disabledReason = "The parameter limit is specific to SQL Server")
+    void testPageWithIdsBeyondParameterLimitFailsOnSqlServer() {
+        assertPageOfIdsFailsBeyond(SQL_SERVER_MAX_QUERY_PARAMETERS, UnaryOperator.identity());
+        assertPageOfIdsFailsBeyond(SQL_SERVER_MAX_QUERY_PARAMETERS - RANGE_PARAMETERS, builder -> builder.range(ROWS_PER_PAGE, ROWS_PER_PAGE));
+    }
+
+    private void assertPageOfIdsFailsBeyond(int maxIds, UnaryOperator<Page.Builder> range) {
+        Function<Integer, Page> pageOfIds = size -> range.apply(Page.with()).allMatch(Map.of("id", LongStream.rangeClosed(1, size).boxed().toList())).build();
+        assertDoesNotThrow(() -> personRepository.getPage(pageOfIds.apply(maxIds), true), "Page of " + maxIds + " IDs");
+        assertThrows(PersistenceException.class, () -> personRepository.getPage(pageOfIds.apply(maxIds + 1), true), "Page of " + (maxIds + 1) + " IDs");
+    }
+
+    /**
      * An all {@link Select} and a criteria {@link Select} exclude soft deleted entities, like <code>list()</code> and a {@link CriteriaQueryBuilder}. A JPQL
      * {@link Select} returns them, like a JPQL query.
      */
@@ -2229,13 +2253,12 @@ public class EntityRepositoryIT {
     }
 
     private List<String> titlesOfTracksOf(Album album, Object disc) {
-        var page = Page.with().allMatch(Map.of("album.id", album.getId(), "disc", disc)).orderBy("title", true).build();
-        return titlesOf(trackRepository.getPage(page, false));
+        return titlesOfTracksOf(album, "disc", disc);
     }
 
     /**
      * A {@link Like} on a <code>Double</code> field matches its decimal string form. DB2 renders a double in scientific notation, such as <code>3.25E0</code>,
-     * so a match on its end is skipped there.
+     * so there a match on its end does not match.
      */
     @Test
     void testPageWithLikeOnDoubleField() {
@@ -2249,20 +2272,45 @@ public class EntityRepositoryIT {
         try {
             transactionServiceCDI.run(() -> albumRepository.persist(album));
 
-            var likes = new ArrayList<>(List.of(Like.contains("3.2"), Like.startsWith("3.")));
-
-            if (trackRepository.getDatabase() != DB2) {
-                likes.add(Like.endsWith(".25"));
+            for (var like : List.of(Like.contains("3.2"), Like.startsWith("3."))) {
+                assertEquals(List.of("a"), titlesOfTracksOf(album, "minutes", like), "Minutes " + like);
             }
 
-            for (var like : likes) {
-                var page = Page.with().allMatch(Map.of("album.id", album.getId(), "minutes", like)).build();
-                assertEquals(List.of("a"), titlesOf(trackRepository.getPage(page, false)), "Minutes " + like);
-            }
+            var endsWith = Like.endsWith(".25");
+            assertEquals(trackRepository.getDatabase() == DB2 ? List.of() : List.of("a"), titlesOfTracksOf(album, "minutes", endsWith), "Minutes " + endsWith);
         }
         finally {
             deleteAlbum(album);
         }
+    }
+
+    /**
+     * {@link Bool} on a nullable <code>Boolean</code> field: <code>true</code> matches <code>TRUE</code>, and <code>false</code> matches <code>FALSE</code> and
+     * not <code>NULL</code>, the same as {@link Bool#applies(Object)}.
+     */
+    @Test
+    void testPageWithBoolOnNullableBooleanField() {
+        var album = new Album();
+        album.setTitle("album");
+        addTrack(album, 1, "yes");
+        addTrack(album, 1, "no");
+        addTrack(album, 1, "unknown");
+        album.getTracks().get(0).setExplicit(true);
+        album.getTracks().get(1).setExplicit(false);
+
+        try {
+            transactionServiceCDI.run(() -> albumRepository.persist(album));
+            assertEquals(List.of("yes"), titlesOfTracksOf(album, "explicit", Bool.value(true)), "Explicit");
+            assertEquals(List.of("no"), titlesOfTracksOf(album, "explicit", Bool.value(false)), "Not explicit");
+        }
+        finally {
+            deleteAlbum(album);
+        }
+    }
+
+    private List<String> titlesOfTracksOf(Album album, String field, Object criteria) {
+        var page = Page.with().allMatch(Map.of("album.id", album.getId(), field, criteria)).orderBy("title", true).build();
+        return titlesOf(trackRepository.getPage(page, false));
     }
 
     private Album persistAlbum() {
@@ -2516,7 +2564,7 @@ public class EntityRepositoryIT {
 
     /**
      * A <code>null</code> criteria on a collection matches the entities without elements, and a negated one the entities with elements, on a basic element
-     * collection and on a <code>@ManyToMany</code>, also as optional criteria. The count is not asserted on OpenJPA, see
+     * collection and on a <code>@ManyToMany</code>, also as optional criteria. On OpenJPA, the count ignores a <code>null</code> criteria on a collection, see
      * {@link OmniPersistenceIT#OPENJPA_COUNT}.
      */
     @Test
@@ -2539,11 +2587,36 @@ public class EntityRepositoryIT {
             assertEquals(categorized, codesOfTitledArticles(Map.of("categories", Not.value(null)), Map.of()), "With categories");
             var tagsOrCategories = Map.<String, Object>of("tags", Not.value(null), "categories", Not.value(null));
             assertEquals(codesOf(articles.subList(0, 2)), codesOfTitledArticles(Map.of(), tagsOrCategories), "With tags or categories");
+
+            if (personRepository.getProvider() == Provider.OPENJPA) {
+                var withoutTags = pageOfTitledArticles(Collections.singletonMap("tags", null), Map.of());
+                var all = pageOfTitledArticles(Map.of(), Map.of()).getEstimatedTotalNumberOfResults();
+                assertEquals(all, withoutTags.getEstimatedTotalNumberOfResults(), "Count without tags ignores the criteria on OpenJPA");
+            }
         }
         finally {
             deleteArticles(articles);
             deleteCategories(List.of(category));
         }
+    }
+
+    /**
+     * An {@link EntityRepository} can be looked up programmatically via {@link CDI}, except on OpenWebBeans, which supports only its injection points. In the
+     * test matrix, OpenWebBeans is the CDI implementation of TomEE, the server with OpenJPA.
+     */
+    @Test
+    void testProgrammaticLookupOfEntityRepositoryFailsOnlyOnOpenWebBeans() {
+        if (personRepository.getProvider() == Provider.OPENJPA) {
+            assertThrows(UnsatisfiedResolutionException.class, this::lookUpPersonRepository, "Programmatic lookup on OpenWebBeans");
+        }
+        else {
+            assertEquals(1L, lookUpPersonRepository().getById(1L).getId(), "Person looked up via programmatic EntityRepository");
+        }
+    }
+
+    private EntityRepository<Long, Person> lookUpPersonRepository() {
+        return CDI.current().select(new TypeLiteral<EntityRepository<Long, Person>>() {
+        }).get();
     }
 
     /**
